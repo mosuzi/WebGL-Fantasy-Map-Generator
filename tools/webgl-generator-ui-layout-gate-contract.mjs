@@ -1,0 +1,27 @@
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import {execFileSync, spawnSync} from "node:child_process";
+import {pathToFileURL} from "node:url";
+
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ui-layout-gate-contract-"));
+await fs.mkdir(path.join(dir, "tools"));await fs.mkdir(path.join(dir, "app/webgl-generator/src"), {recursive: true});
+await fs.copyFile(new URL("./ui-layout-commit-gate.mjs", import.meta.url), path.join(dir, "tools/ui-layout-commit-gate.mjs"));
+const git = args => execFileSync("git", args, {cwd: dir, stdio: "pipe"});
+const gate = () => spawnSync(process.execPath, ["tools/ui-layout-commit-gate.mjs"], {cwd: dir, encoding: "utf8"});
+git(["init", "--quiet"]);
+await fs.writeFile(path.join(dir, "app/webgl-generator/src/theme.css"), "button{white-space:nowrap}");
+git(["add", "tools/ui-layout-commit-gate.mjs", "app/webgl-generator/src/theme.css"]);
+assert.notEqual(gate().status, 0, "缺少凭据必须拒绝");
+const {layoutFingerprint, saveLayoutReceipt} = await import(pathToFileURL(path.join(dir, "tools/ui-layout-commit-gate.mjs")));
+assert.throws(() => saveLayoutReceipt({accepted: false}, layoutFingerprint()), /完整/);
+saveLayoutReceipt({accepted: true, mode: "完整验收", cases: [{}], errors: []}, layoutFingerprint());
+assert.equal(gate().status, 0, "当前暂存树应通过");
+await fs.writeFile(path.join(dir, "app/webgl-generator/src/theme.css"), "button{white-space:normal}");
+assert.equal(gate().status, 0, "未暂存内容不能替换已验收的暂存树");
+git(["add", "app/webgl-generator/src/theme.css"]);
+assert.notEqual(gate().status, 0, "暂存样式变化后旧凭据必须拒绝");
+await fs.writeFile(path.join(dir, "app/webgl-generator/src/new.css"), "button{width:20px}");git(["add", "app/webgl-generator/src/new.css"]);
+assert.notEqual(gate().status, 0, "新增样式不能绕过检查");
+console.log("提交门反例通过：缺失、过期、新增样式拒绝；准确核对暂存内容。临时隔离仓库：" + dir);

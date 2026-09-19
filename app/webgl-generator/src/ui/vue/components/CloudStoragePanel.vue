@@ -56,6 +56,7 @@
             </div>
             <div class="cloud-storage-file-list" aria-label="云端地图文件">
               <button
+                data-layout-multiline="存档卡片分别显示文件名和文件信息"
                 v-for="file in state.files"
                 :key="file.id"
                 type="button"

@@ -1,5 +1,5 @@
 <template>
-  <ElButton :native-type="buttonType" :disabled="disabled" :class="[variantClass, {active}]" @click="event => emit('click', event)">
+  <ElButton class="ui-button" :data-layout-multiline="wrapReason || undefined" :native-type="buttonType" :disabled="disabled" :class="[variantClass, {active}]" @click="event => emit('click', event)">
     <slot />
   </ElButton>
 </template>
@@ -12,6 +12,11 @@ defineOptions({
 });
 
 const props = defineProps({
+  // 仅内容卡片等确需分行的按钮声明原因；普通动作始终保持完整文案。
+  wrapReason: {
+    type: String,
+    default: ""
+  },
   variant: {
     type: String,
     default: "plain"

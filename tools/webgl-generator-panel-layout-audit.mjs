@@ -4,6 +4,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {inspectUiLayout} from "./ui-layout-inspector.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -804,6 +805,9 @@ async function auditPanel(page, panel) {
     };
   }, panel);
 
+  const contract = await page.evaluate(inspectUiLayout, `.floating-panel[data-panel-id="${panel.panelId}"],.ui-secondary-action-panel`);
+  report.buttonLayout = contract;
+  report.issues.push(...contract.issues.map(issue => `${issue.type}：${issue.text}；${issue.detail}`));
   await page.locator(`.floating-panel[data-panel-id="${panel.panelId}"] .floating-panel-close`).click();
   await closeSecondaryPanels(page);
   return report;

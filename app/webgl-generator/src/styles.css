@@ -4766,9 +4766,9 @@ select:disabled {
   position: absolute;
   top: 50%;
   right: 3px;
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
   transform: translateY(-50%);
   border: 0;
   background: transparent;
@@ -8062,11 +8062,21 @@ input.ui-switch-native {
 
 .economy-trade-query-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   color: var(--panel-text);
   font-size: 11px;
+}
+
+.economy-trade-query-summary > span {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.economy-trade-query-summary > .ui-button {
+  width: auto;
 }
 
 .economy-deal-locate-actions {

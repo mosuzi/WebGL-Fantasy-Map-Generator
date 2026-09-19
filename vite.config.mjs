@@ -7,6 +7,7 @@ import {ElementPlusResolver} from "unplugin-vue-components/resolvers";
 import {defineConfig, loadEnv} from "vite";
 import {hasCloudProviderBuildInput, readCloudProviderBuildConfig, serializeCloudProviderConfig} from "./tools/cloud-provider-config.mjs";
 import {stagePrototypeDeployments} from "./tools/prototype-deployment.mjs";
+import {layoutFingerprint} from "./tools/ui-layout-commit-gate.mjs";
 
 const knownVueUseInvalidAnnotationLines = new Set([3362, 5780]);
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
@@ -106,6 +107,12 @@ export default defineConfig(({mode}) => {
       __FMG_APP_BUILD_ID__: JSON.stringify(packageJson.version)
     },
     plugins: [
+      {name: "ui-layout-build-proof", generateBundle() {
+        // 源码压缩包没有 Git 元数据也能构建，但不能签发 Git 提交凭据。
+        let fingerprint = null;
+        try {fingerprint = layoutFingerprint();} catch {}
+        this.emitFile({type: "asset", fileName: "ui-layout-build.json", source: JSON.stringify({fingerprint})});
+      }},
       serveDropboxOAuthCallback(),
       injectAppVersion(),
       injectCloudProviderConfig(),

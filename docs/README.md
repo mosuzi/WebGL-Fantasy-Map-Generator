@@ -15,6 +15,7 @@
 ## 长期文档
 
 - `architecture/`：架构约束和长期 UI/系统约定。
+  - `architecture/ui-layout-contract.md`：按钮单行 / 显式多行、真实排版检查与提交凭据约束。
   - `architecture/floating-panel-architecture.md`：浮动面板长期边界。
   - `architecture/vue-floating-panel-pattern.md`：Vue SFC 面板复用规范。
   - `architecture/laboratory-prototypes.md`：四个独立实验室 / 原型的职责、入口、验证、部署和正式应用边界。
