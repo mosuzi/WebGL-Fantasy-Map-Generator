@@ -142,6 +142,11 @@ focusDocument.frameworkPopups = [{
 focusDocument.dispatchEvent(keyEvent("Escape"));
 assert.equal(closeRequests, 0, "框架 popup 展开时 managed overlay 抢先关闭");
 focusDocument.frameworkPopups = [];
+const modalEscape = keyEvent("Escape");
+Object.defineProperty(modalEscape, "target", {value: {closest: selector => selector === "dialog[open]" ? {} : null}});
+focusDocument.dispatchEvent(modalEscape);
+assert.equal(closeRequests, 0, "原生对话框内的 Escape 不得关闭底层登记面板");
+assert.equal(modalEscape.defaultPrevented, false, "保留原生对话框的关闭行为");
 leakedEscapeEvents = 0;
 focusDocument.dispatchEvent(keyEvent("Escape"));
 assert.equal(closeRequests, 1, "Esc 没有请求关闭顶层浮层");

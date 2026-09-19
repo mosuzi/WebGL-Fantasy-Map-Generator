@@ -41,5 +41,8 @@ try{
  await page.locator('#open-export-panel').click();
  check('重开保留预设',await page.getByRole('combobox',{name:'PNG 已存预设'}).locator('option').allTextContents().then(values=>values.includes('全幅验收')&&values.includes('原图范围')));
  await page.screenshot({path:path.join(process.env.TEMP,'batch-export-narrow.png')});
+ await page.reload();await waitForApiReady(page,180000);
+ await page.getByRole('button',{name:'控制面板',exact:true}).click();await page.getByRole('tab',{name:'简介',exact:true}).click();await page.locator('#open-export-panel').click();await page.getByText('高级导出选项',{exact:true}).click();
+ check('整页刷新保留预设',await page.getByRole('combobox',{name:'PNG 已存预设'}).locator('option').allTextContents().then(values=>values.includes('全幅验收')&&values.includes('原图范围')));
  check('页面错误为零',errors.length===0,errors);
 }finally{await fs.writeFile(path.join(process.env.TEMP,'batch-export-browser.json'),JSON.stringify({checks,errors},null,2));console.log(JSON.stringify({checks,errors},null,2));await browser.close();}

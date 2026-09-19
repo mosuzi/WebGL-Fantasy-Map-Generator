@@ -147,6 +147,8 @@ export class OverlayRegistry {
       || event.isComposing
       || event.keyCode === 229
       || hasOpenFrameworkPopup(this.documentRef)
+      // 原生模态对话框位于所有登记面板之上，由浏览器处理其 Esc。
+      || event.target?.closest?.("dialog[open]")
     ) return;
     const openEntries = [...this.entries.values()].filter(entry => entry.open);
     const topmost = (openEntries.some(entry => entry.kind === "fixed")

@@ -82,6 +82,9 @@ export function createRenameObjectCommand(object, nextName) {
     domain: target.kind,
     effects: {
       ...OBJECT_NAME_EFFECTS,
+      derived: target.kind === OBJECT_KIND.CITY
+        ? [...OBJECT_NAME_EFFECTS.derived, "city-role-labels"]
+        : OBJECT_NAME_EFFECTS.derived,
       affected: objectAffected(target.kind, target.id)
     },
     getReplicaPaths(map) {

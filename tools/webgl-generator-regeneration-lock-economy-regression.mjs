@@ -206,23 +206,25 @@ function testAssignmentConflictAndFailureRollback() {
     before: lockedMarket.i,
     after: otherMarket.i
   }]);
-  assert.throws(
-    () => command.apply({map}),
-    error => error?.code === "regeneration_lock_conflict" && error?.details?.reason === "locked-market-cells-changed"
-  );
-  assert.equal(economySnapshot(map), before, "市场归属锁冲突后没有回滚");
+  command.apply({map});
+  assert.equal(map.pack.cells.market[lockedCell], otherMarket.i, "显式市场归属编辑不受重生成锁阻止");
+  command.revert({map});
+  assert.equal(economySnapshot(map), before, "市场归属编辑撤销没有恢复完整写集");
 
   const lockedDeal = map.pack.deals.find(Boolean);
   lockedDeal.path = [-1];
   map.regenerationLocks = {version: 1, entries: [{kind: "trade-flow", id: lockedDeal.i}]};
   const failureBefore = economySnapshot(map);
   const rebuild = createRebuildEconomyCommand();
-  assert.throws(
-    () => rebuild.apply({map}),
-    error => error?.code === "regeneration_lock_conflict" && error?.details?.reason === "invalid-deal-path-cell"
-  );
-  assert.equal(economySnapshot(map), failureBefore, "交易依赖故障后没有回滚");
-  report.cases.push("assignment-conflict-and-failure-rollback");
+  const preservedDeal = structuredClone(lockedDeal);
+  rebuild.apply({map});
+  assert.deepEqual(map.pack.deals.find(item => item?.i === lockedDeal.i), preservedDeal, "旧锁定交易按原像后置合并，不用旧错误阻止重算");
+  rebuild.revert({map});
+  assert.equal(economySnapshot(map), failureBefore, "旧锁交易经济重算撤销不精确");
+  const failing = createRebuildEconomyCommand({constraintBundle: {hide() { throw new Error("injected-economy-failure"); }}});
+  assert.throws(() => failing.apply({map}), /injected-economy-failure/);
+  assert.equal(economySnapshot(map), failureBefore, "经济执行故障后没有回滚");
+  report.cases.push("explicit-assignment-old-lock-preservation-and-failure-rollback");
 }
 
 function assertLockedEconomy(pack, market, deal, cells) {

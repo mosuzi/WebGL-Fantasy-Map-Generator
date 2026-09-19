@@ -59,7 +59,7 @@ export function searchIndex(index, {query = "", type = "", page = 0, limit = 50}
   return {total: matches.length, page, pages: last + 1, items: matches.slice(page * limit, (page + 1) * limit)};
 }
 
-export function installMapContentSearch(documentRef, {getMap, getBinding, canLocate, locate, view}) {
+export function installMapContentSearch(documentRef, {getMap, getBinding, canLocate, locate}) {
   let cache = null;
   let building = null;
   const signature = () => JSON.stringify(getBinding());
@@ -84,7 +84,6 @@ export function installMapContentSearch(documentRef, {getMap, getBinding, canLoc
         const resolved = resolveObject(getMap(), item.ref);
         const locatable = Boolean(resolved && canLocate(item.ref));
         if (action === "locate" && locatable) locate(item.ref);
-        if (action === "view" && resolved) view(item.ref);
         respond({item, locatable, orphan: !resolved});
       }
     } catch { respond({error: "暂时无法读取此内容，请刷新搜索结果后重试。"}); }

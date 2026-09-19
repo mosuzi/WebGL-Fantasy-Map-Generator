@@ -2859,8 +2859,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     getMap: () => state.map,
     getBinding: () => mapRevision.getSnapshot(),
     canLocate: object => state.renderer.canLocateObject(object),
-    locate: object => locateAndSelectObject(null, object),
-    view: object => { selectionStore.setSelection({object}); refreshRuntimeAndPickPanels(documentRef, state); }
+    locate: object => locateAndSelectObject(null, object)
   });
   state.recovery = installMapRecovery(documentRef, {
     getMap: () => state.map,

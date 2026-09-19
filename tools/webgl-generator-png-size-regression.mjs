@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import {pngOutputSize,assertPngBudget} from "../app/webgl-generator/src/runtime/png-export-size.js";
+import {preparePngDrawingResolution} from "../app/webgl-generator/src/runtime/png-export-resolution.js";
 assert.deepEqual(pngOutputSize(2400,null,2),{width:2400,height:1200});
 assert.throws(()=>pngOutputSize(2400,1300,2),/比例/);
 for(const value of [0,-1,Infinity,1.2,9000])assert.throws(()=>pngOutputSize(value,null,1));
 assert.throws(()=>assertPngBudget(8192,8192),/预算/);
 assert.throws(()=>assertPngBudget(4096,2048,2048),/预算/);
+const canvas={width:800,height:600}, originalSize={width:800,height:600,cssWidth:800,pixelRatio:1};
+const renderer={canvasSize:originalSize,gl:{MAX_TEXTURE_SIZE:1,MAX_RENDERBUFFER_SIZE:2,MAX_VIEWPORT_DIMS:3,getParameter:key=>key===3?[8192,8192]:8192},draw(){throw new Error('绘制失败注入');}};
+assert.throws(()=>preparePngDrawingResolution(canvas,renderer,{width:800,height:600},{width:1600,height:1200}),/绘制失败注入/);
+assert.deepEqual(canvas,{width:800,height:600});assert.equal(renderer.canvasSize,originalSize);
 console.log("PNG 明确尺寸：比例、整数、画布及显卡预算通过");

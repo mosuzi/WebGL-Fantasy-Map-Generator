@@ -21,7 +21,7 @@ try {
   assert.ok(await page.locator('.floating-panel[data-panel-id="economy-panel"]').isVisible());
   report.guidance.openedEconomy=true;
  }else if(mode==='trade') {
-  await page.evaluate(()=>{const a=window.__webglGeneratorApp;a.panels.economy.open(a.map,a.selection,a.editHistory.getStats());a.panels.economy.setSelectedDealId(a.map.pack.deals.find(Boolean).i);});
+  report.tradeParties=await page.evaluate(()=>{const a=window.__webglGeneratorApp,p=a.map.pack,party=(type,id)=>type==='burg'?p.burgs[id]:p.burgs[p.markets.find(m=>m?.i===id)?.centerBurgId];const d=p.deals.find(d=>d&&party(d.sellerType,d.seller)?.cell!==party(d.buyerType,d.buyer)?.cell);if(!d)throw Error('缺少跨端点交易');a.panels.economy.open(a.map,a.selection,a.editHistory.getStats());a.panels.economy.setSelectedDealId(d.i);return {id:d.i,from:party(d.sellerType,d.seller)?.cell,to:party(d.buyerType,d.buyer)?.cell};});
   await page.getByRole('button',{name:'检查现有路网',exact:true}).waitFor();
   await page.evaluate(()=>{window.__batchTasks=[];window.__batchObserver=new PerformanceObserver(list=>window.__batchTasks.push(...list.getEntries().map(e=>e.duration)));window.__batchObserver.observe({type:'longtask'});window.__batchRevision=window.__webglGeneratorApp.mapRevision.getSnapshot().mapRevision;});
   await page.getByRole('button',{name:'检查现有路网',exact:true}).click();

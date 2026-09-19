@@ -2,6 +2,7 @@ import {resolvePersistedDocumentIdentity} from "./persisted-document-identity.js
 import {pngOutputSize} from "./png-export-size.js";
 const STORAGE_KEY = "webgl-generator-png-presets-v1";
 export const PNG_PRESET_EVENT = "webfmg-png-preset";
+export const PNG_PRESET_READY_EVENT = "webfmg-png-preset-ready";
 const IDS = ["scale", "crop-mode", "crop-x", "crop-y", "crop-width", "crop-height", "overlays", "transparent", "overlay-labels", "overlay-city-icons", "overlay-markers", "overlay-military", "overlay-measurements", "overlay-legend", "overlay-scale-bar", "explicit-size", "output-width"];
 export function installPngPresets(documentRef, getMap) {
   const element = key => documentRef.getElementById(`export-png-${key}`);
@@ -39,5 +40,6 @@ export function installPngPresets(documentRef, getMap) {
     } catch (error) { respond({error: error.message || "预设无法保存，请检查浏览器可用空间。"}); }
   };
   documentRef.addEventListener(PNG_PRESET_EVENT, listener);
+  documentRef.dispatchEvent(new documentRef.defaultView.Event(PNG_PRESET_READY_EVENT));
   return {dispose: () => documentRef.removeEventListener(PNG_PRESET_EVENT, listener)};
 }
