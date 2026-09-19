@@ -2615,14 +2615,25 @@ select:disabled {
 }
 
 .object-details-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
 }
 
-.object-details-actions-city {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* 按钮按完整文案占宽；空间不足时整颗换行，图标不占一列。 */
+.floating-panel .object-details-actions .el-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.floating-panel .object-details-actions .el-button:not(.ui-icon-action) {
+  width: auto;
+}
+
+.floating-panel .object-details-actions .el-button > span {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .object-name-editor {
