@@ -27,15 +27,15 @@ assert.match(tableSource, /showRegenerationLock/);
 assert.match(tableSource, /锁定以防重新生成/);
 assert.match(tableSource, /解除重生成锁定/);
 assert.match(tableSource, /aria-pressed/);
-assert.match(tableSource, /lock-range-selection/);
-assert.match(tableSource, /batchLockSelectionMode/);
+assert.match(tableSource, /event\.ctrlKey \|\| event\.metaKey/);
+assert.doesNotMatch(tableSource, /type="checkbox"|batchLockSelectionMode/);
 assert.match(tableSource, /emit\("lock-selection-change", ids\);\s+emit\("selection-change", ids\);/);
-assert.match(tableSource, /selectionColumnVisible = computed\(\(\) => props\.selectableRows \|\| props\.showRegenerationLock\)/);
+assert.match(tableSource, /multiSelectionEnabled = computed\(\(\) => props\.selectableRows \|\| props\.showRegenerationLock\)/);
 const rangeSource = sourceBetween(tableSource, "function emitRangeSelection", "function emitSelectionChange");
 assert.match(rangeSource, /objectTableSelectionRange\(props\.rows, lockSelectionAnchor, rowKey\(row\), rowKey\)/, "Shift 范围必须使用完整过滤排序 rows");
 assert.doesNotMatch(rangeSource, /visibleRows/, "Shift 范围不得退化为虚拟窗口");
 assert.match(tableSource, /@click="event => handleRowClick\(row, event\)"/, "普通行单击入口必须保留");
-assert.match(tableSource, /@dblclick="handleRowDoubleClick\(row\)"/, "普通行双击入口必须保留");
+assert.match(tableSource, /@dblclick="event => handleRowDoubleClick\(row, event\)"/, "普通行双击入口必须保留");
 assert.match(tableSource, /@click\.stop="emit\('locate', row\)"/, "定位事件入口必须保留");
 assert.match(tableSource, /function handleRowClick\(row, event\)[\s\S]*?emit\("select", row\);/, "非批量模式必须继续发出 select");
 assert.match(tableSource, /function handleRowClick\(row, event\)[\s\S]*?emit\("select", row\);/, "普通 click 必须继续发出 select");
@@ -61,13 +61,14 @@ assert.match(
 assert.match(composableSource, /getRegenerationLockUiSession/);
 assert.match(composableSource, /get selectedCount\(\)/, "地图选中不可见行时动作条仍须使用完整会话计数");
 assert.match(actionsSource, /已选 \{\{ selectedCount \}\} 项/);
-for (const label of ["列表多选", "结束列表多选", "在地图多选", "地图多选中", "锁定选中", "解锁选中", "清空选择"]) {
+for (const label of ["在地图多选", "地图多选中", "锁定选中", "解锁选中", "清空选择"]) {
   assert.match(actionsSource, new RegExp(`(?:aria-label|title)=[^>]*${label}`), `共享批量操作缺少 ${label} 的稳定名称`);
 }
-for (const icon of ["List", "Location", "Lock", "Unlock", "CircleClose"]) {
+for (const icon of ["Location", "Lock", "Unlock", "CircleClose"]) {
   assert.match(actionsSource, new RegExp(`<${icon} \/>`), `共享批量操作缺少 ${icon} 图标`);
 }
-assert.equal((actionsSource.match(/aria-pressed=/g) || []).length, 2, "两个选择模式必须保留 aria-pressed");
+assert.equal((actionsSource.match(/aria-pressed=/g) || []).length, 1, "地图选择保留 aria-pressed");
+assert.match(actionsSource, /Ctrl\+点击多选/);
 assert.equal((actionsSource.match(/:disabled="!selectedCount"/g) || []).length, 3, "锁定、解锁和清空必须保留空选择禁用态");
 assert.match(stylesSource, /\.regeneration-lock-actions\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-flow:\s*row wrap;[\s\S]*?gap:\s*8px;/, "共享批量操作没有一行优先、安全换行和稳定按钮间距");
 
@@ -133,6 +134,16 @@ session.setOne({kind: "state", id: 1}, false);
 assert.equal(writes.length, 2);
 assert.equal(writes[1].type, "one");
 assert.equal(session.snapshot().lockedKeys.size, 0);
+
+// 模拟历史回退直接替换锁数据；刷新只能发布状态，不能改动已选集合或再写命令。
+map.regenerationLocks.entries = [{kind: "state", id: 1}];
+session.refresh();
+assert.equal(snapshots.at(-1).lockedKeys.has(regenerationLockKey({kind: "state", id: 1})), true);
+assert.deepEqual(snapshots.at(-1).selectedIds, [1, 3]);
+assert.equal(writes.length, 2);
+map.regenerationLocks.entries = [];
+session.refresh();
+assert.equal(snapshots.at(-1).lockedKeys.size, 0);
 
 session.closePanel("state-panel");
 assert.equal(session.snapshot().panelId, null);

@@ -109,6 +109,8 @@
 </template>
 
 <script setup>
+import {useObjectLabel} from "../composables/use-object-label.js";
+const objectLabel = useObjectLabel();
 import {computed, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -201,7 +203,7 @@ const cityEndpointOptions = computed(() => [
   {value: -1, label: "无城市端点"},
   ...(props.state.map?.settlements?.cities || [])
     .filter(city => city && !city.removed && Number.isInteger(city.id))
-    .map(city => ({value: city.id, label: `${city.name || `城市 #${city.id}`}（#${city.id}）`}))
+    .map(city => ({value: city.id, label: objectLabel(city.name, city.id, "未命名城市")}))
 ]);
 const routeEditPreviewMessage = computed(() => {
   const preview = props.state.editPreview;

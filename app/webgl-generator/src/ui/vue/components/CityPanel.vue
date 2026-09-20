@@ -8,7 +8,7 @@
   </div>
   <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
-    v-memo="[state.version, state.filter, state.sortKey, state.sortDir, state.columnWidths, state.selectedCityId, state.highlightCount, selectedCityIds]"
+    v-memo="[state.version, state.filter, state.sortKey, state.sortDir, state.columnWidths, state.selectedCityId, state.highlightCount, selectedCityIds, regenerationLocks.tableProps.lockedRowIds, regenerationLocks.tableProps.lockSelectionIds, regenerationLocks.tableProps.lockableRowIds]"
     v-bind="regenerationLocks.tableProps"
     v-on="regenerationLocks.tableListeners"
     :columns="columns"

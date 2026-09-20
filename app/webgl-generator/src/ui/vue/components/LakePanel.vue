@@ -102,6 +102,8 @@
 </template>
 
 <script setup>
+import {useObjectLabel} from "../composables/use-object-label.js";
+const objectLabel = useObjectLabel();
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -186,7 +188,7 @@ const outletRiverOptions = computed(() => [
   {value: 0, label: "无出口（闭合湖泊）"},
   ...(props.state.map?.rivers?.rivers || props.state.map?.pack?.rivers || []).map(river => {
     const id = Number(river?.i ?? river?.id);
-    return {value: id, label: `${river?.name || `河流 #${id}`}（#${id}）`};
+    return {value: id, label: objectLabel(river?.name, id, "未命名河流")};
   })
 ]);
 const outletPreviewMessage = computed(() => {

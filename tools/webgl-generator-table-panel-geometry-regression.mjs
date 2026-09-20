@@ -83,13 +83,7 @@ assert.match(cssRule(".object-table-wrap"), /max-width: 100%[\s\S]*overflow-x: a
 const savePanelStateBlock = sourceBlock(panelSource, "  savePanelState(id) {", "\n  readPanelState(");
 assert.doesNotMatch(savePanelStateBlock, /floating-panel-available-height/, "可用高度是运行时几何，不得写入面板持久化");
 
-assertHitVsVisual({
-  visual: cssRule(".object-table-selection-checkbox"),
-  hit: cssRule(".object-table-selection-hit"),
-  visualWidth: 14,
-  hitWidth: 28,
-  label: "checkbox"
-});
+assert.doesNotMatch(tableSource, /type="checkbox"/, "列表选择必须使用 Ctrl+点击，不再渲染多选框");
 assertHitVsVisual({
   visual: cssRule(".object-table-column-resize-handle::after"),
   hit: cssRule(".object-table-column-resize-handle"),
@@ -102,20 +96,19 @@ assert.equal(px(cssRule(".ui-secondary-action-close"), "width"), 26, "二级关�
 assert.equal(insetExpansion(cssRule(".ui-secondary-action-close::before")), 2, "二级关闭透明命中应扩展到 28px");
 assert.equal(px(cssRule(".object-table-empty-action"), "min-height"), 26, "空态动作视觉高度保持 26px");
 assert.equal(insetExpansion(cssRule(".object-table-empty-action::before")), 2, "空态动作透明命中应扩展到至少 28px");
-const rowSelectionBlock = sourceBlock(tableSource, '          <td v-if="selectionColumnVisible" class="object-table-selection-cell">', "\n          </td>");
-assert.match(rowSelectionBlock, /@click="event => handleSelectionHitClick\(row, event\)"/, "checkbox label 空白区必须只在真实 click 捕获 Shift 并阻断行 click");
-assert.doesNotMatch(rowSelectionBlock, /@pointerdown/, "checkbox label 不得在可能无 change 的 pointerdown 持久保存修饰键");
-assert.match(rowSelectionBlock, /class="object-table-selection-checkbox object-table-row-selection-checkbox"[\s\S]*?@click="event => rememberSelectionModifiers\(row, event, false, true\)"/, "checkbox input click 必须保留修饰键捕获以支持键盘激活");
+assert.match(tableSource, /@keydown\.space\.self\.prevent/, "移除多选框后保留行的键盘选择入口");
+assert.equal(px(cssRule(".object-table-action-cell"), "width"), 64);
+assert.equal(px(cssRule(".has-locate-action .object-table-lock-cell"), "right"), 64, "锁列固定在定位列左边");
 assert.equal((tableSource.match(/emit\("column-resize"/g) || []).length, 1, "列宽 pointerup 至多派发一次持久化事件");
 assert.match(tableSource, /session\.finish\(event\?\.type === "pointerup" \? "pointerup" : event\?\.type \|\| "unmount", event\)/, "列宽必须只把 pointerup 路由为提交");
 runSelectionEventContract();
 runColumnResizeSessionContract();
 
 console.log(JSON.stringify({
-  tables: {hosts: 24, instances: 27, virtual: 27, resizable: 26, checkbox: 21, locate: 20, doubleClick: 11},
+  tables: {hosts: 24, instances: 27, virtual: 27, resizable: 26, checkbox: 0, ctrlSelection: 21, locate: 20, doubleClick: 11},
   rowHeight: OBJECT_TABLE_ROW_HEIGHT,
   panelAvailableHeight: {576: 504, 720: 648, 820: 748},
-  hitTargets: {checkbox: "14/28", resize: "2/16", sort: 28, secondaryClose: "26/28", emptyAction: "26/28"}
+  hitTargets: {resize: "2/16", sort: 28, secondaryClose: "26/28", emptyAction: "26/28"}
 }, null, 2));
 
 function cssRule(selector) {

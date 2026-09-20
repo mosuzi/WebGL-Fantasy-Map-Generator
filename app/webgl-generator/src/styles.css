@@ -3308,33 +3308,18 @@ select:disabled {
   color: var(--panel-accent);
 }
 
-.object-table-selection-column,
-.object-table-selection-cell {
-  width: 34px;
-  min-width: 34px;
-  text-align: center;
-}
-
-.object-table-selection-checkbox {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: #d7a84f;
-  vertical-align: middle;
-  cursor: pointer;
-}
-
-.object-table-selection-hit {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  cursor: pointer;
-}
-
-.object-table-selection-checkbox:focus-visible {
+.object-table-row:focus-visible {
   outline: 2px solid var(--panel-accent);
-  outline-offset: 2px;
+  outline-offset: -2px;
+}
+
+.object-table-row {
+  user-select: none;
+}
+
+.regeneration-lock-selection-hint {
+  color: var(--panel-text);
+  font-size: 12px;
 }
 
 .object-table-spacer-row td {
@@ -3350,16 +3335,37 @@ select:disabled {
 
 .object-table-action-column,
 .object-table-action-cell {
-  width: 48px;
-  min-width: 48px;
+  box-sizing: border-box;
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
   position: sticky;
   right: 0;
   z-index: 1;
   background: inherit;
-  text-align: right;
+  text-align: center;
 }
 
-.object-table-action-column {
+.object-table-lock-column,
+.object-table-lock-cell {
+  box-sizing: border-box;
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: inherit;
+  text-align: center;
+}
+
+.has-locate-action .object-table-lock-column,
+.has-locate-action .object-table-lock-cell {
+  right: 64px;
+}
+
+.object-table-action-column,
+.object-table-lock-column {
   z-index: 3;
   background: var(--panel-surface);
 }

@@ -9,7 +9,7 @@
     <p role="status">{{ error || (busy ? '正在查找…' : `共 ${result.total} 项`) }}</p>
     <ul class="map-search-results" aria-label="搜索结果">
       <li v-for="(item, index) in result.items" :key="item.key">
-        <button data-layout-multiline="搜索结果分别显示名称、类型和摘要" :class="{selected: index === selected}" @click="select(index)" @keydown="navigate"><strong>{{ item.name }}</strong><small>{{ item.label }} · #{{ item.ref.id }}</small><span>{{ item.snippet }}</span></button>
+        <button data-layout-multiline="搜索结果分别显示名称、类型和摘要" :class="{selected: index === selected}" @click="select(index)" @keydown="navigate"><strong>{{ item.name }}</strong><small>{{ item.label }}<span v-if="debugEnabled" data-debug-id> · #{{ item.ref.id }}</span></small><span>{{ item.snippet }}</span></button>
       </li>
     </ul>
     <div class="map-search-pages"><button :disabled="!result.page || busy" @click="page--; run()">上一页</button><span>{{ result.page + 1 }} / {{ result.pages }}</span><button :disabled="result.page + 1 >= result.pages || busy" @click="page++; run()">下一页</button></div>
@@ -22,6 +22,8 @@
 
 <script setup>
 import {ref, watch, onBeforeUnmount, nextTick} from "vue";
+import {useDebugMode} from "../composables/use-debug-mode.js";
+const debugEnabled = useDebugMode();
 import {MAP_SEARCH_EVENT, SEARCH_TYPES} from "../../../runtime/map-content-search.js";
 const dialog = ref(null), input = ref(null), query = ref(""), type = ref(""), page = ref(0), selected = ref(0), busy = ref(false), error = ref(""), detail = ref(null);
 const result = ref({items: [], total: 0, page: 0, pages: 1});

@@ -101,6 +101,8 @@
 </template>
 
 <script setup>
+import {useObjectLabel} from "../composables/use-object-label.js";
+const objectLabel = useObjectLabel();
 import {computed, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -171,7 +173,7 @@ const biomeActions = Object.freeze([
   {key: "assign", resultClass: "open-secondary", label: "归属笔刷", icon: "◉"},
   {key: "suitability", resultClass: "open-secondary", label: "数值适居度", icon: "∿"}
 ]);
-const biomeOptions = computed(() => metrics.value.rows.map(row => ({value: row.id, label: `${row.name}（#${row.id}）`})));
+const biomeOptions = computed(() => metrics.value.rows.map(row => ({value: row.id, label: objectLabel(row.name, row.id)})));
 const scopeOptions = Object.freeze([
   {value: "land", label: "陆地"},
   {value: "water", label: "水域"}

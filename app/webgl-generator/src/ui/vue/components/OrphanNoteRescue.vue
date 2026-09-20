@@ -4,13 +4,15 @@
     <div class="orphan-rescue-target">
       <select v-model="kind" aria-label="重新绑定对象类型"><option value="state">国家</option><option value="province">省份</option><option value="city">城市</option></select>
       <input v-model="query" placeholder="筛选目标名称或编号" aria-label="筛选重新绑定目标" />
-      <select v-model="targetId" aria-label="重新绑定目标"><option value="">选择目标</option><option v-for="item in targets" :key="item.id" :value="item.id">{{ item.name }} · #{{ item.id }}</option></select>
+      <select v-model="targetId" aria-label="重新绑定目标"><option value="">选择目标</option><option v-for="item in targets" :key="item.id" :value="item.id">{{ item.name }}{{ debugEnabled ? ` · #${item.id}` : '' }}</option></select>
       <button :disabled="targetId === ''" @click="rescue({target: {kind, id: targetId}})">重新绑定</button>
     </div><p>正文和标题保留；目标已有备注时不会覆盖。保存正文后再重新绑定。</p>
   </section>
 </template>
 <script setup>
 import {ref, computed, watch} from "vue";
+import {useDebugMode} from "../composables/use-debug-mode.js";
+const debugEnabled = useDebugMode();
 import UiNoteField from "./base/UiNoteField.vue";
 const props = defineProps({map: Object, note: Object, version: Number, onRescue: Function});
 const kind = ref("city"), query = ref(""), targetId = ref("");

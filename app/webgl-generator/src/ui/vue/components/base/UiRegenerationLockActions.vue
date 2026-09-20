@@ -1,18 +1,7 @@
 <template>
   <div class="regeneration-lock-actions" role="toolbar" aria-label="重生成锁定批量操作">
     <span class="regeneration-lock-selection-count">已选 {{ selectedCount }} 项</span>
-    <UiButton
-      class="ui-icon-action regeneration-lock-action"
-      variant="secondary"
-      :active="batchSelectionMode"
-      :title="batchSelectionMode ? '结束列表多选' : '列表多选'"
-      :aria-label="batchSelectionMode ? '结束列表多选' : '列表多选'"
-      :aria-pressed="batchSelectionMode ? 'true' : 'false'"
-      circle
-      @click="$emit('toggle-batch-mode')"
-    >
-      <ElIcon aria-hidden="true"><List /></ElIcon>
-    </UiButton>
+    <span class="regeneration-lock-selection-hint">Ctrl+点击多选</span>
     <UiButton
       class="ui-icon-action regeneration-lock-action"
       variant="secondary"
@@ -62,14 +51,13 @@
 </template>
 
 <script setup>
-import {CircleClose, List, Location, Lock, Unlock} from "@element-plus/icons-vue";
+import {CircleClose, Location, Lock, Unlock} from "@element-plus/icons-vue";
 import UiButton from "./UiButton.vue";
 
 defineOptions({name: "UiRegenerationLockActions"});
 defineProps({
   selectedCount: {type: Number, default: 0},
-  batchSelectionMode: {type: Boolean, default: false},
   mapSelectionActive: {type: Boolean, default: false}
 });
-defineEmits(["toggle-batch-mode", "map-select", "lock", "unlock", "clear"]);
+defineEmits(["map-select", "lock", "unlock", "clear"]);
 </script>

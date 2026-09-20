@@ -1,25 +1,12 @@
 <template>
   <div ref="tableWrap" class="object-table-wrap" :style="objectTableGeometryStyle" @scroll.passive="handleScroll">
-    <table v-if="rows.length" class="object-table object-table-native">
+    <table v-if="rows.length" class="object-table object-table-native" :class="{'has-locate-action': showLocateAction}" :aria-label="multiSelectionEnabled ? '对象列表，Ctrl+点击多选，Shift+点击连续选择' : '对象列表'">
       <thead>
         <tr>
-          <th v-if="selectionColumnVisible" class="object-table-selection-column">
-            <label class="object-table-selection-hit" @click="stopSelectionEvent">
-              <input
-                class="object-table-selection-checkbox object-table-select-all-checkbox"
-                type="checkbox"
-                :checked="allRowsSelected"
-                :indeterminate="partialRowsSelected"
-                :aria-checked="selectionHeaderState"
-                aria-label="选择当前列表"
-                @change="handleSelectAllChange"
-              />
-            </label>
-          </th>
-          <th v-if="showRegenerationLock" class="object-table-lock-column">重生成锁</th>
           <th
-            v-for="column in columns"
+            v-for="column in visibleColumns"
             :key="column.key"
+            :data-column-key="column.key"
             :style="columnStyle(column)"
             :class="{'object-table-resizable-column': columnResizable(column)}"
             :aria-sort="headerSortState(column)"
@@ -47,6 +34,7 @@
               @pointerdown.stop.prevent="startColumnResize($event, column)"
             ></button>
           </th>
+          <th v-if="showRegenerationLock" class="object-table-lock-column">重生成锁</th>
           <th v-if="showLocateAction" class="object-table-action-column">定位</th>
         </tr>
       </thead>
@@ -59,26 +47,27 @@
           :key="rowKey(row)"
           v-memo="[rowKey(row), row, isSelected(row), rowSelectionChecked(row), rowLocked(row), rowLockable(row), columnLayoutSignature]"
           class="object-table-row"
-          :class="{'selected-row': isSelected(row), 'is-selected': isSelected(row)}"
-          :aria-selected="isSelected(row) ? 'true' : 'false'"
-          :data-ui-state="isSelected(row) ? 'selected' : undefined"
+          :class="{'selected-row': rowHighlighted(row), 'is-selected': rowHighlighted(row)}"
+          :aria-selected="rowHighlighted(row) ? 'true' : 'false'"
+          :data-ui-state="rowHighlighted(row) ? 'selected' : undefined"
+          :data-current-row="isSelected(row) ? 'true' : undefined"
+          :data-row-key="rowKey(row)"
+          :tabindex="multiSelectionEnabled ? 0 : undefined"
           @click="event => handleRowClick(row, event)"
-          @dblclick="handleRowDoubleClick(row)"
+          @keydown.space.self.prevent="event => handleRowClick(row, event)"
+          @dblclick="event => handleRowDoubleClick(row, event)"
         >
-          <td v-if="selectionColumnVisible" class="object-table-selection-cell">
-            <label
-              class="object-table-selection-hit"
-              @click="event => handleSelectionHitClick(row, event)"
-            >
-              <input
-                class="object-table-selection-checkbox object-table-row-selection-checkbox"
-                type="checkbox"
-                :checked="rowSelectionChecked(row)"
-                :aria-label="`选择 ${rowKey(row)}`"
-                @click="event => rememberSelectionModifiers(row, event, false, true)"
-                @change="event => handleRowSelectionChange(row, event.target.checked)"
-              />
-            </label>
+          <td
+            v-for="column in visibleColumns"
+            :key="column.key"
+            :data-column-key="column.key"
+            :style="columnStyle(column)"
+          >
+            <span v-if="column.type === 'color'" class="object-table-cell object-table-color-cell">
+              <i :style="{backgroundColor: row[column.key]}" aria-hidden="true"></i>
+              {{ formatCell(column, row) }}
+            </span>
+            <span v-else class="object-table-cell">{{ formatCell(column, row) }}</span>
           </td>
           <td v-if="showRegenerationLock" class="object-table-lock-cell">
             <button
@@ -89,24 +78,14 @@
               :aria-label="rowLocked(row) ? '解除重生成锁定' : '锁定以防重新生成'"
               :aria-pressed="rowLocked(row) ? 'true' : 'false'"
               @click.stop="emit('lock-toggle', {row, locked: !rowLocked(row)})"
+              @dblclick.stop
             >
               <ElIcon aria-hidden="true"><Lock v-if="rowLocked(row)" /><Unlock v-else /></ElIcon>
             </button>
             <span v-else aria-label="不可锁定">—</span>
           </td>
-          <td
-            v-for="column in columns"
-            :key="column.key"
-            :style="columnStyle(column)"
-          >
-            <span v-if="column.type === 'color'" class="object-table-cell object-table-color-cell">
-              <i :style="{backgroundColor: row[column.key]}" aria-hidden="true"></i>
-              {{ formatCell(column, row) }}
-            </span>
-            <span v-else class="object-table-cell">{{ formatCell(column, row) }}</span>
-          </td>
           <td v-if="showLocateAction" class="object-table-action-cell">
-            <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="emit('locate', row)">
+            <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="emit('locate', row)" @dblclick.stop>
               <ElIcon aria-hidden="true"><Location /></ElIcon>
             </button>
           </td>
@@ -136,6 +115,8 @@
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
+import {useDebugMode} from "../../composables/use-debug-mode.js";
+import {visibleListFields} from "../../composables/list-visibility.js";
 import {Location, Lock, Unlock} from "@element-plus/icons-vue";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 import {
@@ -147,13 +128,6 @@ import {
 } from "../../../components/selection-scroll.js";
 import {objectTableSelectionRange} from "./object-table-selection.js";
 import {OBJECT_TABLE_ROW_HEIGHT} from "./object-table-geometry.js";
-import {
-  captureObjectTableSelectionEvent,
-  captureObjectTableSelectionHitClick,
-  consumeObjectTableSelectionModifiers,
-  createObjectTableSelectionEventState,
-  stopObjectTableSelectionEvent
-} from "./object-table-selection-events.js";
 import {beginDirectManipulationSession} from "../../../../runtime/direct-manipulation-session.js";
 
 defineOptions({
@@ -242,10 +216,6 @@ const props = defineProps({
   lockSelectionIds: {
     type: Array,
     default: () => []
-  },
-  batchLockSelectionMode: {
-    type: Boolean,
-    default: false
   }
 });
 
@@ -254,7 +224,7 @@ const VIRTUAL_OVERSCAN_ROWS = 8;
 const MIN_RESIZE_COLUMN_WIDTH = 32;
 const MAX_RESIZE_COLUMN_WIDTH = 640;
 
-const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "column-resize", "selection-change", "lock-toggle", "lock-selection-change", "lock-range-selection", "batch-row-toggle"]);
+const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "column-resize", "selection-change", "lock-toggle", "lock-selection-change"]);
 
 const tableWrap = ref(null);
 const objectTableGeometryStyle = Object.freeze({"--object-table-row-height": `${OBJECT_TABLE_ROW_HEIGHT}px`});
@@ -263,11 +233,12 @@ const viewportHeight = ref(300);
 let scrollMetricsFrame = 0;
 let resizeState = null;
 const previewColumnWidths = ref({});
-const selectionEventState = createObjectTableSelectionEventState();
 let lockSelectionAnchor = null;
 
-const selectionColumnVisible = computed(() => props.selectableRows || props.showRegenerationLock);
-const columnSpan = computed(() => props.columns.length + (props.showLocateAction ? 1 : 0) + (selectionColumnVisible.value ? 1 : 0) + (props.showRegenerationLock ? 1 : 0));
+const multiSelectionEnabled = computed(() => props.selectableRows || props.showRegenerationLock);
+const debugEnabled = useDebugMode();
+const visibleColumns = computed(() => visibleListFields(props.columns, debugEnabled.value));
+const columnSpan = computed(() => visibleColumns.value.length + (props.showLocateAction ? 1 : 0) + (props.showRegenerationLock ? 1 : 0));
 const virtualEnabled = computed(() => props.rows.length > VIRTUAL_THRESHOLD);
 const virtualWindow = computed(() => {
   if (!virtualEnabled.value) return {start: 0, end: props.rows.length};
@@ -285,22 +256,14 @@ const effectiveSelectionIds = computed(() => props.showRegenerationLock ? props.
 const selectedRowKeySet = computed(() => new Set(effectiveSelectionIds.value.map(id => stringRowId(id))));
 const lockedRowKeySet = computed(() => new Set(props.lockedRowIds.map(id => stringRowId(id))));
 const lockableRowKeySet = computed(() => new Set(props.lockableRowIds.map(id => stringRowId(id))));
-const allRowsSelected = computed(() => Boolean(props.rows.length) && props.rows.every(row => rowSelectionChecked(row)));
-const someRowsSelected = computed(() => props.rows.some(row => rowSelectionChecked(row)));
-const partialRowsSelected = computed(() => someRowsSelected.value && !allRowsSelected.value);
-const selectionHeaderState = computed(() => {
-  if (allRowsSelected.value) return "true";
-  if (partialRowsSelected.value) return "mixed";
-  return "false";
-});
-const columnLayoutSignature = computed(() => props.columns.map(column => [
+const columnLayoutSignature = computed(() => visibleColumns.value.map(column => [
   column.key,
   columnWidthOverride(column),
   column.width,
   column.minWidth,
   column.maxWidth,
   column.align
-].join(":")).join("|"));
+].join(":")).join("|") + `:${multiSelectionEnabled.value}:${props.showRegenerationLock}:${props.showLocateAction}`);
 const selectedRowPosition = computed(() => selectedRowIndex());
 const rowOrderSignature = computed(() => selectionOrderSignature(props.rows.map(row => rowKey(row))));
 const selectedScrollAnchor = computed(() => selectionCenterAnchor(
@@ -310,7 +273,7 @@ const selectedScrollAnchor = computed(() => selectionCenterAnchor(
 ));
 const selectedCenterController = createSelectionCenterController({
   getScroller: () => tableScroller(tableWrap.value),
-  getTarget: () => tableWrap.value?.querySelector(".object-table-row.selected-row"),
+  getTarget: () => tableWrap.value?.querySelector('.object-table-row[data-current-row="true"]'),
   getViewportInsets: scroller => tableViewportInsets(scroller),
   prepareTarget: scroller => {
     if (!virtualEnabled.value || selectedRowPosition.value < 0) return;
@@ -349,21 +312,32 @@ function rowSelectionChecked(row) {
   return selectedRowKeySet.value.has(rowKey(row));
 }
 
+function rowHighlighted(row) {
+  return multiSelectionEnabled.value ? rowSelectionChecked(row) : isSelected(row);
+}
+
 function rowKey(row) {
   return stringRowId(getRowId(row));
 }
 
 function handleRowClick(row, event) {
-  if (props.showRegenerationLock && props.batchLockSelectionMode) {
-    if (event.shiftKey) emitRangeSelection(row, !rowSelectionChecked(row));
-    else emit("batch-row-toggle", row);
+  if (multiSelectionEnabled.value) {
+    if (event.shiftKey) {
+      emitRangeSelection(row, true);
+      return;
+    }
     lockSelectionAnchor = rowKey(row);
-    return;
+    if (event.ctrlKey || event.metaKey) {
+      handleRowSelectionChange(row, !rowSelectionChecked(row));
+      return;
+    }
+    emitSelectionChange([getRowId(row)]);
   }
   emit("select", row);
 }
 
-function handleRowDoubleClick(row) {
+function handleRowDoubleClick(row, event) {
+  if (event.ctrlKey || event.metaKey || event.shiftKey) return;
   if (props.doubleClickAction !== "edit") return;
   emit("edit", row);
 }
@@ -373,25 +347,7 @@ function handleHeaderSort(column) {
   emit("sort", columnSortKey(column));
 }
 
-function handleSelectAllChange(event) {
-  const checked = Boolean(event.target.checked);
-  const currentRows = props.rows || [];
-  const currentKeys = new Set(currentRows.map(row => rowKey(row)));
-  const selected = new Map(effectiveSelectionIds.value.map(id => [stringRowId(id), id]));
-  if (checked) {
-    for (const row of currentRows) selected.set(rowKey(row), getRowId(row));
-  } else {
-    for (const key of currentKeys) selected.delete(key);
-  }
-  emitSelectionChange(Array.from(selected.values()));
-}
-
 function handleRowSelectionChange(row, checked) {
-  const selectionModifiers = consumeObjectTableSelectionModifiers(selectionEventState);
-  if (props.showRegenerationLock && selectionModifiers?.shiftKey) {
-    emitRangeSelection(row, checked);
-    return;
-  }
   const key = rowKey(row);
   const selected = new Map(effectiveSelectionIds.value.map(id => [stringRowId(id), id]));
   if (checked) selected.set(key, getRowId(row));
@@ -400,26 +356,18 @@ function handleRowSelectionChange(row, checked) {
   emitSelectionChange(Array.from(selected.values()));
 }
 
-function rememberSelectionModifiers(row, event, stopPropagation = false, preserveExisting = false) {
-  captureObjectTableSelectionEvent(selectionEventState, event, {stopPropagation, preserveExisting});
-  if (!event.shiftKey) lockSelectionAnchor = rowKey(row);
-}
-
-function handleSelectionHitClick(row, event) {
-  if (captureObjectTableSelectionHitClick(selectionEventState, event) && !event.shiftKey) lockSelectionAnchor = rowKey(row);
-}
-
-function stopSelectionEvent(event) {
-  stopObjectTableSelectionEvent(event);
-}
-
 function emitRangeSelection(row, selected) {
   const rangeRows = objectTableSelectionRange(props.rows, lockSelectionAnchor, rowKey(row), rowKey);
   if (!rangeRows) {
     emitSelectionChange([getRowId(row)]);
     return;
   }
-  emit("lock-range-selection", {rows: rangeRows, selected});
+  const ids = new Map(effectiveSelectionIds.value.map(id => [stringRowId(id), id]));
+  for (const entry of rangeRows) {
+    if (selected) ids.set(rowKey(entry), getRowId(entry));
+    else ids.delete(rowKey(entry));
+  }
+  emitSelectionChange([...ids.values()]);
 }
 
 function emitSelectionChange(ids) {

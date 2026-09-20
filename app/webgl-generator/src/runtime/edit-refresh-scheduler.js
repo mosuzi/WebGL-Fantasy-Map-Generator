@@ -51,6 +51,8 @@ export const EDIT_REFRESH_PRESETS = Object.freeze({
 export function createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel, applyVisualTheme}) {
   return {
     run(commandOrEffects = null, {binding = null} = {}) {
+      // 锁命令的撤销 / 重做也要发布新快照，不能只在点击锁按钮时刷新。
+      if (commandOrEffects?.domain === "regeneration-locks") state.regenerationLockUiSession?.refresh();
       const sourceEffects = commandOrEffects?.effects || commandOrEffects;
       const effects = normalizeEditEffects(sourceEffects);
       const retainedBinding = binding || issueRetainedRefreshBinding(state, effects);

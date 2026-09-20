@@ -23,7 +23,7 @@
       <thead>
         <tr>
           <th>国家</th>
-          <th v-for="stateRow in matrix.states" :key="stateRow.id" :title="stateRow.name">#{{ stateRow.id }}</th>
+          <th v-for="stateRow in matrix.states" :key="stateRow.id" :title="stateRow.name">{{ debugEnabled ? `#${stateRow.id}` : shortName(stateRow.name) }}</th>
         </tr>
       </thead>
       <tbody>
@@ -151,6 +151,8 @@
 </template>
 
 <script setup>
+import {useDebugMode} from "../composables/use-debug-mode.js";
+const debugEnabled = useDebugMode();
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {DIPLOMACY_RELATION_OPTIONS, DIPLOMACY_RELATIONS} from "../../../generator/diplomacy.js";
 import UiActionDock from "./base/UiActionDock.vue";

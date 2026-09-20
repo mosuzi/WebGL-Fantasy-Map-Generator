@@ -213,6 +213,8 @@
 </template>
 
 <script setup>
+import {useObjectLabel} from "../composables/use-object-label.js";
+const objectLabel = useObjectLabel();
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -350,7 +352,7 @@ const mergeSurvivorOptions = computed(() => [topologySourceStateId.value, mergeO
 const splitProvinceOptions = computed(() => stateProvinces(props.state.map, topologySourceStateId.value));
 const splitCapitalOptions = computed(() => stateCities(props.state.map, topologySourceStateId.value)
   .filter(city => splitProvinceIds.value.includes(Number(city.province)))
-  .map(city => ({value: city.id, label: `${city.name || `城市 #${city.id}`}（省 #${city.province}）`})));
+  .map(city => ({value: city.id, label: `${objectLabel(city.name, city.id, "未命名城市")} · ${props.state.map?.politics?.provinces?.[city.province]?.name || "未命名省份"}`})));
 const canInspectMerge = computed(() => mergeSurvivorOptions.value.length === 2 && mergeSurvivorOptions.value.some(option => option.value === mergeSurvivorStateId.value));
 const canInspectSplit = computed(() => splitProvinceIds.value.length > 0 && Number.isInteger(splitCapitalCityId.value));
 const canSubmitTopology = computed(() => Boolean(topologyInspection.value?.valid));
@@ -713,7 +715,7 @@ function stateProvinces(map, stateId) {
     .sort((a, b) => Number(a.i ?? a.id) - Number(b.i ?? b.id))
     .map(province => {
       const id = Number(province.i ?? province.id);
-      return {value: id, label: `${province.name || `省份 #${id}`}（#${id}）`};
+      return {value: id, label: objectLabel(province.name, id, "未命名省份")};
     });
 }
 

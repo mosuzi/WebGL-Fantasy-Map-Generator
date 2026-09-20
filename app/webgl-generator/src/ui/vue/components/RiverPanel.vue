@@ -110,6 +110,8 @@
 </template>
 
 <script setup>
+import {useObjectLabel} from "../composables/use-object-label.js";
+const objectLabel = useObjectLabel();
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -266,13 +268,13 @@ function riverRows(map) {
     const networkStatus = river.networkStatus || (parentId && !parent ? "orphaned" : "valid");
     return {
       id: river.id,
-      name: river.name || `#${river.id}`,
+      name: river.name || "未命名河流",
       type: networkStatus === "orphaned" ? (parentId ? "支流（无出口）" : "主河（无出口）") : parentId ? "支流" : river.outletKind === "lake" ? "入湖河流" : "主河",
       parentId,
       parentLabel: networkStatus === "orphaned"
-        ? parentId && parent ? `无有效出口（→ #${parentId} ${parent.name || ""}）` : "无有效出口"
-        : parentId ? `#${parentId} ${parent?.name || "未知干流"}` : "—",
-      basinLabel: `#${basinId} ${basin?.name || river.name || ""}`,
+        ? parentId && parent ? `无有效出口（→ ${objectLabel(parent.name, parentId, "未知干流")}）` : "无有效出口"
+        : parentId ? objectLabel(parent?.name, parentId, "未知干流") : "—",
+      basinLabel: objectLabel(basin?.name || river.name, basinId, "未命名河流"),
       confluence: Number.isInteger(Number(river.confluence)) ? Number(river.confluence) : -1,
       networkStatus,
       networkIssue: river.networkIssue || "",

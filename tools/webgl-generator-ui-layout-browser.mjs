@@ -6,6 +6,8 @@ import {createRequire} from "node:module";
 import {preview} from "vite";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 import {inspectUiLayout} from "./ui-layout-inspector.mjs";
+import {assertPlayerListIdentifiers, inspectListDebugToggle} from "./ui-layout-list-identifiers.mjs";
+import {inspectListInteraction} from "./ui-layout-list-interaction.mjs";
 import {layoutFingerprint, saveLayoutReceipt} from "./ui-layout-commit-gate.mjs";
 import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 
@@ -28,7 +30,7 @@ const server = await preview({configFile: "vite.config.mjs", preview: {host: "12
 const profile = await fs.mkdtemp(path.join(os.tmpdir(), "fmg-layout-chrome-"));
 const context = await chromium.launchPersistentContext(profile, {channel: "chrome", headless: true, viewport: {width: 1440, height: 1000}});
 const page = await context.newPage(), settings = await context.newPage();
-const report = {mode: survey ? "调查" : filter ? "目标复验" : "完整验收", cases: [], unavailable: [], errors: [], startupHealth: [], accepted: false};
+const report = {mode: survey ? "调查" : filter ? "目标复验" : "完整验收", cases: [], listDebugToggles: [], listInteractions: [], unavailable: [], errors: [], startupHealth: [], accepted: false};
 let measuring = false;
 page.setDefaultTimeout(10000);
 page.on("pageerror", e => report.errors.push(e.message));
@@ -38,6 +40,7 @@ let currentLayout;
 async function settle() {await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));}
 async function capture(state) {
   await settle();
+  await assertPlayerListIdentifiers(page);
   const row = await page.evaluate(inspectUiLayout, surface);
   assert.ok(row.checked > 0, `状态没有可见控件：${state}`);
   if (state.includes("-菜单")) assert.ok(row.menuItems > 0, `菜单项未实际检查：${state}`);
@@ -179,6 +182,14 @@ try {
     for (const name of panels.filter(n => (!filter || filter.split(",").includes(n)) && n !== skip)) {
       if (name === "objectDetails") {await inspectObjects();continue;}
       await openPanel(name);await capture(`${name}-初始`);
+      if (currentLayout.name === "desktop") {
+        const toggle = await inspectListDebugToggle(page);
+        if (toggle) report.listDebugToggles.push({panel: name, ...toggle});
+      }
+      if (["city", "state", "notes"].includes(name)) {
+        const interaction = await inspectListInteraction(page);
+        if (interaction) report.listInteractions.push({layout: currentLayout.name, panel: name, ...interaction});
+      }
       if (name === "generation") await inspectControl();
       else {
         await inspectSelection(name);await inspectDisclosure(name);
@@ -193,6 +204,8 @@ try {
     console.log(`${currentLayout.name}：已观察 ${report.cases.length} 个状态，问题 ${report.cases.reduce((n, r) => n + r.issues.length, 0)}`);
   }
   assert.equal(report.errors.length, 0, "浏览器错误");
+  if (!filter && !skip) assert.ok(report.listInteractions.filter(item => item.lock && item.horizontalScroll > 0).length >= 5, "各布局必须覆盖锁列横滚与 Ctrl 多选");
+  if (!filter && !skip) assert.ok(report.listDebugToggles.filter(item => item.restored).length >= 15, "必须验证至少 15 类正式列表的 ID 恢复");
   if (!survey && !filter && !skip) for (const layout of layouts) {
     const covered = new Set(report.cases.filter(c => c.layout === layout.name).map(c => c.state));
     for (const name of panels.filter(n => n !== "objectDetails")) assert.ok(covered.has(`${name}-初始`), `${layout.name}/${name} 未执行`);

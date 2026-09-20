@@ -497,7 +497,7 @@ const economyDetail = computed(() => {
 });
 const dealLocateTargets = computed(() => selectedDeal.value ? buildDealLocateTargets(selectedDeal.value) : []);
 const dealLocateActions = computed(() => [
-  {key: "deal", label: `定位交易 #${selectedDeal.value?.id || ""}`, icon: "⌖"},
+  {key: "deal", label: debugEnabled.value ? `定位交易 #${selectedDeal.value?.id ?? ""}` : "定位交易", icon: "⌖"},
   ...dealLocateTargets.value.map((item, index) => ({key: `related-${index}`, label: item.label, icon: "⌖"}))
 ]);
 
@@ -528,7 +528,7 @@ function buildGoodDetail(good) {
   return {
     kicker: "商品档案",
     title: good.name,
-    subtitle: `${good.typeLabel} · good #${good.id}`,
+    subtitle: debugEnabled.value ? `${good.typeLabel} · good #${good.id}` : good.typeLabel,
     badges: [good.visibleLabel, `${formatNumber(good.deals)} 笔交易`],
     highlights: [
       {label: "有效价", value: formatNumber(good.effectivePrice)},
@@ -620,7 +620,7 @@ function buildMarketDetail(market) {
     kicker: "市场档案",
     title: market.name,
     subtitle: `${market.stateName} · ${market.cityName}`,
-    badges: [`market #${market.id}`, `${formatNumber(market.burgs)} 城镇`],
+    badges: [...(debugEnabled.value ? [`market #${market.id}`] : []), `${formatNumber(market.burgs)} 城镇`],
     highlights: [
       {label: "覆盖", value: formatNumber(market.cells)},
       {label: "库存", value: formatNumber(market.stock)},
@@ -676,7 +676,7 @@ function buildDealDetail(deal) {
     kicker: "交易档案",
     title: deal.goodName,
     subtitle: `${deal.sellerName} -> ${deal.buyerName}`,
-    badges: [`deal #${deal.id}`, deal.sourceLabel],
+    badges: [...(debugEnabled.value ? [`deal #${deal.id}`] : []), deal.sourceLabel],
     highlights: [
       {label: "金额", value: formatNumber(deal.value)},
       {label: "数量", value: formatNumber(deal.units)},

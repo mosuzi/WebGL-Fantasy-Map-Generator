@@ -138,6 +138,7 @@ export function createRegenerationLockUiSession({
       return () => listeners.delete(listener);
     },
     snapshot,
+    refresh: notify,
     activate,
     replace,
     toggle,

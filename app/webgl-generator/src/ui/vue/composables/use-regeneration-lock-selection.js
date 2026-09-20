@@ -11,7 +11,6 @@ export function useRegenerationLockSelection({
 }) {
   const session = getRegenerationLockUiSession();
   const snapshot = ref(emptySnapshot());
-  const batchSelectionMode = ref(false);
   const unsubscribe = session?.subscribe(next => {
     snapshot.value = next;
   });
@@ -40,7 +39,6 @@ export function useRegenerationLockSelection({
     : 0);
 
   watch(activeKind, () => {
-    batchSelectionMode.value = false;
     session?.activate(panelId, activeKind.value);
   });
   watch(
@@ -90,9 +88,6 @@ export function useRegenerationLockSelection({
     },
     get lockSelectionIds() {
       return lockSelectionIds.value;
-    },
-    get batchLockSelectionMode() {
-      return batchSelectionMode.value;
     }
   });
   const tableListeners = {
@@ -105,17 +100,11 @@ export function useRegenerationLockSelection({
     get selectedCount() {
       return selectedCount.value;
     },
-    get batchSelectionMode() {
-      return batchSelectionMode.value;
-    },
     get mapSelectionActive() {
       return mapSelectionActive.value;
     }
   });
   const actionListeners = {
-    "toggle-batch-mode": () => {
-      batchSelectionMode.value = !batchSelectionMode.value;
-    },
     "map-select": () => session?.beginMapSelection(panelId, activeKind.value, unref(mapSelectionContext) || {}),
     lock: () => session?.apply(true),
     unlock: () => session?.apply(false),
@@ -123,7 +112,6 @@ export function useRegenerationLockSelection({
   };
 
   return {
-    batchSelectionMode,
     lockableRowIds,
     lockSelectionIds,
     lockedRowIds,

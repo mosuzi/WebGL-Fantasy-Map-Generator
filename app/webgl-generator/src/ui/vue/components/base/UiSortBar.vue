@@ -1,7 +1,7 @@
 <template>
   <div :class="['ui-sort-bar', className]">
     <UiButton
-      v-for="option in options"
+      v-for="option in visibleOptions"
       :key="option.key"
       variant="secondary"
       :active="activeKey === option.key"
@@ -13,6 +13,9 @@
 </template>
 
 <script setup>
+import {computed} from "vue";
+import {useDebugMode} from "../../composables/use-debug-mode.js";
+import {visibleListFields} from "../../composables/list-visibility.js";
 import UiButton from "./UiButton.vue";
 
 defineOptions({
@@ -39,6 +42,8 @@ const props = defineProps({
 });
 
 defineEmits(["sort"]);
+const debugEnabled = useDebugMode();
+const visibleOptions = computed(() => visibleListFields(props.options, debugEnabled.value));
 
 function labelFor(option) {
   return option.key === props.activeKey ? `${option.label} ${props.direction === "asc" ? "↑" : "↓"}` : option.label;

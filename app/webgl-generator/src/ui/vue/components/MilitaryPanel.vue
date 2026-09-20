@@ -444,6 +444,8 @@
 </template>
 
 <script setup>
+import {useObjectLabel} from "../composables/use-object-label.js";
+const objectLabel = useObjectLabel();
 import {computed, nextTick, reactive, ref, watch} from "vue";
 import {MILITARY_STATUSES, MILITARY_UNITS, normalizeUnitRatios} from "../../../generator/military.js";
 import UiActionDock from "./base/UiActionDock.vue";
@@ -1225,9 +1227,7 @@ function packCellLabel(map, cell) {
   const provinceId = map.pack.cells.province?.[normalizedCell];
   const burgName = map.pack.burgs?.[burgId]?.name;
   const provinceName = map.pack.provinces?.[provinceId]?.name;
-  if (burgName) return `${burgName} #${normalizedCell}`;
-  if (provinceName) return `${provinceName} #${normalizedCell}`;
-  return `cell #${normalizedCell}`;
+  return objectLabel(burgName || provinceName, normalizedCell, "未命名地点");
 }
 
 function baseCellForRegiment(map, regiment = {}) {

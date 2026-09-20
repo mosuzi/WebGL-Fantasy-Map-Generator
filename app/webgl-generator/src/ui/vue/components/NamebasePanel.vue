@@ -184,6 +184,8 @@
 </template>
 
 <script setup>
+import {useObjectLabel} from "../composables/use-object-label.js";
+const objectLabel = useObjectLabel();
 import {computed, ref, watch} from "vue";
 import {createNamebaseGeneratedExamples} from "../../../generator/namebase-store.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
@@ -485,10 +487,10 @@ function collectCultures(map) {
     .filter(culture => culture && (culture.i || culture.id))
     .map(culture => {
       const id = culture.i ?? culture.id;
-      const name = culture.name || culture.root || `文化 #${id}`;
+      const name = culture.name || culture.root || "未命名文化";
       return {
         id,
-        label: `${name} #${id}`
+        label: objectLabel(name, id)
       };
     });
 }
