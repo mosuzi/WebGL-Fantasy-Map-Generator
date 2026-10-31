@@ -23,7 +23,7 @@
   />
 
   <div class="religion-panel-controls">
-    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型 / 文化 / 国家" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号 / 类型 / 文化 / 国家" @update:model-value="callbacks.onFilter" />
   </div>
   <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable

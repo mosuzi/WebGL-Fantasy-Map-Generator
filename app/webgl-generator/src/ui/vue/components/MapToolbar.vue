@@ -4,6 +4,7 @@
       <UiButton id="open-generation-panel" variant="primary">控制面板</UiButton>
       <UiButton id="fit-view" variant="secondary">适配视图</UiButton>
       <UiButton id="toggle-measurement" variant="secondary" aria-pressed="false">测量</UiButton>
+      <MapContentSearch />
       <UiButton id="open-development-panel" class="debug-action" variant="secondary" hidden>开发模式</UiButton>
       <UiButton
         id="collapse-global-tools"
@@ -51,6 +52,7 @@
 <script setup>
 import {computed} from "vue";
 import UiButton from "./base/UiButton.vue";
+import MapContentSearch from "./MapContentSearch.vue";
 import {useGlobalConfigStore} from "../stores/global-config-store.js";
 
 defineOptions({

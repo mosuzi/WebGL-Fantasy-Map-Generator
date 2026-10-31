@@ -1,5 +1,4 @@
 <template>
-  <MapContentSearch />
   <UiTabs v-model="activeTab" :tabs="tabs" />
 
   <div class="control-panel-tab-panels">
@@ -401,7 +400,7 @@
           <UiActionDock host-id="ControlPanel" v-model:active="activeThemeAction" :actions="visualThemeActions">
             <template #color>
               <UiSelectField
-                label="颜色 token"
+                label="主题颜色项"
                 input-id="visual-theme-color-token"
                 :model-value="selectedThemeColorKey"
                 :options="visualThemeColorFields"
@@ -756,7 +755,6 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import MapRecoveryControls from "./MapRecoveryControls.vue";
-import MapContentSearch from "./MapContentSearch.vue";
 import PngExportPresets from "./PngExportPresets.vue";
 import UiTabs from "./base/UiTabs.vue";
 import {Lock, Setting, Unlock} from "@element-plus/icons-vue";

@@ -2,7 +2,7 @@
   <UiMetricGrid :metrics="summaryMetrics" class-name="biome-panel-summary" />
 
   <div class="biome-panel-controls">
-    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号" @update:model-value="callbacks.onFilter" />
   </div>
   <UiObjectTable
     :columns="columns"

@@ -15,6 +15,9 @@
   --panel-warning-soft: #f1e3bc;
   --panel-success: #247246;
   --panel-success-soft: #e1e7ce;
+  --panel-type-caption: 12px;
+  --panel-type-body: 13px;
+  --panel-type-title: 15px;
   --el-color-primary: var(--panel-accent);
   --el-color-primary-light-1: #467b83;
   --el-color-primary-light-2: #5b8b90;

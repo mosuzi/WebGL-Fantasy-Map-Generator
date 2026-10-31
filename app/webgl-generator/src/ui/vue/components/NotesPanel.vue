@@ -2,7 +2,7 @@
   <UiMetricGrid :metrics="summaryMetrics" class-name="notes-panel-summary" />
 
   <div class="notes-panel-controls">
-    <UiFilterInput :model-value="state.filter" placeholder="筛选类型 / 名称 / id / 正文" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选类型 / 名称 / 编号 / 正文" @update:model-value="callbacks.onFilter" />
   </div>
   <UiSelectField
     class-name="notes-import-mode"

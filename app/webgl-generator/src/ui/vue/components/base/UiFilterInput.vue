@@ -2,6 +2,7 @@
   <ElInput
     class="ui-filter-input"
     type="search"
+    :aria-label="label || placeholder || '筛选列表'"
     :placeholder="placeholder"
     :model-value="modelValue"
     clearable
@@ -20,6 +21,10 @@ defineProps({
     default: ""
   },
   placeholder: {
+    type: String,
+    default: ""
+  },
+  label: {
     type: String,
     default: ""
   }

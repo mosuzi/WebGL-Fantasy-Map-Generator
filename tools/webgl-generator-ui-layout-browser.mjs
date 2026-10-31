@@ -114,7 +114,17 @@ async function inspectControl() {
       for (let i = 0; i < await options.count(); i++) {await options.nth(i).click();await capture(`generation-style-${i}`);}
     }
   }
-  await page.locator('.map-search-open').click();
+  assert.equal(await page.locator('#open-map-search').count(), 1, "全局搜索入口必须唯一");
+  assert.equal(await page.locator('#toggle-measurement + #open-map-search').count(), 1, "全局搜索入口必须紧随测量");
+  const toolbarButtonStyles = await page.evaluate(() => {
+    const properties = ["font", "backgroundColor", "color", "border", "borderRadius", "padding", "boxShadow"];
+    return ["toggle-measurement", "open-map-search"].map(id => {
+      const style = getComputedStyle(document.getElementById(id));
+      return Object.fromEntries(properties.map(property => [property, style[property]]));
+    });
+  });
+  assert.deepEqual(toolbarButtonStyles[1], toolbarButtonStyles[0], "全局搜索按钮必须与相邻工具按钮保持相同样式");
+  await page.locator('#open-map-search').click();
   const input = page.getByRole("textbox", {name: "地图搜索关键词"});await input.fill("0");
   await page.locator('.map-search-results button').first().waitFor();await capture("搜索-结果");
   await input.fill("不存在的对象_排版校验");await page.waitForFunction(() => !document.querySelector('.map-search-results button'));await capture("搜索-空态");await input.press("Escape");

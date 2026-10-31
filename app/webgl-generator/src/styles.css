@@ -5470,14 +5470,14 @@ select:disabled {
 .ui-state-banner-copy strong,
 .ui-secondary-action-title strong {
   color: var(--panel-text);
-  font-size: 12px;
+  font-size: var(--panel-type-body);
 }
 
 .ui-state-banner-copy p {
   margin: 0;
   color: var(--panel-text);
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: var(--panel-type-caption);
+  line-height: 1.5;
 }
 
 .ui-state-token {
@@ -5487,7 +5487,7 @@ select:disabled {
   padding: 2px 7px;
   color: var(--panel-text);
   background: var(--panel-surface);
-  font-size: 10px;
+  font-size: var(--panel-type-caption);
   font-weight: 700;
   line-height: 1.3;
 }

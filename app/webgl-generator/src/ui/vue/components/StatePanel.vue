@@ -2,7 +2,7 @@
   <UiMetricGrid :metrics="summaryMetrics" class-name="state-panel-summary" />
 
   <div class="state-panel-controls">
-    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 首都" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号 / 首都" @update:model-value="callbacks.onFilter" />
     <UiButton variant="secondary" :disabled="!renamableVisibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(renamableVisibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
     <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成国家</UiButton>
   </div>
