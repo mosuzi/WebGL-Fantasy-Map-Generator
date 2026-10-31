@@ -13,11 +13,11 @@
       <UiSelectField input-id="economy-trade-good" label="商品" :model-value="tradeQuery.goodId" :options="tradeQueryOptions.goods" @update:model-value="value => tradeQuery.goodId = value" />
       <label class="economy-trade-party-filter">
         <span>卖方</span>
-        <UiFilterInput :model-value="tradeQuery.seller" placeholder="卖方名称或 ID" @update:model-value="value => tradeQuery.seller = value" />
+        <UiFilterInput :model-value="tradeQuery.seller" placeholder="卖方名称或编号" @update:model-value="value => tradeQuery.seller = value" />
       </label>
       <label class="economy-trade-party-filter">
         <span>买方</span>
-        <UiFilterInput :model-value="tradeQuery.buyer" placeholder="买方名称或 ID" @update:model-value="value => tradeQuery.buyer = value" />
+        <UiFilterInput :model-value="tradeQuery.buyer" placeholder="买方名称或编号" @update:model-value="value => tradeQuery.buyer = value" />
       </label>
     </div>
     <div class="economy-trade-query-summary">

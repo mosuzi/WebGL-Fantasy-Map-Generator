@@ -29,7 +29,7 @@
   <UiMetricGrid :metrics="summaryMetrics" class-name="river-panel-summary" />
 
   <div class="river-panel-controls">
-    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型 / 干流" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号 / 类型 / 干流" @update:model-value="callbacks.onFilter" />
     <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成河流</UiButton>
   </div>
   <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />

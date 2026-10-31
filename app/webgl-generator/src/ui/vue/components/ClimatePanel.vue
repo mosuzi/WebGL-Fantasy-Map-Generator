@@ -2,7 +2,7 @@
   <UiMetricGrid :metrics="summaryMetrics" class-name="climate-panel-summary" />
 
   <div class="climate-panel-controls">
-    <UiFilterInput :model-value="state.filter" placeholder="筛选温度带 / id" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选温度带 / 编号" @update:model-value="callbacks.onFilter" />
   </div>
   <UiObjectTable
     :columns="columns"

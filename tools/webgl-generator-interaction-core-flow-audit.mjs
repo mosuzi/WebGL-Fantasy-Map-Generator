@@ -277,8 +277,8 @@ function definitions() {
         visibleAction("pan-middle", "中键拖动平移", [sourceRef(FILES.viewportInput, ["event.button === 1 || event.button === 2", "return \"pan\""])]),
         visibleAction("pan-right", "右键拖动平移", [sourceRef(FILES.viewportInput, ["event.button === 1 || event.button === 2", "return \"pan\""])]),
         visibleAction("pan-primary", "空格加主键或触屏拖动平移", [sourceRef(FILES.viewportInput, ["spacePanActive ? \"pan\" : \"select\"", "pointer.mode = \"pan\""])]),
-        visibleAction("pan-wheel", "触摸板滚动平移", [sourceRef(FILES.viewportInput, ["classifyViewportWheelIntent", "panCamera(-delta.x, -delta.y"])]),
-        visibleAction("zoom-wheel", "滚轮或触摸板捏合锚点缩放", [sourceRef(FILES.viewportInput, ["zoomCameraAtClientPoint", "source: event.ctrlKey ? \"pinch\" : \"wheel\""])])
+        visibleAction("pan-wheel", "纯横向滚动平移", [sourceRef(FILES.viewportInput, ["classifyViewportWheelIntent", "panCamera(-delta.x, -delta.y"])]),
+        visibleAction("zoom-wheel", "纵向滚轮或触摸板捏合锚点缩放", [sourceRef(FILES.viewportInput, ["zoomCameraAtClientPoint", "source: event.ctrlKey ? \"pinch\" : \"wheel\""])])
       ],
       entry: "中键 / 右键拖动、空格加主键、触屏拖动或滚轮 / 触摸板",
       preconditions: "指针位于画布且没有更高优先级工具消费事件",

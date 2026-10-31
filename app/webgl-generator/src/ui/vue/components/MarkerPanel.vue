@@ -3,7 +3,7 @@
 
   <div class="marker-panel-controls">
     <UiSegmented label="对象类型" :options="scopeOptions" :model-value="state.scope" @select="callbacks.onScope" />
-    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型 / 国家 / 省份" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号 / 类型 / 国家 / 省份" @update:model-value="callbacks.onFilter" />
   </div>
 
   <div class="marker-edit-toolbar">

@@ -10,7 +10,7 @@
       :options="stateOptions"
       @update:model-value="value => callbacks.onSubjectChange(Number(value))"
     />
-    <UiFilterInput :model-value="state.filter" placeholder="筛选国家 / id / 关系 / 文化 / 宗教" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选国家 / 编号 / 关系 / 文化 / 宗教" @update:model-value="callbacks.onFilter" />
   </div>
 
   <div class="diplomacy-edit-toolbar">

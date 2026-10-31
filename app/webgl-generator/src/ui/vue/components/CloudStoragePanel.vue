@@ -23,9 +23,9 @@
     <template v-if="selectedProvider">
       <div v-if="!selectedProvider.configured" class="cloud-storage-configuration" data-cloud-state="unconfigured">
         <strong>{{ selectedProvider.label }} 尚未配置</strong>
-        <p>部署者需要先在 Cloud Provider Config 中设置以下公开的 OAuth client identifier。本仓库不会提供项目方账号，也不会回退到原作的硬编码配置。</p>
-        <p v-if="selectedProvider.configurationError">{{ selectedProvider.configurationError }}</p>
-        <code v-for="field in missingConfiguration" :key="field">{{ field }}</code>
+        <p>当前站点尚未配置此云端存储服务。你仍可在“简介”页保存到当前浏览器，或导出完整地图文件；如需连接云盘，请联系站点部署者。</p>
+        <p v-if="selectedProvider.configurationError && debugEnabled">{{ selectedProvider.configurationError }}</p>
+        <code v-for="field in debugEnabled ? missingConfiguration : []" :key="field">{{ field }}</code>
         <a href="https://github.com/mosuzi/fmg-gl/blob/main/docs/deployment/cloud-storage.md" target="_blank" rel="noreferrer">查看自部署配置说明</a>
       </div>
 
@@ -81,13 +81,16 @@
 
     <p v-if="state.status" class="cloud-storage-status" aria-live="polite">{{ state.status }}</p>
     <p v-if="state.error" class="cloud-storage-error" role="alert">{{ state.error }}</p>
-    <p class="cloud-storage-live-boundary">当前版本已通过本地 fixture 与 mock 协议回归；在项目方提供 OAuth client 和测试账号前，不代表 Dropbox / Google Drive 真实账号联调完成。</p>
+    <p v-if="debugEnabled" class="cloud-storage-live-boundary">当前版本已通过本地 fixture 与 mock 协议回归；在项目方提供 OAuth client 和测试账号前，不代表 Dropbox / Google Drive 真实账号联调完成。</p>
   </div>
 </template>
 
 <script setup>
 import {computed} from "vue";
 import UiButton from "./base/UiButton.vue";
+import {useDebugMode} from "../composables/use-debug-mode.js";
+
+const debugEnabled = useDebugMode();
 
 const props = defineProps({
   state: {type: Object, required: true},

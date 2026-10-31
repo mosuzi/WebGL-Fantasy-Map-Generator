@@ -67,11 +67,12 @@ class FakeCanvas extends FakeTarget {
 }
 
 assert.equal(classifyViewportWheelIntent({ctrlKey: true, deltaMode: 0, deltaX: 0, deltaY: 12}), "zoom");
-assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 3, deltaY: 100}), "pan");
+assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 3, deltaY: 100}), "zoom");
 assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 1, deltaX: 3, deltaY: 1}), "zoom");
-assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 12}), "pan");
-assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 60.5}), "pan");
+assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 12}), "zoom");
+assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 60.5}), "zoom");
 assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 100}), "zoom");
+assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 12, deltaY: 0}), "pan");
 assert.deepEqual(normalizeViewportWheelDelta({deltaMode: 1, deltaX: 2, deltaY: -3}, {height: 600}), {x: 32, y: -48});
 assert.deepEqual(normalizeViewportWheelDelta({deltaMode: 2, deltaX: 0, deltaY: 3}, {height: 600}), {x: 0, y: 1200});
 
@@ -115,16 +116,26 @@ space.documentRef.emit("keyup", {code: "Space", target: {tagName: "BODY"}});
 assert.equal(space.selections.length, 0, "空格拖动不得选择对象");
 
 const wheel = createHarness();
-const scaleBeforePan = wheel.camera.scale;
-wheel.canvas.emit("wheel", wheelEvent({deltaY: 12, timeStamp: 10}));
-assert.equal(wheel.camera.scale, scaleBeforePan, "触摸板普通滚动不得缩放");
-assert.notEqual(wheel.camera.offsetY, 0, "触摸板纵向滚动应平移");
 const anchorRect = wheel.canvas.getBoundingClientRect();
 const anchorClient = {x: 350, y: 220};
+const scaleBeforeWheel = wheel.camera.scale;
+const worldBeforeWheel = worldAtClient(wheel.camera, anchorRect, anchorClient);
+const verticalWheel = wheel.canvas.emit("wheel", wheelEvent({deltaY: 12, clientX: anchorClient.x, clientY: anchorClient.y, timeStamp: 10}));
+assert.equal(verticalWheel.defaultPrevented, true, "画布滚轮必须阻止页面滚动");
+assert.ok(wheel.camera.scale < scaleBeforeWheel, "细小纵向滚轮必须缩小地图");
+const worldAfterWheel = worldAtClient(wheel.camera, anchorRect, anchorClient);
+assert.ok(Math.abs(worldBeforeWheel.x - worldAfterWheel.x) < 1e-9 && Math.abs(worldBeforeWheel.y - worldAfterWheel.y) < 1e-9, "纵向滚轮应保持指针锚点");
+const scaleBeforeHorizontal = wheel.camera.scale;
+const offsetBeforeHorizontal = wheel.camera.offsetX;
+wheel.canvas.emit("wheel", wheelEvent({deltaX: 12, timeStamp: 20}));
+assert.equal(wheel.camera.scale, scaleBeforeHorizontal, "纯横向滚动不应缩放");
+assert.notEqual(wheel.camera.offsetX, offsetBeforeHorizontal, "纯横向滚动应平移");
+wheel.canvas.emit("wheel", wheelEvent({deltaX: 3, deltaY: 12, timeStamp: 30}));
+assert.ok(wheel.camera.scale < scaleBeforeHorizontal, "横向事件后紧接的纵向滚轮仍须缩放");
 const worldBefore = worldAtClient(wheel.camera, anchorRect, anchorClient);
 wheel.canvas.emit("wheel", wheelEvent({ctrlKey: true, deltaY: -80, clientX: anchorClient.x, clientY: anchorClient.y, timeStamp: 200}));
 const worldAfter = worldAtClient(wheel.camera, anchorRect, anchorClient);
-assert.ok(wheel.camera.scale > scaleBeforePan, "触摸板捏合应缩放");
+assert.ok(wheel.camera.scale > scaleBeforeHorizontal, "触摸板捏合应缩放");
 assert.ok(Math.abs(worldBefore.x - worldAfter.x) < 1e-9 && Math.abs(worldBefore.y - worldAfter.y) < 1e-9, "捏合缩放应保持指针锚点");
 const mouseScale = wheel.camera.scale;
 wheel.canvas.emit("wheel", wheelEvent({deltaY: 100, timeStamp: 400}));

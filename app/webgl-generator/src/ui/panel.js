@@ -694,7 +694,7 @@ export function updateRuntimePanel(documentRef, state) {
   const longTaskThresholdMs = state.healthMonitor?.thresholds?.longTaskMs;
   const unitPreferences = readControlPreferences(documentRef).units;
   syncLabelLimitControlBounds(documentRef, map, stats);
-  documentRef.getElementById("app-status").textContent = `${map.status.message}，seed ${map.metadata.seed}`;
+  documentRef.getElementById("app-status").textContent = map.status.message;
   const mapBadge = documentRef.getElementById("map-badge");
   if (mapBadge) {
     mapBadge.textContent = `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)}`;

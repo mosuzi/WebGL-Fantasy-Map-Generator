@@ -1,19 +1,13 @@
 const POINTER_MOUSE_THRESHOLD_CSS_PX = 5;
 const POINTER_TOUCH_THRESHOLD_CSS_PX = 8;
-const WHEEL_BURST_GAP_MS = 140;
-const TRACKPAD_PIXEL_DELTA_THRESHOLD = 48;
 const MIN_CAMERA_SCALE = 0.5;
 const MAX_CAMERA_SCALE = 12;
 
 export function classifyViewportWheelIntent(event) {
   if (event?.ctrlKey) return "zoom";
-  if (Number(event?.deltaMode) !== 0) return "zoom";
   const deltaX = Math.abs(Number(event?.deltaX) || 0);
   const deltaY = Math.abs(Number(event?.deltaY) || 0);
-  if (deltaX >= 0.5) return "pan";
-  if (!deltaY) return "zoom";
-  const fractional = Math.abs(deltaY - Math.round(deltaY)) > 0.001;
-  return fractional || deltaY < TRACKPAD_PIXEL_DELTA_THRESHOLD ? "pan" : "zoom";
+  return deltaX > 0 && deltaY === 0 ? "pan" : "zoom";
 }
 
 export function normalizeViewportWheelDelta(event, viewport = {}) {
@@ -43,7 +37,7 @@ export function installViewportInputController({
   let interactionActive = false;
   let cancellingPointers = false;
   let touchGesture = null;
-  let wheelBurst = null;
+  let wheelIntent = null;
 
   const listeners = [
     [canvas, "pointerenter", handlePointerEnter],
@@ -70,7 +64,7 @@ export function installViewportInputController({
       pointerCount: pointers.size,
       interactionActive,
       spacePanActive,
-      wheelIntent: wheelBurst?.intent || null
+      wheelIntent
     })
   };
 
@@ -200,13 +194,8 @@ export function installViewportInputController({
     const viewport = getViewportSize();
     const delta = normalizeViewportWheelDelta(event, viewport);
     if (!delta.x && !delta.y) return;
-    const now = eventTimestamp(event, view);
-    const classified = classifyViewportWheelIntent(event);
-    const burstCompatible = wheelBurst
-      && wheelBurst.ctrlKey === Boolean(event.ctrlKey)
-      && now - wheelBurst.at <= WHEEL_BURST_GAP_MS;
-    const intent = burstCompatible ? wheelBurst.intent : classified;
-    wheelBurst = {intent, ctrlKey: Boolean(event.ctrlKey), at: now};
+    const intent = classifyViewportWheelIntent(event);
+    wheelIntent = intent;
     if (intent === "pan") {
       panCamera(-delta.x, -delta.y, viewport, {wheel: true});
       return;
@@ -381,12 +370,6 @@ function clampScale(value) {
 
 function clampWheelDelta(value) {
   return Math.max(-1200, Math.min(1200, value));
-}
-
-function eventTimestamp(event, view) {
-  const value = Number(event?.timeStamp);
-  if (Number.isFinite(value) && value >= 0) return value;
-  return typeof view.performance?.now === "function" ? view.performance.now() : Date.now();
 }
 
 function isEditableTarget(target) {

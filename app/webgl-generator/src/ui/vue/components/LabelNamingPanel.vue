@@ -2,7 +2,7 @@
   <UiMetricGrid :metrics="summaryMetrics" class-name="route-panel-summary" />
 
   <div class="route-panel-controls">
-    <UiFilterInput :model-value="state.filter" placeholder="筛选标签 / id / 类型 / 归属" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选标签 / 编号 / 类型 / 归属" @update:model-value="callbacks.onFilter" />
   </div>
   <UiObjectTable
     :columns="columns"

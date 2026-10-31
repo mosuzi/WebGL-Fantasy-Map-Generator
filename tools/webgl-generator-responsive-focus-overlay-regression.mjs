@@ -11,6 +11,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FILES = {
   styles: "app/webgl-generator/src/styles.css",
   toolbar: "app/webgl-generator/src/ui/vue/components/MapToolbar.vue",
+  search: "app/webgl-generator/src/ui/vue/components/MapContentSearch.vue",
   control: "app/webgl-generator/src/ui/vue/components/ControlPanel.vue",
   actionDock: "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue",
   app: "app/webgl-generator/src/runtime/app.js",
@@ -22,7 +23,10 @@ const source = Object.fromEntries(Object.entries(FILES).map(([key, file]) => [ke
 
 const toolbarIds = [...source.toolbar.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]).filter(id => id !== "map-global-tool-actions");
 assert.deepEqual(toolbarIds, ["open-generation-panel", "fit-view", "toggle-measurement", "open-development-panel", "collapse-global-tools", "expand-global-tools"]);
-assert.equal(toolbarIds.filter(id => id !== "open-development-panel").length, 5, "MapToolbar 用户入口必须保持 5 个");
+assert.match(source.toolbar, /id="toggle-measurement"[\s\S]*?<MapContentSearch\s*\/>[\s\S]*?id="open-development-panel"/, "全局搜索入口必须位于测量右侧");
+assert.match(source.search, /id="open-map-search"[^>]*aria-label="搜索地图内容"/, "全局搜索入口缺少稳定标识或可访问名称");
+assert.doesNotMatch(source.control, /<MapContentSearch\s*\/>/, "控制面板不得重复挂载搜索入口");
+assert.equal(toolbarIds.filter(id => id !== "open-development-panel").length + 1, 6, "全局工具栏应有 6 个用户入口");
 const toolbarActionsRule = cssRulesContaining(source.styles, ".map-toolbar-actions");
 for (const token of ["align-items: flex-start", "flex-wrap: nowrap"]) assert.ok(toolbarActionsRule.includes(token), `工具栏单排契约缺少 ${token}`);
 const toolbarButtonRules = cssRulesContaining(source.styles, ".map-toolbar .primary-action");
