@@ -458,10 +458,10 @@
     <UiButton variant="secondary" @click="callbacks.onRegenerateDownstream?.()">重建世界内容</UiButton>
   </div>
 
-  <section v-if="debugEnabled" class="heightmap-import-launcher" aria-labelledby="heightmap-import-title">
+  <section class="heightmap-import-launcher" aria-labelledby="heightmap-import-title">
     <div>
       <h2 id="heightmap-import-title">高度图导入</h2>
-      <p>在独立工作台预览灰度图，再应用到当前地图。</p>
+      <p>选择灰度图预览地形，确认后生成新地图。</p>
     </div>
     <UiButton class="heightmap-workbench-open" variant="secondary" @click="openImportWorkbench">打开导入工作台</UiButton>
     <p id="heightmap-import-status" class="file-operation-status" aria-live="polite"></p>
@@ -469,7 +469,7 @@
 
   <Teleport to="body">
     <section
-      v-if="debugEnabled && workbenchOpen"
+      v-if="workbenchOpen"
       ref="workbenchRef"
       class="heightmap-import-workbench"
       :style="workbenchStyle"
@@ -786,6 +786,7 @@
           <UiButton variant="secondary" @click="closeImportWorkbench">取消</UiButton>
         </div>
 
+        <p class="height-action-help">应用会替换当前地图并清空撤销历史。请先保存当前地图。</p>
         <p v-if="pendingUnassignedWarning" class="heightmap-pending-warning">{{ pendingUnassignedWarning }}</p>
         <p class="heightmap-preview-status" aria-live="polite">{{ previewStatus }}</p>
       </div>
@@ -1210,7 +1211,6 @@ watch(debugEnabled, enabled => {
     return;
   }
   normalizePlayerHeightState();
-  closeImportWorkbench();
 });
 
 onBeforeUnmount(() => {

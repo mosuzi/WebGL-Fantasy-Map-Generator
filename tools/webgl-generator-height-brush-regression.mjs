@@ -97,7 +97,7 @@ assert(/if \(isPlayerLevelAction\.value\) \{\s*props\.state\.levelPerturbation =
 assert(/props\.state\.action !== "raise" && props\.state\.action !== "lower" && props\.state\.action !== "level"/.test(heightPanelSource), "普通模式没有接受等高动作");
 assert(/label="平滑度"[^>]+:min="0"[^>]+:max="1"[^>]+:step="0\.01"/.test(heightPanelSource), "范围平滑度契约异常");
 assert(/<details v-if="debugEnabled" class="panel-advanced-section height-advanced-section">/.test(heightPanelSource), "专家地形程序仍在普通模式显示");
-assert(/<section v-if="debugEnabled" class="heightmap-import-launcher"/.test(heightPanelSource), "高度图导入仍在普通模式显示");
+assert(/<section class="heightmap-import-launcher"/.test(heightPanelSource) && /v-if="workbenchOpen"[\s\S]*class="heightmap-import-workbench"/.test(heightPanelSource), "普通模式无法打开高度图导入工作台");
 assert(/scope: "land"/.test(heightPanelModelSource), "高度面板默认范围不是陆地");
 assert(/strength: 6/.test(heightPanelModelSource), "受控节奏下的默认单次高度步长没有提高到 6");
 assert(/affectSeafloor: false/.test(heightPanelModelSource), "影响海底没有保持会话级默认关闭");

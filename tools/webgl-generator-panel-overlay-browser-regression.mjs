@@ -119,20 +119,16 @@ async function runViewportCase(browserInstance, viewport) {
     await page.keyboard.press("Escape");
     assert.equal((await page.evaluate(() => window.webglGeneratorApi.selection.get().data)).selection, null, `${viewport.label} 主面板关闭后的下一次 Escape 未清除 selection`);
 
-    await page.evaluate(() => {
-      const result = window.webglGeneratorApi.debug.enable();
-      if (!result?.ok) throw new Error(result?.error?.message || "无法启用高度工作台验收所需的开发模式");
-      window.__webglGeneratorDebug?.collapse?.();
-      document.getElementById("open-height-panel")?.click();
-    });
+    await page.evaluate(() => document.getElementById("open-height-panel")?.click());
     await page.waitForSelector('.floating-panel[data-panel-id="height-panel"]:not(.hidden)');
+    assert.equal(await page.evaluate(() => Boolean(window.__webglGeneratorDebug?.enabled)), false, `${viewport.label} 高度图工作台依赖开发模式`);
     await page.locator(".heightmap-workbench-open").click();
     await page.waitForSelector('[data-overlay-id="heightmap-import-workbench"]');
+    await page.getByText("应用会替换当前地图并清空撤销历史。请先保存当前地图。", {exact: true}).waitFor();
     const workbenchOverlay = await inspectFixedOverlay(page, "heightmap-import-workbench");
     assertSafeOverlay(workbenchOverlay, viewport, "高度图工作台");
     await page.keyboard.press("Escape");
     await page.waitForSelector('[data-overlay-id="heightmap-import-workbench"]', {state: "detached"});
-    await page.evaluate(() => window.webglGeneratorApi.debug.disable());
 
     await page.evaluate(() => document.getElementById("open-culture-panel")?.click());
     await page.waitForSelector('.floating-panel[data-panel-id="culture-panel"]:not(.hidden)');
