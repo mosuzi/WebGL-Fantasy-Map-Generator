@@ -4342,7 +4342,7 @@ select:disabled {
   width: 100%;
 }
 
-.state-color-field input {
+.state-color-field input[type="color"] {
   width: 48px;
   height: 30px;
   padding: 0;
@@ -4577,7 +4577,7 @@ select:disabled {
   font-size: 12px;
 }
 
-.province-color-field input {
+.province-color-field input[type="color"] {
   width: 44px;
   height: 30px;
   padding: 0;
@@ -9996,8 +9996,8 @@ input.ui-switch-native {
   color: var(--panel-text);
 }
 
-.culture-color-field input,
-.religion-color-field input {
+.culture-color-field input[type="color"],
+.religion-color-field input[type="color"] {
   width: 42px;
   height: 30px;
   border: 1px solid var(--panel-border);
