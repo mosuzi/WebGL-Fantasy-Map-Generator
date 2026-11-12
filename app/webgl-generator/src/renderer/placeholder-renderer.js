@@ -1593,9 +1593,15 @@ export class PlaceholderMapRenderer {
     return applyCellAttributePatch(this.gl, patch);
   }
 
+  refreshEditedColorPalette(mode) {
+    if (!this.map || !this.cellAttributeStore) return false;
+    return refreshCellAttributePalette(this.gl, this.cellAttributeStore, this.map, mode, this.viewOptions);
+  }
+
   refreshEditedCellColors(gridCells, {draw = true, binding = null} = {}) {
     if (!gridCells?.length || !this.canPresentGpuResidentColorMode(this.colorMode)) return false;
     if (!this.refreshCellAttributeCells(gridCells)) return false;
+    if (shouldDrawShoreVisualBands(this.colorMode)) refreshShoreSurfaceCellColors(this, gridCells);
     if (binding) this.rebindEditedRendererResources(binding);
     if (draw) this.draw();
     return true;

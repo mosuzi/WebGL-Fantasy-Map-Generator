@@ -69,6 +69,9 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         applyVisualTheme?.(presentationPresetForRefresh(commandOrEffects, state.map));
       }
 
+      const editedPalette = editedColorPaletteMode(effects.derived);
+      if (editedPalette) state.renderer.refreshEditedColorPalette?.(editedPalette);
+
       if (!queuedPoliticalPatch && !terrainCaches && effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
         measureStateBrush("politicalVisualCaches", () => state.renderer.refreshPoliticalVisualCaches());
       }
@@ -199,6 +202,8 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       if (effects.derived.includes("visual-theme")) {
         await runStep(() => applyVisualTheme?.(presentationPresetForRefresh(commandOrEffects, state.map)));
       }
+      const editedPalette = editedColorPaletteMode(effects.derived);
+      if (editedPalette) await runStep(() => state.renderer.refreshEditedColorPalette?.(editedPalette));
       if (!queuedPoliticalPatch && !terrainCaches && effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
         await runStep(() => state.renderer.refreshPoliticalVisualCaches());
       }
@@ -289,6 +294,14 @@ function defaultYieldToMain() {
 function normalizeChangedGridCells(values) {
   if (!Array.isArray(values)) return [];
   return [...new Set(values.map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))].sort((a, b) => a - b);
+}
+
+function editedColorPaletteMode(derived) {
+  if (derived.includes("state-color")) return "states";
+  if (derived.includes("province-color")) return "provinces";
+  if (derived.includes("culture-color")) return "cultures";
+  if (derived.includes("religion-color")) return "religions";
+  return null;
 }
 
 function invalidateRendererBuffers(renderer, effects) {
