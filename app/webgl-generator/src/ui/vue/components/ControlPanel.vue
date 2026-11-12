@@ -1030,6 +1030,7 @@ const layerGroups = Object.freeze([
   layerGroup("terrain", "地形水文", [
     {id: "coastline", label: "水陆线"},
     {id: "rivers", label: "河流"},
+    {id: "precipitationDots", label: "降雨量圆点"},
     {id: "oceanCurrents", label: "洋流"}
   ]),
   layerGroup("politics", "政治边界", [
@@ -1039,6 +1040,7 @@ const layerGroups = Object.freeze([
   layerGroup("objects", "地图对象", [
     {id: "routes", label: "道路"},
     {id: "cities", label: "城市"},
+    {id: "populationColumns", label: "人口柱"},
     {id: "mapMarkers", label: "资源与标记", layers: ["resources", "markers"]},
     {id: "military", label: "军事"},
     {id: "warFronts", label: "战线"}

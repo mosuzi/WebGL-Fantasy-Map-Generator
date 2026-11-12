@@ -88,6 +88,7 @@ import {
 } from "./city-icon-layer.js";
 import {resizeCanvasToDisplaySize} from "./canvas-display-size.js";
 import {createStateBorderHazeCompositor} from "./state-border-haze-compositor.js";
+import {createCellMetricLayer} from "./cell-metric-layer.js";
 import {
   createSurfaceBaseBufferSet,
   createSurfaceBaseBufferSetAsync,
@@ -384,7 +385,7 @@ const WEBGL_DIRECT_BUFFER_KEYS = Object.freeze([
 ]);
 
 const WEBGL_INITIALIZED_RESOURCE_KEYS = Object.freeze([
-  "program", "surfaceProgram", "cityIconLayer", "stateBorderHazeCompositor", "locations", "surfaceLocations", "surfaceBaseBufferSet",
+  "program", "surfaceProgram", "cityIconLayer", "cellMetricLayer", "stateBorderHazeCompositor", "locations", "surfaceLocations", "surfaceBaseBufferSet",
   "vertexBuffer", "cellVisualCorrectionBufferSet", ...WEBGL_DIRECT_BUFFER_KEYS
 ]);
 
@@ -393,6 +394,7 @@ function initializeWebGlResources(renderer) {
   renderer.program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
   renderer.surfaceProgram = createProgram(gl, surfaceVertexShaderSource, fragmentShaderSource);
   renderer.cityIconLayer = createCityIconWebglLayer(gl);
+  renderer.cellMetricLayer = createCellMetricLayer(gl);
   renderer.stateBorderHazeCompositor = createStateBorderHazeCompositor(gl, renderer.canvas);
   renderer.locations = {
     position: gl.getAttribLocation(renderer.program, "a_position"), color: gl.getAttribLocation(renderer.program, "a_color"),
@@ -442,6 +444,7 @@ function cleanupInitializedWebGlResources(gl, resources) {
     run(() => gl.deleteBuffer(buffer));
   }
   run(() => resources.cityIconLayer?.destroy?.());
+  run(() => resources.cellMetricLayer?.destroy?.());
   run(() => resources.stateBorderHazeCompositor?.destroy?.());
   run(() => resources.program && gl.deleteProgram(resources.program));
   run(() => resources.surfaceProgram && gl.deleteProgram(resources.surfaceProgram));
@@ -954,7 +957,7 @@ export class PlaceholderMapRenderer {
 
   async restoreWebGlContext({yieldToMain = null, binding = null} = {}) {
     const map = this.map;
-    const staged = {gl: this.gl};
+    const staged = {gl: this.gl, canvas: this.canvas};
     let stagedCommitted = false;
     let restoreBinding = null;
     this.webGlContextLost = true;
@@ -2357,6 +2360,7 @@ export class PlaceholderMapRenderer {
 
   refreshPointLayers({draw = true, binding = null} = {}) {
     if (!this.map) return;
+    this.cellMetricLayer?.invalidate();
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("pointRefresh", {drawRequested: draw}, startedAt);
     try {
@@ -2486,6 +2490,12 @@ export class PlaceholderMapRenderer {
     return this.setLayersVisible([[layer, visible]]);
   }
 
+  async waitForCellMetricLayer() {
+    if (!this.map || (!this.layerVisibility.populationColumns && !this.layerVisibility.precipitationDots)) return;
+    this.cellMetricLayer.setMap(this.map);
+    await this.cellMetricLayer.waitUntilReady();
+  }
+
   setLayersVisible(entries = []) {
     const requested = normalizeRequestedLayerVisibility(this.layerVisibility, entries);
     const deferredEntries = [...requested];
@@ -2509,7 +2519,7 @@ export class PlaceholderMapRenderer {
     if (changed.some(layer => layer === "coastline" || layer === "lakeShore" || layer === "stateBorders" || layer === "provinceBorders" || layer === "warFronts" || layer === "zones" || layer === "zoneEvents" || layer === "zoneNatural" || layer === "zoneWilderness" || layer === "oceanCurrents")) {
       this.refreshLineLayers({draw: false});
     }
-    const canvasPointOnly = changed.every(layer => layer === "cities" || layer === "population");
+    const canvasPointOnly = changed.every(layer => layer === "cities" || layer === "population" || layer === "populationColumns" || layer === "precipitationDots");
     if (canvasPointOnly && changed.includes("cities")) this.refreshCityLayerOverlay();
     this.draw(canvasPointOnly ? {updateOverlay: false} : undefined);
     return changed;
@@ -3133,6 +3143,19 @@ export class PlaceholderMapRenderer {
     gl.uniform1f(this.locations.scale, this.camera.scale);
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     if (stateBorderHaze.enabled) layerOrder.push("stateBorderHaze");
+    const cellMetricLayer = this.cellMetricLayer;
+    const cellMetrics = cellMetricLayer.draw({
+      map: this.map,
+      camera: this.camera,
+      canvas: this.canvas,
+      visibility: this.layerVisibility,
+      onReady: () => {
+        if (this.cellMetricLayer === cellMetricLayer && this.map === cellMetricLayer.map && !this.webGlContextLost) this.draw({updateOverlay: false});
+      }
+    });
+    gl.useProgram(this.program);
+    if (cellMetrics.population) layerOrder.push("populationColumns");
+    if (cellMetrics.precipitation) layerOrder.push("precipitationDots");
     if (this.oceanCurrentVertexCount > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
       gl.uniform1f(this.locations.scale, this.camera.scale);
@@ -3302,6 +3325,7 @@ export class PlaceholderMapRenderer {
       glError,
       glErrorChecked,
       layerOrder,
+      cellMetrics,
       gridCellsDrawCalls,
       cityIconInstances,
       cityIconDrawCalls: cityIconInstances > 0 ? 1 : 0,
@@ -3345,6 +3369,12 @@ export class PlaceholderMapRenderer {
       },
       boundaryPresentation: displayState.boundaryPresentation,
       stateBorderHaze: this.stateBorderHazeCompositor?.getLastReceipt?.() || null,
+      cellMetricLayer: this.cellMetricLayer ? {
+        ready: this.cellMetricLayer.ready,
+        pending: this.cellMetricLayer.pending,
+        populationCount: this.cellMetricLayer.populationCount,
+        precipitationCount: this.cellMetricLayer.precipitationCount
+      } : null,
       routeVertexCount: this.routeVertexCount,
       routeTriangleCount: this.routeVertexCount / 3,
       routeBuildMs: this.routeBuildMs,

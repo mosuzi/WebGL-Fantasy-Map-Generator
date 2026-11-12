@@ -807,6 +807,7 @@ export function heightToGrayscaleByte(height) {
 
 export async function createCanvasPngBlob(documentRef, canvas, options = {}) {
   if (!canvas?.toBlob) throw new Error("当前浏览器不支持 canvas 图片导出");
+  await options.renderer?.waitForCellMetricLayer?.();
   const normalizedOptions = normalizePngExportOptions(options);
   const composed = normalizedOptions.includeMapOverlays || normalizedOptions.transparentBackground || normalizedOptions.pixelScale !== 1 || normalizedOptions.crop.mode !== "viewport" || options.renderer
     ? await composeMapExportCanvas(documentRef, canvas, {...options, ...normalizedOptions})

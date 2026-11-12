@@ -10,6 +10,8 @@ export const DEFAULT_LAYER_VISIBILITY = Object.freeze({
   stateLabels: true,
   provinceLabels: false,
   population: true,
+  populationColumns: false,
+  precipitationDots: false,
   markers: false,
   resources: false,
   military: false,

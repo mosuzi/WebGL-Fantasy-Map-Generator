@@ -266,6 +266,7 @@ function normalizeChangedGridCells(values) {
 }
 
 function invalidateRendererBuffers(renderer, effects) {
+  if (effects.derived.some(item => item === "point-layers" || item === "cell-colors" || item === "terrain-caches")) renderer?.cellMetricLayer?.invalidate?.();
   if (typeof renderer?.invalidateDynamicBuffers !== "function") return;
   renderer.invalidateDynamicBuffers({
     routes: effects.derived.includes("route-mesh") || effects.derived.includes("render-mesh"),
