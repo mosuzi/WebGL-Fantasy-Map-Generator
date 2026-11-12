@@ -7,6 +7,7 @@ import {namebaseRenameAffected, newObjectAffected, objectAffected, systemAffecte
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
+  cellAttributePatch: true,
   selection: "refresh",
   runtimeStats: true,
   pickPanel: true,
@@ -32,11 +33,17 @@ const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
 
 export const STATE_BRUSH_PREVIEW_EFFECTS = Object.freeze({
   render: "draw",
+  cellAttributePatch: true,
+  reuseResourceBinding: true,
   selection: "none",
   runtimeStats: false,
   pickPanel: false,
   derived: Object.freeze(["state-cells", "cell-colors"])
 });
+
+function roundBrushMs(value) {
+  return Math.round(value * 10) / 10;
+}
 
 const STATE_COLOR_EFFECTS = Object.freeze({
   render: "draw",
@@ -105,20 +112,33 @@ export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} =
   const affectedStates = [...new Set(normalized.flatMap(change => [change.before, change.after]).filter(stateId => stateId > 0))];
   let settlementSnapshot = null;
   let politicalSnapshot = null;
+  let lastApplyPerformance = null;
   return {
     label: `${label} ${normalized.length} cells`,
     domain: "state",
     effects: {
       ...STATE_CELL_SURFACE_EFFECTS,
+      changedGridCells: normalized.map(change => change.gridCell),
       affected: systemAffected("state-brush", affectedStates.length ? affectedStates.map(id => ({kind: "state", id})) : [{kind: "grid-cells", id: normalized.length}])
     },
     apply(context) {
+      const startedAt = performance.now();
       settlementSnapshot ??= captureSettlementSnapshot(context.map, normalized);
       politicalSnapshot ??= capturePoliticalDerivativeSnapshot(context.map, normalized, settlementSnapshot);
+      const capturedAt = performance.now();
       applyStateChanges(context.map, normalized, "after");
       applySettlementTransfers(context.map, settlementSnapshot);
+      const transferredAt = performance.now();
       repairPoliticalDerivativesForStateBrush(context.map, normalized, settlementSnapshot);
+      const repairedAt = performance.now();
       refreshStateSummaries(context.map);
+      const summarizedAt = performance.now();
+      lastApplyPerformance = {
+        snapshotMs: roundBrushMs(capturedAt - startedAt),
+        transferMs: roundBrushMs(transferredAt - capturedAt),
+        provinceMs: roundBrushMs(repairedAt - transferredAt),
+        summaryMs: roundBrushMs(summarizedAt - repairedAt)
+      };
     },
     revert(context) {
       applyStateChanges(context.map, normalized, "before");
@@ -131,6 +151,9 @@ export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} =
     },
     getChanges() {
       return normalized;
+    },
+    getLastApplyPerformance() {
+      return lastApplyPerformance;
     }
   };
 }

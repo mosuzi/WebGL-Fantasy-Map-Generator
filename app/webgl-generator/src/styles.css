@@ -2522,7 +2522,8 @@ select:disabled {
 }
 
 .development-load-trace,
-.development-health-events {
+.development-health-events,
+.development-canvas-samples {
   display: grid;
   gap: 5px;
   max-height: 190px;
@@ -2535,7 +2536,8 @@ select:disabled {
 }
 
 .development-load-trace li,
-.development-health-events li {
+.development-health-events li,
+.development-canvas-samples li {
   width: max-content;
   min-width: 100%;
   white-space: nowrap;
@@ -2568,7 +2570,8 @@ select:disabled {
 }
 
 .development-load-trace li::marker,
-.development-health-events li::marker {
+.development-health-events li::marker,
+.development-canvas-samples li::marker {
   color: var(--panel-text);
 }
 

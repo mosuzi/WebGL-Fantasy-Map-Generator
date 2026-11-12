@@ -140,7 +140,7 @@ import {applyHeightBrushPreview, createApplyHeightBrushCommand, prewarmHeightEdi
 import {createHeightBrushCommitTrace, finishHeightBrushCommitTrace, measureHeightBrushCommitStage, recordHeightBrushCommitStage} from "./height-brush-performance.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {acceptHeightBrushSample} from "./height-brush-cadence.js";
-import {prewarmHeightCellSpatialIndex} from "./height-cell-spatial-index.js";
+import {prewarmHeightCellSpatialIndex, queryHeightCellsInRadius} from "./height-cell-spatial-index.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
 import {captureClimatePopulation, restoreClimatePopulation} from "./climate-population-preservation.js";
@@ -13281,7 +13281,7 @@ function messageFromOption(message, command) {
 }
 
 function refreshAfterStateEdit(state, commandOrEffects) {
-  updateStatePickAtLastPointer(state);
+  if (!Array.isArray(commandOrEffects?.effects?.changedGridCells)) updateStatePickAtLastPointer(state);
   refreshAfterEdit(state, commandOrEffects);
 }
 
@@ -16397,11 +16397,16 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
 
   register(CANVAS_TOOL_MODE.STATE_BRUSH, "state-panel", {
     onEnter: () => {
+      prewarmHeightCellSpatialIndex(state.map);
       state.stateEdit.addMode = false;
       state.stateEdit.deleteMode = false;
       state.panels.state?.setActive(true);
       syncPoliticalModePanel(state, "state");
       activateCanvasToolTheme(state, documentRef, "states");
+      state.renderer.onPoliticalBrushRefresh = sample => state.healthMonitor?.recordCanvasSample?.("state-brush-boundary-apply", sample);
+      const workerWarmStartedAt = performance.now();
+      state.renderer.warmPoliticalBrushWorker?.();
+      state.healthMonitor?.recordCanvasSample?.("state-brush-worker-warm", {durationMs: performance.now() - workerWarmStartedAt});
     },
     onExit: () => {
       rollbackCanvasToolStroke(state, "state");
@@ -16977,7 +16982,7 @@ function rollbackCanvasToolStroke(state, kind) {
     deferTerrainRefresh: false,
     changedGridCells: [...stroke.originals.keys()]
   });
-  else if (kind === "state") state.editRefreshScheduler?.run(STATE_BRUSH_PREVIEW_EFFECTS);
+  else if (kind === "state") state.editRefreshScheduler?.run({...STATE_BRUSH_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
   else if (kind === "province") state.editRefreshScheduler?.run(PROVINCE_BRUSH_PREVIEW_EFFECTS);
   else if (kind === "biome") {
     state.editRefreshScheduler?.run(BIOME_ASSIGNMENT_PREVIEW_EFFECTS);
@@ -19325,16 +19330,27 @@ function applyStateBrushAtEvent(state, event) {
   const stroke = state.stateEdit.activeStroke;
   if (!brush.active || !stroke || brush.targetStateId === null || brush.targetStateId === undefined || brush.targetStateId < 0) return;
 
+  const startedAt = performance.now();
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
   state.stateEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
   const changes = getStateBrushChanges(state.map, point, brush, stroke.originals);
   if (!changes.length) return;
 
+  const sampledAt = performance.now();
   applyStateBrushPreview(state.map, changes);
+  const appliedAt = performance.now();
   state.stateEdit.lastAffected = changes.length;
   state.stateEdit.sourceStateId = stroke.sourceStateId;
-  state.editRefreshScheduler.run(STATE_BRUSH_PREVIEW_EFFECTS);
+  state.editRefreshScheduler.run({...STATE_BRUSH_PREVIEW_EFFECTS, changedGridCells: changes.map(change => change.gridCell)});
+  const renderedAt = performance.now();
   updateStatePanel(state);
+  state.healthMonitor?.recordCanvasSample?.("state-brush-preview", {
+    durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
+    sampleMs: Math.round((sampledAt - startedAt) * 10) / 10,
+    applyMs: Math.round((appliedAt - sampledAt) * 10) / 10,
+    renderMs: Math.round((renderedAt - appliedAt) * 10) / 10,
+    cells: changes.length
+  });
 }
 
 function applyProvinceBrushAtEvent(state, event) {
@@ -19643,6 +19659,7 @@ function finishStateStroke(state, documentRef) {
   state.stateEdit.activeStroke = null;
   if (!stroke?.originals?.size) return;
 
+  const trace = createHeightBrushCommitTrace({kind: "state-brush-commit", originalCells: stroke.originals.size});
   const changes = [];
   for (const [gridCell, before] of stroke.originals.entries()) {
     const after = state.map.grid.cells.state[gridCell];
@@ -19652,9 +19669,22 @@ function finishStateStroke(state, documentRef) {
   if (command.isNoop({map: state.map})) return;
   state.stateEdit.lastAffected = changes.length;
   state.stateEdit.sourceStateId = stroke.sourceStateId;
-  executeEditCommand(state, documentRef, command, {
-    context: {map: state.map},
-    refresh: refreshAfterStateEdit
+  state.stateEdit.activeCommitTrace = trace;
+  try {
+    executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      refresh: refreshAfterStateEdit,
+      performanceTrace: trace
+    });
+  } finally {
+    state.stateEdit.activeCommitTrace = null;
+  }
+  const result = finishHeightBrushCommitTrace(trace);
+  state.healthMonitor?.recordCanvasSample?.("state-brush-commit", {
+    durationMs: result.totalMs,
+    cells: changes.length,
+    stages: result.stages,
+    apply: command.getLastApplyPerformance?.() || null
   });
 }
 
@@ -19680,17 +19710,11 @@ function finishProvinceStroke(state, documentRef) {
 
 function getStateBrushChanges(map, point, brush, originals) {
   const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.STATE, brush?.radius);
-  const radiusSq = radius * radius;
   const affected = [];
   const cells = map.grid.cells;
 
-  for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
+  for (const {gridCell} of queryHeightCellsInRadius(map, point, radius)) {
     if (!isGridLandCell(map, gridCell)) continue;
-    const cellPoint = map.grid.points[cells.p[gridCell]];
-    if (!cellPoint) continue;
-    const dx = cellPoint[0] - point.x;
-    const dy = cellPoint[1] - point.y;
-    if (dx * dx + dy * dy > radiusSq) continue;
     if (cells.state[gridCell] === brush.targetStateId) continue;
     affected.push(stateChange(cells, originals, gridCell, brush.targetStateId));
   }

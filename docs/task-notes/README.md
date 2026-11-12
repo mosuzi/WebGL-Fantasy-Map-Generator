@@ -146,7 +146,7 @@
 - `editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单。
 - `user-facing-shell-debug-export-and-naming-plan.md`：用户外壳、开发模式、导入导出和命名策略计划。
 - `initialization-loading-flow.md`：页面初始化与地图加载流程规约，记录阶段边界、预算和 Chrome 验证要求。
-- `render-health-monitoring.md`：渲染健康监测说明，记录本地卡顿日志、阈值、查询方式和限制。
+- `render-health-monitoring.md`：渲染与画布交互健康监测说明，记录浏览器长任务、长帧、输入延迟、调试面板、本地卡顿日志、阈值和限制。
 - `cell-diagnostics-and-ai-api-design.md`：权威任务第 195 项经新智能体 `RELEASE` 的实施编排，消费第 200 项能力矩阵，按 Cell 只读、诊断图层、全动作 inspector 与同族创建、受控写缺口四阶段实施。
 - `console-api-full-audit-and-gap-closure-2026-07-25.md`：权威任务第 200 项执行说明与结果，记录全量能力分母、机器矩阵、AI 描述层、对象发现和非 Cell API 缺口关闭。
 - `compound-semantic-api-and-gameplay-rules.md`：权威任务第 204 项规则分层说明，区分事实/原子原语、单事务规则动作和 AI 规划器玩法配方，并为完整玩法文档冻结领域骨架。

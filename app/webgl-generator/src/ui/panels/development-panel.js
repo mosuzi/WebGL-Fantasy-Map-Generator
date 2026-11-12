@@ -1,6 +1,7 @@
 export function createDevelopmentPanel(documentRef, manager) {
   const LOAD_TRACE_LIMIT = 80;
   const HEALTH_EVENT_LIMIT = 80;
+  const CANVAS_SAMPLE_LIMIT = 160;
   const control = documentRef.getElementById("open-development-panel");
   const record = manager.registerPanel("development-panel", {
     title: "开发模式",
@@ -32,6 +33,8 @@ export function createDevelopmentPanel(documentRef, manager) {
   let pendingBridgeRequest = null;
   const loadTrace = [];
   const healthEvents = [];
+  const canvasSamples = [];
+  let canvasRenderTimer = 0;
 
   bindAiBridgeControls();
 
@@ -91,6 +94,18 @@ export function createDevelopmentPanel(documentRef, manager) {
     get healthEvents() {
       return healthEvents.map(item => ({...item, detail: {...item.detail}}));
     },
+    recordCanvasPerformanceSample: sample => {
+      canvasSamples.push({...sample});
+      if (canvasSamples.length > CANVAS_SAMPLE_LIMIT) canvasSamples.shift();
+      if (canvasRenderTimer || !enabled || collapsed || record.panel.classList.contains("hidden")) return;
+      canvasRenderTimer = documentRef.defaultView.setTimeout(() => {
+        canvasRenderTimer = 0;
+        renderCanvasPerformance(documentRef, canvasSamples, documentRef.defaultView.__webglGeneratorHealth?.getCanvasMonitoringSupport?.());
+      }, 200);
+    },
+    get canvasPerformanceSamples() {
+      return canvasSamples.map(item => ({...item}));
+    },
     configureAiBridge: factory => {
       aiBridgeFactory = factory;
       restoreAiBridgeSession();
@@ -109,6 +124,7 @@ export function createDevelopmentPanel(documentRef, manager) {
   documentRef.defaultView.__webglGeneratorDebug = api;
   const existingHealthEvents = documentRef.defaultView.__webglGeneratorHealth?.getEvents?.(HEALTH_EVENT_LIMIT) || [];
   for (const event of existingHealthEvents) api.recordHealthEvent(event);
+  for (const sample of documentRef.defaultView.__webglGeneratorHealth?.getCanvasSamples?.(CANVAS_SAMPLE_LIMIT) || []) api.recordCanvasPerformanceSample(sample);
   if (new URLSearchParams(documentRef.defaultView.location.search).get("debug") === "1") setEnabled(true, {open: true});
   else showControl(false);
 
@@ -131,6 +147,7 @@ export function createDevelopmentPanel(documentRef, manager) {
     collapsed = false;
     showControl(true);
     manager.open("development-panel");
+    renderCanvasPerformance(documentRef, canvasSamples, documentRef.defaultView.__webglGeneratorHealth?.getCanvasMonitoringSupport?.());
     control?.classList.add("active");
     control?.setAttribute("aria-pressed", "true");
   }
@@ -315,6 +332,7 @@ function createDevelopmentPanelBody(documentRef, callbacks) {
     developmentToolbar(documentRef, callbacks),
     developmentSection(documentRef, "状态", [paragraph(documentRef, "app-status", "初始化中")]),
     developmentSection(documentRef, "健康监测", [healthEventList(documentRef)]),
+    developmentSection(documentRef, "画布性能", [paragraph(documentRef, "development-canvas-summary", "暂无画布交互采样"), canvasPerformanceList(documentRef)]),
     developmentSection(documentRef, "加载追踪", [loadTraceList(documentRef)]),
     developmentSection(documentRef, "运行时", [definitionList(documentRef, "runtime-stats")]),
     gridRefinementSection(documentRef, callbacks),
@@ -459,6 +477,52 @@ function healthEventList(documentRef) {
   empty.textContent = "暂无健康事件";
   list.append(empty);
   return list;
+}
+
+function canvasPerformanceList(documentRef) {
+  const list = documentRef.createElement("ol");
+  list.id = "development-canvas-samples";
+  list.className = "development-canvas-samples";
+  const empty = documentRef.createElement("li");
+  empty.textContent = "暂无画布交互采样";
+  list.append(empty);
+  return list;
+}
+
+function renderCanvasPerformance(documentRef, samples, support = {}) {
+  const summary = documentRef.getElementById("development-canvas-summary");
+  const list = documentRef.getElementById("development-canvas-samples");
+  if (!summary || !list) return;
+  const latestTime = samples.at(-1)?.pageTimeMs || 0;
+  const recent = samples.filter(item => item.pageTimeMs >= latestTime - 10000);
+  const previews = recent.filter(item => item.phase === "state-brush-preview").map(item => Number(item.durationMs)).filter(Number.isFinite).sort((a, b) => a - b);
+  const commits = recent.filter(item => item.phase === "state-brush-commit").map(item => Number(item.durationMs)).filter(Number.isFinite).sort((a, b) => a - b);
+  const p95 = values => values.length ? values[Math.min(values.length - 1, Math.ceil(values.length * 0.95) - 1)] : null;
+  const format = value => Number.isFinite(value) ? `${value}ms` : "暂无";
+  const browser = [support.longTask && "长任务", support.longAnimationFrame && "长帧", support.eventTiming && "输入事件"].filter(Boolean).join("、") || "无浏览器性能条目";
+  summary.textContent = `近 10 秒：预览 ${previews.length} 次，P95 ${format(p95(previews))}，最大 ${format(previews.at(-1))}；提交 ${commits.length} 次，最大 ${format(commits.at(-1))}。浏览器采集：${browser}。主线程卡住期间由浏览器缓冲，恢复后显示。`;
+  if (!samples.length) return;
+  list.replaceChildren(...samples.slice(-16).reverse().map(sample => {
+    const item = documentRef.createElement("li");
+    const duration = Number.isFinite(Number(sample.durationMs)) ? `${sample.durationMs}ms` : "耗时未知";
+    const cells = Number.isInteger(sample.cells) ? `，${sample.cells} 格` : "";
+    const detail = sample.phase === "state-brush-preview"
+      ? `（采样 ${sample.sampleMs} / 写入 ${sample.applyMs} / 绘制 ${sample.renderMs}ms）`
+      : sample.phase === "state-brush-commit"
+        ? formatCanvasCommitStages(sample)
+        : sample.phase === "browser-event"
+          ? `（${sample.eventName}，派发等待 ${sample.inputDelayMs}ms，处理 ${sample.processingMs}ms）`
+          : Number.isFinite(sample.blockingMs) ? `（阻塞 ${sample.blockingMs}ms）` : "";
+    item.textContent = `${sample.phase}：${duration}${cells}${detail}`;
+    return item;
+  }));
+}
+
+function formatCanvasCommitStages(sample) {
+  const stages = Object.entries(sample.stages || {}).map(([name, value]) => [name, Number(value?.ms) || 0]);
+  const main = stages.sort((left, right) => right[1] - left[1]).slice(0, 3).map(([name, ms]) => `${name} ${ms}ms`);
+  const apply = Object.entries(sample.apply || {}).map(([name, ms]) => `${name} ${ms}ms`);
+  return main.length ? `（${[...main, ...apply].join(" / ")}）` : "";
 }
 
 function boundaryList(documentRef) {

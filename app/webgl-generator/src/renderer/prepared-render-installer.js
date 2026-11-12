@@ -418,6 +418,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       }
       if (layers.line) {
       assign("lineVertices", layers.line.vertices);
+      assign("politicalLineRange", layers.line.politicalLineRange || null);
       assign("shoreLineVertices", layers.line.shoreVertices);
       assign("gpuResidentSmoothShoreLineVertices", layers.line.gpuResidentSmoothShoreVertices || new Float32Array());
       assign("gpuResidentHardShoreLineVertices", layers.line.gpuResidentHardShoreVertices || new Float32Array());

@@ -1166,6 +1166,7 @@ export class PlaceholderMapRenderer {
     const profile = createRendererLoadProfile();
     this.cancelScheduledRouteBufferRefresh();
     this.map = map;
+    this.resetPoliticalBrushWorker();
     profile.stage("cell-attribute-store", "建立 cell attribute store", () => installRendererCellAttributeStore(this, createCellAttributeStore(this.gl, map, this.viewOptions)));
     this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
@@ -1184,6 +1185,7 @@ export class PlaceholderMapRenderer {
     const lineVertices = lineLayer.vertices;
     const shoreLineVertices = lineLayer.shoreVertices;
     this.lineVertices = lineVertices;
+    this.politicalLineRange = lineLayer.politicalLineRange;
     this.shoreLineVertices = shoreLineVertices;
     this.gpuResidentSmoothShoreLineVertices = lineLayer.gpuResidentSmoothShoreVertices;
     this.gpuResidentHardShoreLineVertices = lineLayer.gpuResidentHardShoreVertices;
@@ -1310,6 +1312,7 @@ export class PlaceholderMapRenderer {
     };
 
     this.map = map;
+    this.resetPoliticalBrushWorker();
     await stage("cell-attribute-store", "建立 cell attribute store", () => installRendererCellAttributeStore(this, createCellAttributeStore(this.gl, map, this.viewOptions)));
     this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
@@ -1328,6 +1331,7 @@ export class PlaceholderMapRenderer {
     const lineVertices = lineLayer.vertices;
     const shoreLineVertices = lineLayer.shoreVertices;
     this.lineVertices = lineVertices;
+    this.politicalLineRange = lineLayer.politicalLineRange;
     this.shoreLineVertices = shoreLineVertices;
     this.gpuResidentSmoothShoreLineVertices = lineLayer.gpuResidentSmoothShoreVertices;
     this.gpuResidentHardShoreLineVertices = lineLayer.gpuResidentHardShoreVertices;
@@ -1469,6 +1473,7 @@ export class PlaceholderMapRenderer {
     };
 
     this.map = map;
+    this.resetPoliticalBrushWorker();
     this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
     this.oceanCurrentHighlights = new Set();
@@ -1586,6 +1591,14 @@ export class PlaceholderMapRenderer {
     if (!this.map || !this.cellAttributeStore) return false;
     const patch = prepareCellAttributePatch(this.cellAttributeStore, this.map, gridCells);
     return applyCellAttributePatch(this.gl, patch);
+  }
+
+  refreshEditedCellColors(gridCells, {draw = true, binding = null} = {}) {
+    if (!gridCells?.length || !this.canPresentGpuResidentColorMode(this.colorMode)) return false;
+    if (!this.refreshCellAttributeCells(gridCells)) return false;
+    if (binding) this.rebindEditedRendererResources(binding);
+    if (draw) this.draw();
+    return true;
   }
 
   restoreCellAttributeStore() {
@@ -2279,6 +2292,7 @@ export class PlaceholderMapRenderer {
       const lineVertices = lineLayer.vertices;
       const shoreLineVertices = lineLayer.shoreVertices;
       this.lineVertices = lineVertices;
+      this.politicalLineRange = lineLayer.politicalLineRange;
       this.shoreLineVertices = shoreLineVertices;
       this.gpuResidentSmoothShoreLineVertices = lineLayer.gpuResidentSmoothShoreVertices;
       this.gpuResidentHardShoreLineVertices = lineLayer.gpuResidentHardShoreVertices;
@@ -2353,9 +2367,162 @@ export class PlaceholderMapRenderer {
 
   refreshPoliticalVisualCaches() {
     if (!this.map) return;
+    this.resetPoliticalBrushWorker();
     this.rebuildStateVisualCache();
     this.rebuildProvinceVisualCache();
     this.rebuildPoliticalVisualMeshesIfNeeded();
+  }
+
+  refreshPoliticalLineLayers({draw = true, binding = null, politicalVertices: preparedVertices = null} = {}) {
+    if (!this.map) return;
+    const startedAt = performance.now();
+    const range = this.politicalLineRange;
+    if (!range || !(this.lineVertices instanceof Float32Array)) {
+      this.refreshLineLayers({draw, binding});
+      return;
+    }
+    const politicalVertices = preparedVertices || [];
+    if (!preparedVertices) {
+      const context = createRenderContext(this.map);
+      const themeLines = this.viewOptions.visualTheme?.lines || {};
+      if (this.layerVisibility.provinceBorders !== false) {
+        pushPoliticalBoundaryStrokes(politicalVertices, this.provinceVisualPaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
+      }
+      if (this.layerVisibility.stateBorders !== false) {
+        pushPoliticalBoundaryStrokes(politicalVertices, this.stateVisualPaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
+      }
+    }
+    const previous = this.lineVertices;
+    const next = new Float32Array(range.start + politicalVertices.length + previous.length - range.end);
+    next.set(previous.subarray(0, range.start));
+    next.set(politicalVertices, range.start);
+    next.set(previous.subarray(range.end), range.start + politicalVertices.length);
+    const assembledAt = performance.now();
+    this.lineVertices = next;
+    this.lineVertexCount = next.length / 6;
+    this.politicalLineRange = {start: range.start, end: range.start + politicalVertices.length};
+    this.recordBufferUpload("political-line-refresh", () => {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, next, this.gl.STATIC_DRAW);
+    }, {bufferGroup: "line"});
+    const uploadedAt = performance.now();
+    adoptRenderCacheResourceBinding(this, "line", currentRendererRenderCacheBinding(this, binding));
+    if (draw) this.draw();
+    this.lastPoliticalLineRefresh = {
+      assembleMs: Math.round((assembledAt - startedAt) * 10) / 10,
+      uploadMs: Math.round((uploadedAt - assembledAt) * 10) / 10,
+      drawMs: Math.round((performance.now() - uploadedAt) * 10) / 10,
+      totalVertices: this.lineVertexCount,
+      politicalVertices: politicalVertices.length / 6
+    };
+  }
+
+  resetPoliticalBrushWorker() {
+    this.politicalBrushWorker?.terminate();
+    this.politicalBrushWorker = null;
+    this.politicalBrushWorkerMap = null;
+    this.politicalBrushWorkerReady = false;
+    this.politicalBrushPendingPatches = [];
+    this.politicalBrushGeneration = (this.politicalBrushGeneration || 0) + 1;
+  }
+
+  warmPoliticalBrushWorker() {
+    if (!this.map || typeof Worker !== "function") return false;
+    if (this.politicalBrushWorker && this.politicalBrushWorkerMap === this.map) return true;
+    this.resetPoliticalBrushWorker();
+    const source = this.map;
+    const worker = new Worker(new URL("./political-brush-worker.js", import.meta.url), {type: "module"});
+    const generation = this.politicalBrushGeneration;
+    this.politicalBrushWorker = worker;
+    this.politicalBrushWorkerMap = source;
+    this.politicalBrushWorkerReady = false;
+    this.politicalBrushRequest = 0;
+    this.politicalBrushLastError = null;
+    worker.onmessage = event => {
+      const result = event.data;
+      if (this.map !== source || result.generation !== this.politicalBrushGeneration || result.request !== this.politicalBrushRequest) return;
+      if (result.type === "error") {
+        this.politicalBrushLastError = result.message;
+        this.resetPoliticalBrushWorker();
+        this.refreshPoliticalVisualCaches();
+        this.refreshPoliticalLineLayers({draw: true});
+        return;
+      }
+      if (result.type !== "result") return;
+      const startedAt = performance.now();
+      this.stateVisualPaths = result.statePaths;
+      this.provinceVisualPaths = result.provincePaths;
+      this.refreshPoliticalLineLayers({draw: true, politicalVertices: result.politicalVertices});
+      this.politicalBrushAppliedRequest = result.request;
+      this.onPoliticalBrushRefresh?.({durationMs: performance.now() - startedAt, request: result.request, ...this.lastPoliticalLineRefresh});
+    };
+    worker.onerror = event => {
+      if (this.politicalBrushGeneration !== generation || this.map !== source) return;
+      this.politicalBrushLastError = event.message || "政治边界计算失败";
+      this.resetPoliticalBrushWorker();
+      this.refreshPoliticalVisualCaches();
+      this.refreshPoliticalLineLayers({draw: true});
+    };
+    worker.postMessage({
+      type: "init", generation,
+      metadata: {graphWidth: source.metadata.graphWidth, graphHeight: source.metadata.graphHeight},
+      features: source.features.features.map(feature => ({land: Boolean(feature?.land)})),
+      indices: source.grid.cells.i,
+      cellCount: source.grid.cells.state.length,
+      pointCount: source.grid.points.length,
+      vertexCount: source.grid.vertices.p.length
+    });
+    const sendChunks = async (kind, fields, count) => {
+      for (let start = 0; start < count; start += 3000) {
+        if (this.politicalBrushGeneration !== generation || this.map !== source) return false;
+        const values = Object.fromEntries(Object.entries(fields).map(([field, array]) => [field, array.slice(start, start + 3000)]));
+        worker.postMessage({type: "chunk", generation, kind, start, values});
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      return true;
+    };
+    void (async () => {
+      try {
+        if (!await sendChunks("cells", {
+          c: source.grid.cells.c, v: source.grid.cells.v, p: source.grid.cells.p,
+          f: source.grid.cells.f, state: source.grid.cells.state, province: source.grid.cells.province
+        }, source.grid.cells.state.length)) return;
+        if (!await sendChunks("points", {points: source.grid.points}, source.grid.points.length)) return;
+        if (!await sendChunks("vertices", {p: source.grid.vertices.p, c: source.grid.vertices.c || []}, source.grid.vertices.p.length)) return;
+        if (this.politicalBrushGeneration !== generation || this.map !== source) return;
+        this.politicalBrushWorkerReady = true;
+        for (const patch of this.politicalBrushPendingPatches) worker.postMessage(patch);
+        this.politicalBrushPendingPatches = [];
+      } catch (error) {
+        if (this.politicalBrushGeneration === generation) {
+          this.politicalBrushLastError = error?.message || String(error);
+          this.resetPoliticalBrushWorker();
+          this.refreshPoliticalVisualCaches();
+          this.refreshPoliticalLineLayers({draw: true});
+        }
+      }
+    })();
+    return true;
+  }
+
+  queuePoliticalBrushRefresh(gridCells) {
+    if (!this.warmPoliticalBrushWorker()) return false;
+    const cells = gridCells.map(cell => [cell, this.map.grid.cells.state[cell], this.map.grid.cells.province[cell]]);
+    const patch = {
+      type: "refresh", generation: this.politicalBrushGeneration,
+      request: ++this.politicalBrushRequest, cells,
+      visibility: {
+        stateBorders: this.layerVisibility.stateBorders !== false,
+        provinceBorders: this.layerVisibility.provinceBorders !== false
+      },
+      colors: {
+        state: this.viewOptions.visualTheme?.lines?.stateBorder || STATE_VISUAL_STYLE.borderStroke,
+        province: this.viewOptions.visualTheme?.lines?.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke
+      }
+    };
+    if (this.politicalBrushWorkerReady) this.politicalBrushWorker.postMessage(patch);
+    else this.politicalBrushPendingPatches.push(patch);
+    return true;
   }
 
   refreshPointLayers({draw = true, binding = null} = {}) {
@@ -4566,7 +4733,7 @@ export class PlaceholderMapRenderer {
     };
   }
 
-  buildLabels(map, {cityRolesOnly = false, stateIds = []} = {}) {
+  buildLabels(map, {cityRolesOnly = false, politicalOnly = false, stateIds = []} = {}) {
     if (!this.overlay) {
       this.gridCellIdLayer = null;
       this.labelItems = [];
@@ -4593,10 +4760,17 @@ export class PlaceholderMapRenderer {
     }
     // 城市角色改变排名与图标；只有迁都会改变所属国家的领土标签锚点。
     // 保留其他标签和标记，避免每次点击重新遍历全部国家领土并重建整个覆盖层。
-    const scoped = cityRolesOnly && Boolean(this.selectionMarker?.parentNode === this.overlay);
+    const scoped = (cityRolesOnly || politicalOnly) && Boolean(this.selectionMarker?.parentNode === this.overlay);
     const stateIdSet = new Set(stateIds.map(Number));
+    const provinceIdSet = politicalOnly
+      ? new Set((map.politics?.provinces || []).filter(province => stateIdSet.has(Number(province?.state))).map(province => Number(province.i ?? province.id)))
+      : new Set();
     const sourceLabels = scoped
-      ? [
+      ? politicalOnly ? [
+        ...this.labelItems.filter(item => !(item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId))) && !(item.targetKind === LABEL_TARGET_KIND.PROVINCE && provinceIdSet.has(Number(item.targetId)))),
+        ...getLabelStates(map, stateIdSet),
+        ...getLabelProvinces(map, provinceIdSet)
+      ] : [
         ...[...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE && !stateIdSet.has(Number(item.targetId))), ...getLabelStates(map, stateIdSet)].sort((a, b) => b.priority - a.priority || a.rank - b.rank),
         ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.PROVINCE).sort((a, b) => b.priority - a.priority || a.rank - b.rank),
         ...getLabelCities(map, this.labelOptions),
@@ -4606,7 +4780,9 @@ export class PlaceholderMapRenderer {
       : [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getLabelZones(map), ...getCustomLabels(map)];
     if (scoped) {
       for (const item of this.labelItems) {
-        if (item.targetKind === LABEL_TARGET_KIND.CITY || (item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId)))) item.node.remove();
+        if (politicalOnly
+          ? (item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId))) || (item.targetKind === LABEL_TARGET_KIND.PROVINCE && provinceIdSet.has(Number(item.targetId)))
+          : item.targetKind === LABEL_TARGET_KIND.CITY || (item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId)))) item.node.remove();
       }
     } else this.overlay.replaceChildren();
     const documentRef = this.overlay.ownerDocument || document;
@@ -4645,10 +4821,10 @@ export class PlaceholderMapRenderer {
       return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null};
     });
     this.labelItems = hasManualLabelPriorities(map) ? sortLabelItemsByPriority(labels) : labels;
-    const cityLabelWidths = new Map(labels
+    const cityLabelWidths = politicalOnly ? null : new Map(labels
       .filter(item => item.targetKind === LABEL_TARGET_KIND.CITY)
       .map(item => [String(item.targetId), item.metrics?.width]));
-    this.cityIconItems = getCityIconItems(map).map(item => ({
+    if (!politicalOnly) this.cityIconItems = getCityIconItems(map).map(item => ({
       ...item,
       nameWidthCss: cityLabelWidths.get(String(item.id)),
       maxSizeFactor: cityIconMaxSizeFactor({
@@ -4662,14 +4838,17 @@ export class PlaceholderMapRenderer {
       visibilityTarget: 0,
       selected: false
     }));
-    this.cityIconItemsById = new Map(this.cityIconItems.map(item => [String(item.id), item]));
-    this.cityIconLayer.setInstances(this.cityIconItems, {nowMs: performance.now()});
+    if (!politicalOnly) {
+      this.cityIconItemsById = new Map(this.cityIconItems.map(item => [String(item.id), item]));
+      this.cityIconLayer.setInstances(this.cityIconItems, {nowMs: performance.now()});
+    }
     if (scoped) {
       const firstMarker = this.markerIconItems[0]?.node || this.militaryIconItems[0]?.node || this.selectionMarker;
       this.overlay.insertBefore(fragment, firstMarker);
       this.labelCount = this.labelItems.length;
       this.cityLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).length;
       this.stateLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE).length;
+      this.provinceLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.PROVINCE).length;
       this.cityIconCount = this.cityIconItems.length;
       return;
     }
@@ -5895,9 +6074,10 @@ function getLabelStates(map, stateIds = null) {
     .sort((a, b) => b.priority - a.priority);
 }
 
-function getLabelProvinces(map) {
+function getLabelProvinces(map, provinceIds = null) {
   return (map?.politics?.provinces || [])
     .filter(province => province && (province.i || province.id) && !province.removed)
+    .filter(province => !provinceIds || provinceIds.has(Number(province.i ?? province.id)))
     .filter(province => !isGeneratedLabelHidden(map, LABEL_TARGET_KIND.PROVINCE, province.i ?? province.id))
     .map((province, rank) => {
       const text = province.fullName || province.name || `省份 #${province.i ?? province.id}`;
@@ -7190,11 +7370,14 @@ export function buildLineVertices(map, visibility = {}, colorMode = "height", sh
   const oceanCurrents = includeCore
     ? pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights)
     : 0;
+  const politicalLineStart = vertices.length;
   if (includeCore && visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
   if (includeCore && visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
+  const politicalLineEnd = vertices.length;
   if (includeCore && visibility.warFronts !== false) pushMilitaryFrontLayer(vertices, context, map);
   return {
     vertices: new Float32Array(vertices),
+    politicalLineRange: {start: politicalLineStart, end: politicalLineEnd},
     mapEdgeFadeVertexCount,
     shoreVertices: shoreLineLayer.vertices,
     shoreLinePathVertices: shoreLineLayer.pathVertices,

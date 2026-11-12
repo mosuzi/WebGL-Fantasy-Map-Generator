@@ -1,5 +1,5 @@
 import {summarizeAffectedTargets} from "./edit-command-effects.js";
-import {recordHeightBrushCommitStage} from "./height-brush-performance.js";
+import {measureHeightBrushCommitStage, recordHeightBrushCommitStage} from "./height-brush-performance.js";
 
 const DEFAULT_EDIT_EFFECTS = Object.freeze({
   render: "draw",
@@ -55,26 +55,36 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       if (commandOrEffects?.domain === "regeneration-locks") state.regenerationLockUiSession?.refresh();
       const sourceEffects = commandOrEffects?.effects || commandOrEffects;
       const effects = normalizeEditEffects(sourceEffects);
-      const retainedBinding = binding || issueRetainedRefreshBinding(state, effects);
+      const retainedBinding = binding || (sourceEffects?.reuseResourceBinding ? null : issueRetainedRefreshBinding(state, effects));
       const changedGridCells = normalizeChangedGridCells(sourceEffects?.changedGridCells);
       const terrainCaches = effects.derived.includes("terrain-caches");
+      const politicalPatch = sourceEffects?.cellAttributePatch === true && !terrainCaches && effects.derived.includes("political-boundaries") && changedGridCells.length > 0;
+      const stateBrushTrace = state.stateEdit?.activeCommitTrace;
+      const measureStateBrush = (name, task) => measureHeightBrushCommitStage(stateBrushTrace, name, task);
+      const queuedPoliticalPatch = politicalPatch && measureStateBrush("queuePoliticalPatch", () => state.renderer.queuePoliticalBrushRefresh?.(changedGridCells)) === true;
       state.lastEditRefresh = summarizeEditRefresh(effects);
-      invalidateRendererBuffers(state.renderer, effects);
+      measureStateBrush("invalidateBuffers", () => invalidateRendererBuffers(state.renderer, effects));
 
       if (effects.derived.includes("visual-theme")) {
         applyVisualTheme?.(presentationPresetForRefresh(commandOrEffects, state.map));
       }
 
-      if (!terrainCaches && effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
-        state.renderer.refreshPoliticalVisualCaches();
+      if (!queuedPoliticalPatch && !terrainCaches && effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
+        measureStateBrush("politicalVisualCaches", () => state.renderer.refreshPoliticalVisualCaches());
       }
 
       if (terrainCaches && typeof state.renderer.refreshTerrainCaches === "function") {
         state.renderer.refreshTerrainCaches({draw: false, refreshSurface: false, refreshLines: false});
       }
 
-      if ((terrainCaches || effects.derived.includes("political-boundaries") || effects.derived.includes("line-layers")) && typeof state.renderer.refreshLineLayers === "function") {
-        state.renderer.refreshLineLayers({draw: false, binding: retainedBinding});
+      if (!queuedPoliticalPatch && (terrainCaches || effects.derived.includes("political-boundaries") || effects.derived.includes("line-layers")) && typeof state.renderer.refreshLineLayers === "function") {
+        measureStateBrush("lineLayers", () => {
+          if (politicalPatch && typeof state.renderer.refreshPoliticalLineLayers === "function") {
+            state.renderer.refreshPoliticalLineLayers({draw: false, binding: retainedBinding});
+          } else {
+            state.renderer.refreshLineLayers({draw: false, binding: retainedBinding});
+          }
+        });
       }
 
       if (effects.derived.includes("point-layers") && typeof state.renderer.refreshPointLayers === "function") {
@@ -91,7 +101,10 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         state.renderer.refreshRoutePickingIndex(retainedBinding);
       }
 
-      if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
+      if (sourceEffects?.cellAttributePatch === true && effects.derived.includes("cell-colors") && changedGridCells.length
+        && measureStateBrush("cellAttributePatchAndDraw", () => state.renderer.refreshEditedCellColors?.(changedGridCells, {draw: effects.render === "draw", binding: retainedBinding}))) {
+        // GPU 常驻表面只需更新 cell 属性，避免每次涂抹重建整张表面。
+      } else if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
         const trace = state.heightEdit?.activeCommitTrace;
         if (trace) {
           const startedAt = globalThis.performance?.now?.() ?? Date.now();
@@ -112,11 +125,15 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
-        state.renderer.refreshLabels(retainedBinding, labelRefreshOptions(effects));
+        measureStateBrush("refreshLabels", () => state.renderer.refreshLabels(retainedBinding, {
+          ...labelRefreshOptions(effects),
+          politicalOnly: politicalPatch,
+          stateIds: politicalPatch ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
+        }));
       }
 
       if (effects.selection === "refresh") {
-        state.selectionStore.refresh();
+        measureStateBrush("selectionRefresh", () => state.selectionStore.refresh());
         return state.lastEditRefresh;
       }
 
@@ -124,7 +141,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         const trace = state.heightEdit?.activeCommitTrace;
         if (trace) {
           const startedAt = globalThis.performance?.now?.() ?? Date.now();
-          updateRuntimePanel(documentRef, state);
+          measureStateBrush("runtimePanel", () => updateRuntimePanel(documentRef, state));
           recordHeightBrushCommitStage(trace, "runtimePanel", startedAt);
         } else {
           updateRuntimePanel(documentRef, state);
@@ -134,7 +151,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         const trace = state.heightEdit?.activeCommitTrace;
         if (trace) {
           const startedAt = globalThis.performance?.now?.() ?? Date.now();
-          updatePickPanel(documentRef, state);
+          measureStateBrush("pickPanel", () => updatePickPanel(documentRef, state));
           recordHeightBrushCommitStage(trace, "pickPanel", startedAt);
         } else {
           updatePickPanel(documentRef, state);
@@ -146,9 +163,11 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
     async runAsync(commandOrEffects = null, {yieldToMain = defaultYieldToMain, assertCurrent = null, binding = null} = {}) {
       const sourceEffects = commandOrEffects?.effects || commandOrEffects;
       const effects = normalizeEditEffects(sourceEffects);
-      const retainedBinding = binding || issueRetainedRefreshBinding(state, effects);
+      const retainedBinding = binding || (sourceEffects?.reuseResourceBinding ? null : issueRetainedRefreshBinding(state, effects));
       const changedGridCells = normalizeChangedGridCells(sourceEffects?.changedGridCells);
       const terrainCaches = effects.derived.includes("terrain-caches");
+      const politicalPatch = sourceEffects?.cellAttributePatch === true && !terrainCaches && effects.derived.includes("political-boundaries") && changedGridCells.length > 0;
+      const queuedPoliticalPatch = politicalPatch && state.renderer.queuePoliticalBrushRefresh?.(changedGridCells) === true;
       const atomicSurfacePublish = Boolean(
         retainedBinding
         && (effects.derived.includes("cell-colors") || terrainCaches)
@@ -180,13 +199,13 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       if (effects.derived.includes("visual-theme")) {
         await runStep(() => applyVisualTheme?.(presentationPresetForRefresh(commandOrEffects, state.map)));
       }
-      if (!terrainCaches && effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
+      if (!queuedPoliticalPatch && !terrainCaches && effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
         await runStep(() => state.renderer.refreshPoliticalVisualCaches());
       }
       if (terrainCaches && typeof state.renderer.refreshTerrainCaches === "function") {
         await runStep(() => state.renderer.refreshTerrainCaches({draw: false, refreshSurface: false, refreshLines: false}));
       }
-      if ((terrainCaches || effects.derived.includes("political-boundaries") || effects.derived.includes("line-layers")) && typeof state.renderer.refreshLineLayers === "function") {
+      if (!queuedPoliticalPatch && (terrainCaches || effects.derived.includes("political-boundaries") || effects.derived.includes("line-layers")) && typeof state.renderer.refreshLineLayers === "function") {
         await runStep(() => state.renderer.refreshLineLayers({draw: false, binding: retainedBinding}));
       }
       if (effects.derived.includes("point-layers") && typeof state.renderer.refreshPointLayers === "function") {
@@ -202,7 +221,10 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         await runStep(() => state.renderer.refreshRoutePickingIndex(retainedBinding));
       }
 
-      if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
+      if (sourceEffects?.cellAttributePatch === true && effects.derived.includes("cell-colors") && changedGridCells.length
+        && state.renderer.refreshEditedCellColors?.(changedGridCells, {draw: effects.render === "draw", binding: retainedBinding})) {
+        await checkpoint();
+      } else if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
         await runStep(() => state.renderer.refreshHeightCells(changedGridCells, {deferTopology: effects.deferTerrainRefresh, draw: effects.render === "draw", binding: retainedBinding}));
       } else if ((terrainCaches || effects.derived.includes("cell-colors")) && typeof state.renderer.refreshCellSurface === "function") {
         await runStep(() => state.renderer.refreshCellSurface({draw: effects.render === "draw", binding: retainedBinding}));
@@ -210,7 +232,11 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         await runStep(() => state.renderer.draw());
       }
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
-        await runStep(() => state.renderer.refreshLabels(retainedBinding, labelRefreshOptions(effects)));
+        await runStep(() => state.renderer.refreshLabels(retainedBinding, {
+          ...labelRefreshOptions(effects),
+          politicalOnly: politicalPatch,
+          stateIds: politicalPatch ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
+        }));
       }
       if (effects.selection === "refresh") {
         await runStep(() => state.selectionStore.refresh());

@@ -290,6 +290,7 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
       );
       result.layers.line = {
         vertices: line.vertices,
+        politicalLineRange: line.politicalLineRange,
         mapEdgeFadeVertexCount: line.mapEdgeFadeVertexCount,
         shoreVertices: line.shoreVertices,
         gpuResidentSmoothShoreVertices: line.gpuResidentSmoothShoreVertices,

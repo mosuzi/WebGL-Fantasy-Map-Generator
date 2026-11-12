@@ -1,6 +1,8 @@
 const HEALTH_EVENT_NAME = "webgl-generator-health-event";
 const STORAGE_KEY = "webgl-generator-health-events-v1";
 const EVENT_LIMIT = 180;
+const CANVAS_SAMPLE_LIMIT = 160;
+const CANVAS_EVENT_NAME = "webgl-generator-canvas-performance";
 const INPUT_EVENTS = Object.freeze(["pointerdown", "click", "keydown", "input", "change"]);
 
 const DEFAULT_THRESHOLDS = Object.freeze({
@@ -42,7 +44,12 @@ function createHealthMonitor(documentRef, view, options) {
   let loading = null;
   let frameId = 0;
   let longTaskObserver = null;
+  let longFrameObserver = null;
+  let eventTimingObserver = null;
   let inputHandlers = [];
+  const canvasSamples = [];
+  let lastCanvasInputAt = -Infinity;
+  let canvasInteractionUntil = -Infinity;
 
   const api = {
     get storageKey() {
@@ -57,11 +64,14 @@ function createHealthMonitor(documentRef, view, options) {
       scheduleMapReadyTimeout();
       installFrameGapMonitor();
       installLongTaskObserver();
+      installCanvasBrowserObservers();
       installInputMonitor();
     },
     dispose() {
       if (frameId) view.cancelAnimationFrame?.(frameId);
       if (longTaskObserver) longTaskObserver.disconnect();
+      if (longFrameObserver) longFrameObserver.disconnect();
+      if (eventTimingObserver) eventTimingObserver.disconnect();
       for (const item of inputHandlers) {
         documentRef.removeEventListener(item.eventName, item.handler, item.options);
       }
@@ -85,6 +95,31 @@ function createHealthMonitor(documentRef, view, options) {
     },
     clear() {
       clearStoredHealthEvents(view);
+    },
+    recordCanvasSample(phase, detail = {}) {
+      const sample = {
+        phase: String(phase || "unknown"),
+        at: new Date().toISOString(),
+        pageTimeMs: roundMs(now(view)),
+        ...sanitizeDetail(detail)
+      };
+      canvasSamples.push(sample);
+      if (canvasSamples.length > CANVAS_SAMPLE_LIMIT) canvasSamples.shift();
+      view.__webglGeneratorDebug?.recordCanvasPerformanceSample?.(sample);
+      if (Number(sample.durationMs) >= thresholds.longTaskMs && !String(phase).startsWith("browser-")) {
+        api.record("canvas-interaction-stall", sample, severityForDuration(sample.durationMs, thresholds.longTaskMs));
+      }
+      if (typeof view.CustomEvent === "function" && Number(sample.durationMs) >= thresholds.longTaskMs) {
+        view.dispatchEvent(new view.CustomEvent(CANVAS_EVENT_NAME, {detail: sample}));
+      }
+      return sample;
+    },
+    getCanvasSamples(limit = CANVAS_SAMPLE_LIMIT) {
+      return canvasSamples.slice(-limit).map(item => ({...item}));
+    },
+    getCanvasMonitoringSupport() {
+      const supported = Array.isArray(view.PerformanceObserver?.supportedEntryTypes) ? view.PerformanceObserver.supportedEntryTypes : [];
+      return {longTask: supported.includes("longtask"), longAnimationFrame: supported.includes("long-animation-frame"), eventTiming: supported.includes("event")};
     },
     beginOperation(name, detail = {}) {
       const operation = {
@@ -185,6 +220,9 @@ function createHealthMonitor(documentRef, view, options) {
           documentVisibility: documentRef.visibilityState || "unknown"
         }, severityForDuration(gapMs, thresholds.frameGapMs));
       }
+      if (documentRef.visibilityState !== "hidden" && frameNow <= canvasInteractionUntil && gapMs >= 50) {
+        api.recordCanvasSample("browser-frame-gap", {durationMs: roundMs(gapMs)});
+      }
       lastFrameAt = frameNow;
       frameId = view.requestAnimationFrame(tick);
     };
@@ -199,6 +237,9 @@ function createHealthMonitor(documentRef, view, options) {
     try {
       longTaskObserver = new Observer(list => {
         for (const entry of list.getEntries()) {
+          if (entry.duration >= 50 && entry.startTime >= lastCanvasInputAt && entry.startTime <= canvasInteractionUntil) {
+            api.recordCanvasSample("browser-long-task", {durationMs: roundMs(entry.duration), startTime: roundMs(entry.startTime)});
+          }
           if (entry.duration < thresholds.longTaskMs) continue;
           const current = api.currentOperation;
           api.record("main-thread-long-task", {
@@ -220,6 +261,10 @@ function createHealthMonitor(documentRef, view, options) {
     for (const eventName of INPUT_EVENTS) {
       const handler = event => {
         const receivedAt = now(view);
+        if (isCanvasTarget(event.target)) {
+          lastCanvasInputAt = receivedAt;
+          canvasInteractionUntil = receivedAt + 1500;
+        }
         const delayMs = receivedAt - normalizeEventTimestamp(view, event.timeStamp);
         if (delayMs >= thresholds.inputDelayMs) {
           api.record("input-delay", {
@@ -241,7 +286,57 @@ function createHealthMonitor(documentRef, view, options) {
       documentRef.addEventListener(eventName, handler, options);
       inputHandlers.push({eventName, handler, options});
     }
+    for (const eventName of ["pointermove", "pointerup", "pointercancel"]) {
+      const handler = event => {
+        if (!isCanvasTarget(event.target)) return;
+        lastCanvasInputAt = now(view);
+        canvasInteractionUntil = lastCanvasInputAt + 1500;
+      };
+      documentRef.addEventListener(eventName, handler, options);
+      inputHandlers.push({eventName, handler, options});
+    }
   }
+
+  function installCanvasBrowserObservers() {
+    const Observer = view.PerformanceObserver;
+    if (typeof Observer !== "function") return;
+    const supported = Array.isArray(Observer.supportedEntryTypes) ? Observer.supportedEntryTypes : [];
+    if (supported.includes("long-animation-frame")) {
+      try {
+        longFrameObserver = new Observer(list => {
+          for (const entry of list.getEntries()) {
+            if (entry.duration < 50 || entry.startTime < lastCanvasInputAt - 1500 || entry.startTime > canvasInteractionUntil) continue;
+            api.recordCanvasSample("browser-long-frame", {
+              durationMs: roundMs(entry.duration),
+              blockingMs: roundMs(entry.blockingDuration || 0),
+              scriptMs: roundMs((Array.isArray(entry.scripts) ? entry.scripts : []).reduce((total, script) => total + (script.duration || 0), 0))
+            });
+          }
+        });
+        longFrameObserver.observe({type: "long-animation-frame", buffered: true});
+      } catch { longFrameObserver = null; }
+    }
+    if (supported.includes("event")) {
+      try {
+        eventTimingObserver = new Observer(list => {
+          for (const entry of list.getEntries()) {
+            if (!isCanvasTarget(entry.target) || !["pointerdown", "pointerup", "click"].includes(entry.name)) continue;
+            api.recordCanvasSample("browser-event", {
+              eventName: entry.name,
+              durationMs: roundMs(entry.duration),
+              inputDelayMs: roundMs(entry.processingStart - entry.startTime),
+              processingMs: roundMs(entry.processingEnd - entry.processingStart)
+            });
+          }
+        });
+        eventTimingObserver.observe({type: "event", buffered: true, durationThreshold: 16});
+      } catch { eventTimingObserver = null; }
+    }
+  }
+}
+
+function isCanvasTarget(target) {
+  return target?.id === "map-canvas" || Boolean(target?.closest?.("#map-canvas"));
 }
 
 function normalizeHealthEvent(view, type, detail, severity) {
