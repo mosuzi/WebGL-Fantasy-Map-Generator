@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  POPULATION_COLUMN_GEOMETRY,
   cellMetricInradius,
   createCellMetricDataBuilder,
   populationColumnHeight,
@@ -43,7 +44,11 @@ assert.deepEqual([...data.precipitation], [5, 5, 4.5, 20, 17, 5, 4.5, 80]);
 
 const radius = 4.5;
 assert.ok(populationColumnHeight(radius, 10, 100) < populationColumnHeight(radius, 100, 100));
-assert.ok(populationColumnHeight(radius, 100, 100) <= radius);
+assert.equal(populationColumnHeight(radius, 100, 100), radius * 2.54);
+assert.equal(populationColumnHeight(radius, 100, 100) + radius * POPULATION_COLUMN_GEOMETRY.capDepthScale * 2, radius * 1.36 * 2);
+assert.equal(POPULATION_COLUMN_GEOMETRY.halfWidthScale, 0.17);
+assert.equal(POPULATION_COLUMN_GEOMETRY.halfWidthScale * 2, 0.34);
+assert.ok(POPULATION_COLUMN_GEOMETRY.capDepthScale < POPULATION_COLUMN_GEOMETRY.halfWidthScale);
 assert.ok(precipitationDotRadius(radius, 20, 80) < precipitationDotRadius(radius, 80, 80));
 assert.ok(precipitationDotRadius(radius, 80, 80) < radius);
 assert.equal(populationColumnHeight(radius, 0, 100), 0);
@@ -57,4 +62,4 @@ assert.equal(legacyBuilder.step(3), true);
 assert.equal(legacyBuilder.finish().populationCount, 0);
 assert.equal(legacyBuilder.finish().precipitationCount, 0);
 
-console.log("cell 人口柱与降雨量圆点：零值、海格、旧数据、单调比例和 cell 尺寸约束通过");
+console.log("cell 人口柱与降雨量圆点：零值、海格、旧数据、单调比例、完整轮廓翻倍与底面尺寸约束通过");
