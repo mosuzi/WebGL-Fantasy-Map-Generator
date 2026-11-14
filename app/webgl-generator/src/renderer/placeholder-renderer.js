@@ -125,6 +125,7 @@ import {
 import {
   buildCellVisualSurfaceCorrection,
   buildCellVisualSurfaceCorrectionFromMap,
+  shouldDrawCellVisualCorrection,
   createCellVisualCorrectionBufferSet,
   createCellVisualCorrectionBufferSetAsync,
   deleteCellVisualCorrectionBufferSet,
@@ -7264,7 +7265,7 @@ function drawSurfaceBase(gl, renderer, depthFunction) {
 }
 
 function drawCellVisualCorrection(gl, renderer) {
-  if (renderer.viewOptions?.smoothCellBorders === false || !GPU_RESIDENT_COLOR_MODES[renderer.colorMode]) return;
+  if (!shouldDrawCellVisualCorrection(renderer.colorMode, renderer.viewOptions) || !GPU_RESIDENT_COLOR_MODES[renderer.colorMode]) return;
   const bufferSet = currentCellVisualCorrectionBufferSet(renderer);
   if (!bufferSet?.vertexCount) return;
   gl.useProgram(renderer.surfaceProgram);

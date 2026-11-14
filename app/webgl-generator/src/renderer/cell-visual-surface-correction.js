@@ -5,9 +5,15 @@ import {visitCellVisualCorrectionEdges} from "./cell-visual-layer.js";
 export const CELL_VISUAL_CORRECTION_WORDS_PER_VERTEX = 3;
 export const CELL_VISUAL_CORRECTION_WORDS_PER_TRIANGLE = 9;
 export const CELL_VISUAL_CORRECTION_MAX_SEGMENT_BYTES = 8 * 1024 * 1024;
+const CANONICAL_OWNER_COLOR_MODES = new Set(["states", "provinces", "governments", "diplomacy"]);
 const identityWordBuffer = new ArrayBuffer(4);
 const identityUintView = new Uint32Array(identityWordBuffer);
 const identityFloatView = new Float32Array(identityWordBuffer);
+
+export function shouldDrawCellVisualCorrection(colorMode, viewOptions) {
+  // 归属和拾取使用原始 cell 边界；修正三角跨过该边界会留下无法用画笔点中的异色碎片。
+  return viewOptions?.smoothCellBorders !== false && !CANONICAL_OWNER_COLOR_MODES.has(colorMode);
+}
 
 export function buildCellVisualSurfaceCorrection(map, cellVisualMesh) {
   const context = createRenderContext(map);

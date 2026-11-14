@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   CELL_VISUAL_CORRECTION_MAX_SEGMENT_BYTES,
   buildCellVisualSurfaceCorrection,
+  shouldDrawCellVisualCorrection,
   createCellVisualCorrectionBufferSet,
   createCellVisualCorrectionBufferSetAsync,
   deleteCellVisualCorrectionBufferSet,
@@ -24,6 +25,14 @@ const mesh = {
 };
 const geometry = buildCellVisualSurfaceCorrection(map, mesh);
 assert.equal(geometry.length, 18);
+assert.ok(geometry[3] < 0 && geometry[12] < 0, "修正片确实越过原始 x=50 的 cell 边界");
+for (const mode of ["states", "provinces", "governments", "diplomacy"]) {
+  assert.equal(shouldDrawCellVisualCorrection(mode, {smoothCellBorders: true}), false, `${mode} 归属色不得越过可拾取边界`);
+}
+for (const mode of ["height", "population", "temperature", "precipitation"]) {
+  assert.equal(shouldDrawCellVisualCorrection(mode, {smoothCellBorders: true}), true, `${mode} 保留既有表面修正`);
+}
+assert.equal(shouldDrawCellVisualCorrection("height", {smoothCellBorders: false}), false);
 const words = new Uint32Array(geometry.buffer);
 assert.deepEqual([2, 5, 8, 11, 14, 17].map(index => unpackSurfaceBaseIdentity(words[index])), Array(6).fill({cellId: 1, water: false}));
 assert.deepEqual([...buildCellVisualSurfaceCorrection(map, {...mesh, shoreEdges: new Set(["1:2"])})], []);

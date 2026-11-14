@@ -54,6 +54,35 @@ async function exercise(browserInstance, localPort, cellsTarget) {
     const generated = await page.evaluate(async options => window.webglGeneratorApi.generate.newMap({confirm: true, ...options}), {seed, cellsTarget});
     assert.equal(generated.ok, true, generated.error?.message);
     await page.waitForFunction(expected => window.__webglGeneratorApp?.map?.metadata?.seed === expected && !window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy, seed);
+    const correctionDraws = await page.evaluate(() => {
+      const renderer = window.__webglGeneratorApp.renderer;
+      const gl = renderer.gl;
+      const buffers = new Set(renderer.cellVisualCorrectionBufferSet.segments.map(segment => segment.buffer));
+      const original = gl.drawArrays;
+      const counts = {};
+      let currentMode = "";
+      gl.drawArrays = function (...args) {
+        if (buffers.has(gl.getParameter(gl.ARRAY_BUFFER_BINDING))) counts[currentMode]++;
+        return original.apply(this, args);
+      };
+      try {
+        for (const mode of ["height", "states", "provinces", "governments", "diplomacy"]) {
+          renderer.setColorMode(mode);
+          currentMode = mode;
+          counts[mode] = 0;
+          renderer.draw();
+        }
+      } finally {
+        gl.drawArrays = original;
+        renderer.setColorMode("states");
+      }
+      return {...counts, smoothCellBorders: renderer.viewOptions.smoothCellBorders !== false};
+    });
+    assert.equal(correctionDraws.smoothCellBorders, true, "夹具需要启用平滑边缘");
+    assert.ok(correctionDraws.height > 0, "地形平滑修正片应继续绘制");
+    for (const mode of ["states", "provinces", "governments", "diplomacy"]) {
+      assert.equal(correctionDraws[mode], 0, `${mode} 归属色不应绘制越过 cell 边界的修正片`);
+    }
     const sample = await page.evaluate(() => {
       const app = window.__webglGeneratorApp;
       const map = app.map;
@@ -69,6 +98,7 @@ async function exercise(browserInstance, localPort, cellsTarget) {
       const rect = app.renderer.canvas.getBoundingClientRect();
       for (let cell = 0; cell < cells.p.length; cell++) {
         if (cells.h[cell] < 20 || cells.state[cell] === targetStateId) continue;
+        if (!(cells.c?.[cell] || []).every(neighbor => cells.h[neighbor] >= 20 && cells.state[neighbor] === cells.state[cell])) continue;
         const point = map.grid.points[cells.p[cell]];
         if (!point) continue;
         const screen = app.renderer.worldToScreen(point[0], point[1], rect);
@@ -134,7 +164,7 @@ async function exercise(browserInstance, localPort, cellsTarget) {
     });
     assert.deepEqual(errors, [], "页面错误");
     return {
-      cellsTarget, wallMs, downMs, moveMs, warmMs: round(sample.warmMs), undoWallMs,
+      cellsTarget, wallMs, downMs, moveMs, warmMs: round(sample.warmMs), undoWallMs, correctionDraws,
       workerWarm: observed.warm.map(item => item.durationMs),
       previews: observed.preview.map(item => ({durationMs: item.durationMs, sampleMs: item.sampleMs, renderMs: item.renderMs, cells: item.cells})),
       commit: observed.commit,
