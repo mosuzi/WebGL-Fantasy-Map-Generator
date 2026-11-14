@@ -18,7 +18,7 @@ try{
  await page.locator('#export-png-explicit-size').check();
  await page.locator('#export-png-output-width').fill('1200');
  await page.getByRole('textbox',{name:'PNG 预设名称'}).fill('全幅验收');
- await page.getByRole('button',{name:'保存预设',exact:true}).click();
+ await page.getByRole('textbox',{name:'PNG 预设名称'}).press('Enter');
  await page.getByRole('combobox',{name:'PNG 已存预设'}).selectOption('全幅验收');
  await page.locator('#export-png-output-width').fill('640');
  await page.locator('.png-presets').getByRole('button',{name:'应用',exact:true}).click();
@@ -32,7 +32,7 @@ try{
  const legacy=await page.evaluate(async()=>{const r=await window.webglGeneratorApi.data.exportPNG({download:false,includeDataUrl:false,pixelScale:1,crop:{mode:'viewport'}});return{result:r.data,expected:window.__webglGeneratorApp.renderer.canvas.width};});
  check('显式旧倍率不受面板目标宽度覆盖',legacy.result.width===legacy.expected,legacy);
  await page.locator('#export-png-crop-mode').selectOption('world');
- await page.getByRole('textbox',{name:'PNG 预设名称'}).fill('原图范围');await page.getByRole('button',{name:'保存预设',exact:true}).click();
+ await page.getByRole('textbox',{name:'PNG 预设名称'}).fill('原图范围');await page.getByRole('textbox',{name:'PNG 预设名称'}).press('Enter');
  await page.evaluate(()=>window.webglGeneratorApi.generate.newMap({confirm:true,seed:'different-map',cellsTarget:3000}));
  await page.getByRole('combobox',{name:'PNG 已存预设'}).selectOption('原图范围');
  await page.locator('.png-presets').getByRole('button',{name:'应用',exact:true}).click();

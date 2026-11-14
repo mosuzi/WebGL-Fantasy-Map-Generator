@@ -33,7 +33,6 @@
       v-if="debugEnabled"
       class-name="climate-downstream-seed"
       label="固定 seed"
-      action-label="设置 seed"
       :model-value="Number(state.downstreamSeed) || 0"
       :min="0"
       :step="1"

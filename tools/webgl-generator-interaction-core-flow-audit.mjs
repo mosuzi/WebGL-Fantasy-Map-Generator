@@ -623,7 +623,7 @@ function renameHostActions() {
     if (base === "Namebase") {
       return visibleAction("rename-namebase", "Namebase 用户名称库重命名", [
         sourceRef(file, ["UiTextEditField", "@apply=\"value => callbacks.onRenameUser"]),
-        sourceRef(FILES.textEdit, ["submit.prevent", "$emit('apply'"]),
+        sourceRef(FILES.textEdit, ["@keydown.enter", "emit(\"apply\""]),
         sourceRef(wrapper, ["onRenameUser:", "callbacks.onRenameUser"]),
         sourceRef(FILES.runtime, ["onRenameUser:", "renameImportedNamebase"], {anchor: "createNamebasePanel(documentRef", end: "next-panel-factory"}),
         sourceRef(FILES.runtime, ["createRenameUserNamebaseCommand", "executeNamebaseEdit"], {anchor: "function renameImportedNamebase", span: 1800})
@@ -641,7 +641,7 @@ function renameHostActions() {
     if (base === "OceanCurrent") {
       return visibleAction("rename-ocean-current", "OceanCurrent 重命名", [
         sourceRef(file, ["UiTextEditField", "@apply"]),
-        sourceRef(FILES.textEdit, ["submit.prevent", "$emit('apply'"]),
+        sourceRef(FILES.textEdit, ["@keydown.enter", "emit(\"apply\""]),
         sourceRef(wrapper, [`${callback}:`, `callbacks.${callback}`]),
         sourceRef(FILES.runtime, [`${callback}:`, "runtimeActions.oceanCurrents.rename"], {anchor, end: "next-panel-factory"}),
         sourceRef(FILES.runtime, ["function renameOceanCurrentViaApi", commandToken, "executeEditCommand"])
@@ -649,7 +649,7 @@ function renameHostActions() {
     }
     return visibleAction(`rename-${panelSlug}`, `${base} 重命名`, [
       sourceRef(file, ["UiTextEditField", "@apply"]),
-      sourceRef(FILES.textEdit, ["submit.prevent", "$emit('apply'"]),
+      sourceRef(FILES.textEdit, ["@keydown.enter", "emit(\"apply\""]),
       sourceRef(wrapper, [`${callback}:`, `callbacks.${callback}`]),
       sourceRef(FILES.runtime, [`${callback}:`, commandToken, "executeEditCommand"], {anchor, end: "next-panel-factory"})
     ]);

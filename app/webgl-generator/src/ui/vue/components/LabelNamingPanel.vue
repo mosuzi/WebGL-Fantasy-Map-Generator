@@ -62,7 +62,6 @@
       <UiNumberField
         class-name="label-priority-editor"
         label="显示优先级"
-        action-label="应用优先级"
         :model-value="selected.priority"
         :min="0"
         :max="100"

@@ -2641,7 +2641,7 @@ select:disabled {
 
 .object-name-editor {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 94px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 12px;
 }
@@ -3578,7 +3578,7 @@ select:disabled {
 .lake-name-editor {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -4229,7 +4229,7 @@ select:disabled {
 .state-name-editor {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -4547,7 +4547,7 @@ select:disabled {
 .province-name-editor {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -7312,7 +7312,7 @@ input.ui-switch-native {
 .marker-name-editor {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 10px;
 }
@@ -7843,7 +7843,7 @@ input.ui-switch-native {
 .label-name-editor {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -7902,7 +7902,7 @@ input.ui-switch-native {
 
 .label-priority-editor {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 112px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   align-items: end;
   margin-top: 8px;
@@ -9718,7 +9718,7 @@ input.ui-switch-native {
 .religion-name-editor {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 

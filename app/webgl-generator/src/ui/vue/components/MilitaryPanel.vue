@@ -309,7 +309,6 @@
       <UiTextEditField
         class-name="military-name-editor"
         label="军团"
-        action-label="应用名称"
         :model-value="selected?.name || ''"
         :max-length="40"
         @apply="applyRename"

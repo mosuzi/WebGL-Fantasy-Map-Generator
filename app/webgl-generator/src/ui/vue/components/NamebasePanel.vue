@@ -140,7 +140,6 @@
     v-if="selectedUserRow"
     :model-value="selectedUserRow.name"
     label="名称"
-    action-label="重命名"
     :max-length="48"
     @apply="value => callbacks.onRenameUser(selectedUserRow, value)"
   />

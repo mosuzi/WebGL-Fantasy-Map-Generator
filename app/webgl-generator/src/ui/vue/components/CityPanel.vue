@@ -66,11 +66,10 @@
 
   <section v-if="selected" class="city-population-controls" aria-label="城市人口编辑">
     <form @submit.prevent="applyPopulation(false)">
-      <label>人口（人）<input ref="populationInput" v-model="populationDraft" aria-label="城市人口（人）" type="number" min="0" max="1000000000" step="1" :disabled="populationDisabled" /></label>
-      <UiButton :disabled="populationDisabled" @click="applyPopulation(false)">应用人口</UiButton>
+      <label>人口（人）<input ref="populationInput" v-model="populationDraft" aria-label="城市人口（人）" aria-keyshortcuts="Enter" title="按回车保存人口" type="number" min="0" max="1000000000" step="1" :disabled="populationDisabled" @keydown.enter="applyPopulationOnEnter" @compositionstart="populationComposing = true" @compositionend="populationComposing = false" /></label>
       <UiButton variant="secondary" :disabled="populationDisabled" @click="applyPopulation(true)">按条件重算人口</UiButton>
     </form>
-    <span>潜在人口：{{ formatPopulationValue(populationPotential) }}，不限制手工人口。应用后同步所属地区人口；经济、道路和军队需另行重算。</span>
+    <span>潜在人口：{{ formatPopulationValue(populationPotential) }}，不限制手工人口。输入后按回车保存并同步所属地区人口；经济、道路和军队需另行重算。</span>
     <span v-if="populationFeedback" role="status">{{ populationFeedback }}</span>
   </section>
 
@@ -219,6 +218,7 @@ const modalActionActive = computed(() => Boolean(props.state.addMode || props.st
 const attributeBusy = ref(false);
 const attributeFeedback = ref("");
 const populationInput = ref(null);
+const populationComposing = ref(false);
 const populationDraft = ref("");
 const populationFeedback = ref("");
 const populationPending = ref(false);
@@ -234,6 +234,11 @@ onMounted(() => {
 });
 onBeforeUnmount(() => globalThis.document?.removeEventListener("webgl-generator-runtime-operation", handlePopulationBusy));
 function handlePopulationBusy(event) {runtimeOperationBusy.value = Boolean(event.detail?.busy);}
+function applyPopulationOnEnter(event) {
+  event.preventDefault();
+  if (populationComposing.value || event.isComposing || event.keyCode === 229) return;
+  applyPopulation(false);
+}
 async function applyPopulation(recalculate) {
   if (!selected.value || populationDisabled.value) return;
   const id = selected.value.id;

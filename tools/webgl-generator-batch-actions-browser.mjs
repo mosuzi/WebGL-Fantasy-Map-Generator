@@ -23,7 +23,7 @@ try{
   await page.evaluate(()=>window.webglGeneratorApi.history.redo());check(`${label}重做提示`,await page.locator('.city-update-guidance').innerText().then(t=>t.includes(label)));await page.evaluate(()=>window.webglGeneratorApi.history.undo());
  }
  const cityId=await page.evaluate(()=>window.__webglGeneratorApp.map.settlements.cities.find(Boolean).id);await page.evaluate(id=>window.__webglGeneratorApp.panels.city.setSelectedCityId(id),cityId);
- await page.getByRole('spinbutton',{name:'城市人口（人）'}).fill('12345');await page.getByRole('button',{name:'应用人口',exact:true}).click();
+ await page.getByRole('spinbutton',{name:'城市人口（人）'}).fill('12345');await page.getByRole('spinbutton',{name:'城市人口（人）'}).press('Enter');
  const people=await page.evaluate(id=>({population:window.__webglGeneratorApp.map.settlements.cities[id].population,units:window.webglGeneratorApi.layers.get().data.units}),cityId);
  check('人口真实编辑入口',Math.round(populationUnitsToPeople(people.population,people.units))===12345,people);
  const failure=await page.evaluate(async id=>{const a=window.__webglGeneratorApp,before=JSON.stringify(a.cityGuidance.read(id));const r=await window.webglGeneratorApi.edit.economy.rebuild({confirm:false});return{rejected:!r.ok||r.data.executed===false,same:before===JSON.stringify(a.cityGuidance.read(id))};},cityId);check('取消重算保持关联提示',failure.rejected&&failure.same,failure);

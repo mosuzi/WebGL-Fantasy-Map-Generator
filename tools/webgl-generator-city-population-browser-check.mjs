@@ -5,7 +5,6 @@ export async function verifyCityPopulation(page, panel, select) {
   const id = await page.evaluate(() => window.__webglGeneratorApp.map.settlements.cities.find(city => city?.state > 0 && city?.province > 0).id);
   await select(id);
   const input = panel.getByRole("spinbutton", {name: "城市人口（人）"});
-  const apply = panel.getByRole("button", {name: "应用人口", exact: true});
   const read = () => page.evaluate(id => {
     const app = window.__webglGeneratorApp, map = app.map, city = map.settlements.cities[id];
     const fields = records => records.map(item => item && {urban: item.urban, rural: item.rural});
@@ -21,7 +20,7 @@ export async function verifyCityPopulation(page, panel, select) {
     const before = await read(), count = await history();
     const people = scale === .1 ? 0 : 123457;
     await input.fill(String(people));
-    if (scale === 1) await input.press("Enter"); else await apply.click();
+    await input.press("Enter");
     await page.waitForFunction(({id, people, scale}) => Math.round(window.__webglGeneratorApp.map.settlements.cities[id].population * 1000 * scale) === people, {id, people, scale});
     const after = await read();
     assert.equal(after.mirror, after.population);
@@ -38,24 +37,24 @@ export async function verifyCityPopulation(page, panel, select) {
     await undo(); assert.deepEqual(await read(), before);
     await redo(); assert.deepEqual(await read(), after);
     assert.equal(await input.inputValue(), String(people));
-    await apply.click(); assert.equal(await history(), count + 1, "同值不写历史");
+    await input.press("Enter"); assert.equal(await history(), count + 1, "同值不写历史");
     matrices.push({scale, people, undoRedo: true});
   }
   const count = await history();
   for (const invalid of ["", "-1", "1.5", "1000000001"]) {
-    await input.fill(invalid); await apply.click();
+    await input.fill(invalid); await input.press("Enter");
     assert.match(await panel.locator(".city-population-controls [role=status]").innerText(), /整数人数/);
     assert.equal(await history(), count);
   }
   await page.evaluate(() => document.dispatchEvent(new CustomEvent("webgl-generator-runtime-operation", {detail: {busy: true}})));
-  assert.equal(await input.isDisabled(), true); assert.equal(await apply.isDisabled(), true);
+  assert.equal(await input.isDisabled(), true); assert.equal(await panel.getByRole("button", {name: "按条件重算人口", exact: true}).isDisabled(), true);
   await page.evaluate(() => document.dispatchEvent(new CustomEvent("webgl-generator-runtime-operation", {detail: {busy: false}})));
   const otherId = await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities.find(c => c && !c.removed && c.id !== id).id, id);
   await select(otherId); assert.equal(await panel.locator(".city-population-controls [role=status]").count(), 0);
   await select(id);
   await panel.getByRole("button", {name: "调整人口", exact: true}).click();
   assert.equal(await input.evaluate(element => element === document.activeElement), true);
-  await input.fill("543219"); await apply.click();
+  await input.fill("543219"); await input.press("Enter");
   await page.waitForFunction(id => Math.round(window.__webglGeneratorApp.map.settlements.cities[id].population * 10000) === 543219, id);
   const units = {populationScale: 10, numberAbbreviation: "none"};
   for (const [kind, collection] of [["state", "states"], ["province", "provinces"], ["population", null]]) {

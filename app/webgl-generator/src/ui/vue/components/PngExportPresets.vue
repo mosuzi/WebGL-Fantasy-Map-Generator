@@ -1,16 +1,17 @@
 <template><section class="png-presets" aria-label="PNG 输出尺寸和预设">
   <label><input id="export-png-explicit-size" type="checkbox" @change="refreshSize" />指定像素尺寸（锁定比例）</label>
   <div class="png-preset-row"><label>宽 <input id="export-png-output-width" type="number" min="1" max="8192" value="2048" @input="refreshSize" /> px</label><span>{{ size }}</span></div>
-  <div class="png-preset-row"><input v-model="name" maxlength="64" aria-label="PNG 预设名称" placeholder="预设名称" /><button @click="act('save')">保存预设</button></div>
+  <div class="png-preset-row"><input v-model="name" maxlength="64" aria-label="PNG 预设名称" aria-keyshortcuts="Enter" title="按回车保存预设" placeholder="输入预设名称后按回车保存" @keydown.enter="saveOnEnter" @compositionstart="composing = true" @compositionend="composing = false" /></div>
   <div class="png-preset-row"><select v-model="selected" aria-label="PNG 已存预设"><option value="">选择预设</option><option v-for="item in presets" :key="item.name">{{ item.name }}</option></select><button :disabled="!selected" @click="act('apply')">应用</button><button :disabled="!selected" @click="act('delete')">删除</button></div>
   <p role="status">{{ message || '全幅与固定世界范围的输出尺寸独立于窗口；预设保存在此浏览器。' }}</p>
 </section></template>
 <script setup>
 import {ref, onMounted, onBeforeUnmount} from "vue";
 import {PNG_PRESET_EVENT, PNG_PRESET_READY_EVENT} from "../../../runtime/png-export-presets.js";
-const name=ref(""),selected=ref(""),presets=ref([]),message=ref(""),size=ref(""); let timer;
+const name=ref(""),selected=ref(""),presets=ref([]),message=ref(""),size=ref(""),composing=ref(false); let timer;
 function request(payload) { document.dispatchEvent(new CustomEvent(PNG_PRESET_EVENT,{detail:{...payload,respond: response=>{if(response.presets)presets.value=response.presets; if(response.error)message.value=response.error; else if(response.message)message.value=response.message; if(response.height)size.value=`高 ${response.height} px`;}}})); }
-function act(action){request({action,name:action==='save'?name.value:selected.value}); refreshSize();}
+function act(action,value){request({action,name:action==='save'?(value??name.value):selected.value}); refreshSize();}
+function saveOnEnter(event){event.preventDefault();if(composing.value||event.isComposing||event.keyCode===229)return;act('save',event.target.value);}
 function refreshSize(){request({action:'size'});}
 function refreshList(){request({action:'list'});}
 // 自动重开控制面板可能先于预设服务就绪，双方顺序均须能读取已存列表。
