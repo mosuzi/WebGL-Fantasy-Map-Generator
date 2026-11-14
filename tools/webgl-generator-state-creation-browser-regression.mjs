@@ -76,6 +76,23 @@ try {
   assert.deepEqual(visualColor.palette.slice(0, 3), [1, 3, 5].map(index => Number.parseInt(visualColor.color.slice(index, index + 2), 16)),
     "新国家颜色应写入正式 GPU 国家色表");
   assert.equal(visualColor.glError, 0);
+  await page.waitForFunction(id => Boolean(document.querySelector(`.state-label[data-label-target-id="${id}"]`)),
+    profile.result.data?.result?.stateId);
+  const labelStyles = await page.evaluate(({createdId, originalId}) => {
+    const read = id => {
+      const node = document.querySelector(`.state-label[data-label-target-id="${id}"]`);
+      if (!node) return null;
+      const style = getComputedStyle(node);
+      return {selected: node.classList.contains("selected"), color: style.color, textShadow: style.textShadow,
+        fontFamily: style.fontFamily, fontSize: style.fontSize, fontWeight: style.fontWeight, stroke: style.webkitTextStroke};
+    };
+    return {created: read(createdId), original: read(originalId)};
+  }, {createdId: profile.result.data?.result?.stateId, originalId: sample.oldStateId});
+  assert.ok(labelStyles.created?.selected && labelStyles.original && !labelStyles.original.selected,
+    `新增国家应已选中且旧国未选中：${JSON.stringify(labelStyles)}`);
+  const textStyle = ({selected, ...style}) => style;
+  assert.deepEqual(textStyle(labelStyles.created), textStyle(labelStyles.original),
+    "新增国家选中态应沿用统一国家标签的文字样式");
   const capitalProfile = await page.evaluate(gridCell => {
     const app = window.__webglGeneratorApp;
     const oldStateId = app.map.grid.cells.state[gridCell];
@@ -236,6 +253,57 @@ try {
     largeDelete: {wallMs: largeDelete.wallMs, cells: largeDelete.beforeCells, capitalRestored: undoDelete.capital === largeDelete.beforeCapital},
     health, dialogs, errors}, null, 2));
   assert.ok(health.every(event => Number(event.detail?.durationMs || 0) <= 200), "建国与删除不应出现超过 200ms 的 LongTask");
+  if (cellsTarget === 3000) {
+    const customStyle = await page.evaluate(({createdId, originalId}) => {
+      const api = window.webglGeneratorApi;
+      const updated = api.edit.labels.setStyle("state", {color: "#943b57", shadowColor: "#293038", shadowOffsetX: 1, shadowOffsetY: 2, shadowBlur: 3});
+      if (!updated.ok) throw new Error(JSON.stringify(updated.error));
+      const selected = api.selection.select({kind: "state", id: createdId});
+      if (!selected.ok) throw new Error(JSON.stringify(selected.error));
+      const read = id => {
+        const node = document.querySelector(`.state-label[data-label-target-id="${id}"]`);
+        const style = getComputedStyle(node);
+        return {color: style.color, shadow: style.textShadow, font: style.fontFamily, stroke: style.webkitTextStroke};
+      };
+      return {created: read(createdId), original: read(originalId)};
+    }, {createdId: profile.result.data?.result?.stateId, originalId: sample.oldStateId});
+    assert.equal(customStyle.created.color, "rgb(148, 59, 87)");
+    assert.deepEqual(customStyle.created.color, customStyle.original.color);
+    assert.deepEqual(customStyle.created.shadow, customStyle.original.shadow);
+    const located = await page.evaluate(id => {
+      const selected = window.webglGeneratorApi.selection.select({kind: "state", id});
+      if (!selected.ok) return selected;
+      return window.webglGeneratorApi.selection.locate({kind: "state", id});
+    }, sample.oldStateId);
+    assert.equal(located.ok, true, JSON.stringify(located.error));
+    await page.evaluate(() => window.__webglGeneratorApp.panelManager.close("state-panel"));
+    await page.waitForTimeout(250);
+    await page.screenshot({path: join(root, "docs/generated/screenshots/task-408-state-label-selection.png")});
+    const styleRoundtrip = await page.evaluate(async ({createdId, originalId}) => {
+      const api = window.webglGeneratorApi;
+      const read = id => {
+        const node = document.querySelector(`.state-label[data-label-target-id="${id}"]`);
+        const style = getComputedStyle(node);
+        return {color: style.color, shadow: style.textShadow};
+      };
+      const before = read(createdId);
+      const undone = await api.history.undo();
+      const afterUndo = read(createdId);
+      const redone = await api.history.redo();
+      const afterRedo = read(createdId);
+      const exported = api.data.exportMap({download: false, includeText: true});
+      const imported = exported.ok ? await api.data.importMap(exported.data.text, {confirm: true}) : exported;
+      return {before, afterUndo, afterRedo, restored: imported.ok ? read(createdId) : null,
+        original: imported.ok ? read(originalId) : null, undoOk: undone.ok, redoOk: redone.ok,
+        exportOk: exported.ok, importOk: imported.ok};
+    }, {createdId: profile.result.data?.result?.stateId, originalId: sample.oldStateId});
+    assert.equal(styleRoundtrip.undoOk && styleRoundtrip.redoOk && styleRoundtrip.exportOk && styleRoundtrip.importOk,
+      true, JSON.stringify(styleRoundtrip));
+    assert.notDeepEqual(styleRoundtrip.afterUndo, styleRoundtrip.before, "撤销应恢复原国家标签样式");
+    assert.deepEqual(styleRoundtrip.afterRedo, styleRoundtrip.before, "重做应恢复自定义国家标签样式");
+    assert.deepEqual(styleRoundtrip.restored, styleRoundtrip.before, "保存回读应保持新国家标签样式");
+    assert.deepEqual(styleRoundtrip.original, styleRoundtrip.before, "保存回读后新旧国家仍共用标签样式");
+  }
 } finally {
   await browser.close();
   await server.httpServer.close();

@@ -1891,11 +1891,6 @@ select:disabled {
   color: #fff1b8;
 }
 
-.state-label.selected {
-  color: #fff1b8;
-  text-shadow: 0 2px 4px rgba(4, 7, 8, 0.9), 0 0 18px rgba(255, 205, 95, 0.38);
-}
-
 .city-label.visible.scale-entering,
 .custom-label.visible.scale-entering,
 .state-label.visible.scale-entering,
