@@ -36,7 +36,10 @@ try {
     const capitalProvinces = new Set(map.politics.states.filter(state => state?.capital).map(state => map.pack.burgs[state.capital]?.province));
     const cells = map.grid.cells;
     const ordinary = Array.from(cells.i).find(cell => cells.h[cell] >= 20 && cells.state[cell] > 0 && !capitalProvinces.has(cells.province[cell]));
-    const state = map.politics.states.find(item => item?.capital && map.pack.burgs[item.capital]?.cell >= 0);
+    const state = map.politics.states.find(item => {
+      const capitalCell = map.pack.cells.g?.[map.pack.burgs[item?.capital]?.cell];
+      return Number.isInteger(capitalCell) && (cells.c?.[capitalCell] || []).some(neighbor => cells.h[neighbor] >= 20 && cells.state[neighbor] === (item.i ?? item.id));
+    });
     const capital = state ? map.pack.cells.g[map.pack.burgs[state.capital].cell] : null;
     return {ordinary, capital, oldStateId: state?.i ?? state?.id};
   });
@@ -111,6 +114,72 @@ try {
   assert.equal(capitalProfile.newCapital, capitalProfile.oldCapital);
   assert.notEqual(capitalProfile.replacementCapital, capitalProfile.oldCapital);
   assert.ok(capitalProfile.neighborColors.every(color => color?.toLowerCase() !== capitalProfile.color?.toLowerCase()));
+  const brushCapital = await page.evaluate(({gridCell, oldStateId, newStateId}) => {
+    const api = window.webglGeneratorApi;
+    const app = window.__webglGeneratorApp;
+    const beforeCities = app.map.settlements.cities.length;
+    const startedAt = performance.now();
+    const result = api.edit.states.applyChanges([{gridCell, after: oldStateId}]);
+    const wallMs = Math.round((performance.now() - startedAt) * 10) / 10;
+    const inspect = id => {
+      const state = app.map.politics.states[id];
+      const city = app.map.settlements.cities.find(item => item?.burgId === state?.capital);
+      const burg = app.map.pack.burgs[state?.capital];
+      return {capital: state?.capital, cells: state?.cells, cityState: city?.state, burgState: burg?.state,
+        cityFlags: app.map.settlements.cities.filter(item => item?.state === id && item.capital).length,
+        burgFlags: app.map.pack.burgs.filter(item => item?.state === id && item.capital).length,
+        packCapital: app.map.pack.states[id]?.capital};
+    };
+    return {result, wallMs, beforeCities, afterCities: app.map.settlements.cities.length,
+      old: inspect(oldStateId), created: inspect(newStateId), glError: app.renderer.gl.getError()};
+  }, {gridCell: sample.capital, oldStateId: capitalProfile.oldStateId, newStateId: capitalProfile.newStateId});
+  console.log("stage:capital-brushed", brushCapital.wallMs, brushCapital.result.ok, JSON.stringify({old: brushCapital.old, created: brushCapital.created}));
+  assert.equal(brushCapital.result.ok, true, JSON.stringify(brushCapital.result.error));
+  assert.ok(brushCapital.created.cells > 0 && brushCapital.created.capital > 0 && brushCapital.created.capital !== capitalProfile.oldCapital,
+    "刷走新国原首都但仍有领土时应重选或补建唯一首都");
+  for (const [stateId, capital] of [[capitalProfile.oldStateId, brushCapital.old], [capitalProfile.newStateId, brushCapital.created]]) {
+    assert.equal(capital.cityState, stateId);
+    assert.equal(capital.burgState, stateId);
+    assert.equal(capital.packCapital, capital.capital);
+    assert.equal(capital.cityFlags, 1);
+    assert.equal(capital.burgFlags, 1);
+  }
+  assert.equal(brushCapital.glError, 0);
+  const colorRepair = await page.evaluate(({oldStateId, newStateId}) => {
+    const app = window.__webglGeneratorApp;
+    const api = window.webglGeneratorApi;
+    const map = app.map;
+    const borderCell = Array.from(map.grid.cells.i).find(cell => map.grid.cells.state[cell] === oldStateId
+      && (map.grid.cells.c?.[cell] || []).some(other => map.grid.cells.state[other] === newStateId));
+    if (!Number.isInteger(borderCell)) return {error: "没有可涂抹的接壤 cell"};
+    const forced = api.edit.states.setColor(newStateId, map.politics.states[oldStateId].color);
+    const startedAt = performance.now();
+    const result = api.edit.states.applyChanges([{gridCell: borderCell, after: newStateId}]);
+    const wallMs = Math.round((performance.now() - startedAt) * 10) / 10;
+    const state = map.politics.states[newStateId];
+    const palette = app.renderer.cellAttributeStore.snapshot.palettes.states;
+    return {forced, result, wallMs, borderCell, color: state.color,
+      neighborColors: state.neighbors.map(id => map.politics.states[id]?.color),
+      palette: [...palette.slice((newStateId + 1) * 4, (newStateId + 2) * 4)],
+      glError: app.renderer.gl.getError()};
+  }, {oldStateId: capitalProfile.oldStateId, newStateId: capitalProfile.newStateId});
+  console.log("stage:color-repaired", colorRepair.wallMs, colorRepair.color);
+  assert.equal(colorRepair.forced?.ok && colorRepair.result?.ok, true, JSON.stringify(colorRepair));
+  assert.ok(colorRepair.neighborColors.every(color => color?.toLowerCase() !== colorRepair.color.toLowerCase()),
+    "涂抹形成接壤后新国不得与任何邻国同色");
+  assert.deepEqual(colorRepair.palette.slice(0, 3), [1, 3, 5].map(index => Number.parseInt(colorRepair.color.slice(index, index + 2), 16)),
+    "接壤改色应同步正式 GPU 调色板");
+  assert.ok(colorRepair.result.data?.effects?.derived?.includes("state-color"));
+  assert.equal(colorRepair.glError, 0);
+  if (cellsTarget === 3000) {
+    await page.evaluate(stateId => {
+      window.__webglGeneratorApp.panelManager.close("state-panel");
+      window.__webglGeneratorDebug?.collapse?.();
+      window.webglGeneratorApi.selection.locate({kind: "state", id: stateId});
+      window.webglGeneratorApi.selection.clear();
+    }, capitalProfile.newStateId);
+    await page.screenshot({path: join(root, "docs/generated/screenshots/task-409-state-color-repair.png")});
+  }
   const deleteProfile = await page.evaluate(stateId => {
     const app = window.__webglGeneratorApp;
     const stages = [];

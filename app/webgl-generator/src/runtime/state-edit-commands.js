@@ -128,13 +128,38 @@ export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} =
       settlementSnapshot ??= captureSettlementSnapshot(context.map, normalized);
       politicalSnapshot ??= capturePoliticalDerivativeSnapshot(context.map, normalized, settlementSnapshot);
       const capturedAt = performance.now();
-      applyStateChanges(context.map, normalized, "after");
-      applySettlementTransfers(context.map, settlementSnapshot);
-      const transferredAt = performance.now();
-      repairPoliticalDerivativesForStateBrush(context.map, normalized, settlementSnapshot);
-      const repairedAt = performance.now();
-      refreshStateSummaries(context.map);
-      const summarizedAt = performance.now();
+      settlementSnapshot.createdCapitalCells = [];
+      let transferredAt;
+      let repairedAt;
+      let summarizedAt;
+      try {
+        applyStateChanges(context.map, normalized, "after");
+        applySettlementTransfers(context.map, settlementSnapshot);
+        transferredAt = performance.now();
+        repairPoliticalDerivativesForStateBrush(context.map, normalized, settlementSnapshot);
+        const createdCapitals = reconcileStateCapitals(context.map, affectedStates, settlementSnapshot);
+        assertAffectedStateCapitals(context.map, affectedStates);
+        repairedAt = performance.now();
+        refreshStateSummaries(context.map);
+        const recoloredStates = repairStateColorConflicts(context.map, affectedStates);
+        const capitalVisualsChanged = createdCapitals || settlementSnapshot.capitalCitySnapshots.some(item => {
+          const city = context.map?.settlements?.cities?.[item.cityId];
+          const burg = context.map?.pack?.burgs?.[item.burgId];
+          return Boolean(city?.capital) !== Boolean(item.city.capital) || Boolean(burg?.capital) !== Boolean(item.burg?.capital);
+        });
+        const extraDerived = [
+          ...(capitalVisualsChanged ? ["point-layers"] : []),
+          ...(createdCapitals ? ["object-index"] : []),
+          ...(recoloredStates.length ? ["state-color"] : [])
+        ];
+        this.effects.derived = extraDerived.length ? [...STATE_CELL_SURFACE_EFFECTS.derived, ...extraDerived] : STATE_CELL_SURFACE_EFFECTS.derived;
+        summarizedAt = performance.now();
+      } catch (error) {
+        applyStateChanges(context.map, normalized, "before");
+        restoreSettlementSnapshot(context.map, settlementSnapshot);
+        restorePoliticalDerivativeSnapshot(context.map, politicalSnapshot);
+        throw error;
+      }
       lastApplyPerformance = {
         snapshotMs: roundBrushMs(capturedAt - startedAt),
         transferMs: roundBrushMs(transferredAt - capturedAt),
@@ -859,6 +884,17 @@ function captureSettlementSnapshot(map, changes) {
   return {
     movedCities,
     replacementCapitalSnapshots,
+    capitalCitySnapshots: (map?.settlements?.cities || [])
+      .filter(city => city && affectedStates.has(normalizeStateId(city.state)))
+      .map(city => ({cityId: city.id, burgId: city.burgId, city: snapshotCity(city), burg: snapshotBurg(findBurgForCity(map, city))})),
+    capitalBurgSnapshots: (map?.pack?.burgs || [])
+      .map((burg, burgId) => burg && affectedStates.has(normalizeStateId(burg.state)) ? {burgId, burg: snapshotBurg(burg)} : null)
+      .filter(Boolean),
+    cityLength: map?.settlements?.cities?.length || 0,
+    burgLength: map?.pack?.burgs?.length || 0,
+    packBurgArray: map?.pack?.cells?.burg || null,
+    settlementMetadata: clonePlain(map?.settlements?.metadata),
+    createdCapitalCells: [],
     states: [...affectedStates].map(stateId => snapshotState(map, stateId)).filter(Boolean)
   };
 }
@@ -880,7 +916,6 @@ function capturePoliticalDerivativeSnapshot(map, changes, settlementSnapshot) {
 
 function applySettlementTransfers(map, snapshot) {
   if (!snapshot?.movedCities?.length) return;
-  const statesNeedingCapital = new Set();
 
   for (const item of snapshot.movedCities) {
     const city = map?.settlements?.cities?.[item.cityId];
@@ -892,7 +927,6 @@ function applySettlementTransfers(map, snapshot) {
     if (wasCapital) {
       city.capital = false;
       city.group = cityScaleForMap(map, city, burg);
-      statesNeedingCapital.add(item.previousState);
     }
 
     if (burg) {
@@ -903,10 +937,104 @@ function applySettlementTransfers(map, snapshot) {
       }
     }
   }
+}
 
-  for (const stateId of statesNeedingCapital) {
-    chooseReplacementCapital(map, stateId);
+function reconcileStateCapitals(map, stateIds, snapshot) {
+  let created = 0;
+  for (const stateId of stateIds) {
+    const state = map?.politics?.states?.[stateId];
+    if (!state || state.removed) continue;
+    const anchor = chooseEmptyStateAnchor(map, stateId, state.center);
+    const current = findCityByBurgId(map, state.capital);
+    const validCurrent = isCityInStateLand(map, current, stateId) ? current : null;
+    for (const city of map?.settlements?.cities || []) {
+      if (!city || normalizeStateId(city.state) !== stateId) continue;
+      city.capital = false;
+      const burg = findBurgForCity(map, city);
+      if (burg) burg.capital = 0;
+    }
+    for (const burg of map?.pack?.burgs || []) {
+      if (burg && normalizeStateId(burg.state) === stateId) burg.capital = 0;
+    }
+    if (!anchor) {
+      assignStateCapitalAnchor(map, stateId, {capital: 0, capitalName: "", center: 0, gridCenter: 0});
+      continue;
+    }
+    if (validCurrent) {
+      setStateCapitalCity(map, stateId, validCurrent);
+      continue;
+    }
+    const beforeCityLength = map.settlements.cities.length;
+    ensureReplacementCapitalForState(map, stateId);
+    if (map.settlements.cities.length > beforeCityLength) {
+      const burg = map.pack.burgs[map.politics.states[stateId].capital];
+      snapshot.createdCapitalCells.push({packCell: burg.cell, before: 0});
+      created++;
+    }
+    const replacement = findCityByBurgId(map, map.politics.states[stateId].capital);
+    if (!isCityInStateLand(map, replacement, stateId)) throw new Error(`国家 #${stateId} 有领土但无法补齐首都`);
+    setStateCapitalCity(map, stateId, replacement);
   }
+  if (created) refreshSettlementMetadata(map);
+  return created;
+}
+
+function assertAffectedStateCapitals(map, stateIds) {
+  for (const stateId of stateIds) {
+    const state = map?.politics?.states?.[stateId];
+    if (!state || state.removed) continue;
+    const cityCapitals = (map?.settlements?.cities || []).filter(city => city?.state === stateId && city.capital);
+    const burgCapitals = (map?.pack?.burgs || []).filter(burg => burg?.state === stateId && burg.capital);
+    const hasLand = Boolean(chooseEmptyStateAnchor(map, stateId, state.center));
+    if (!hasLand) {
+      if (state.capital || cityCapitals.length || burgCapitals.length) throw new Error(`国家 #${stateId} 已无领土但仍有首都`);
+      continue;
+    }
+    if (cityCapitals.length !== 1 || burgCapitals.length !== 1 || cityCapitals[0].burgId !== state.capital
+      || (burgCapitals[0].i ?? burgCapitals[0].id) !== state.capital
+      || !isCityInStateLand(map, cityCapitals[0], stateId)
+      || map?.pack?.states?.[stateId]?.capital !== state.capital) {
+      throw new Error(`国家 #${stateId} 首都归属或数量未能补齐`);
+    }
+  }
+}
+
+function isCityInStateLand(map, city, stateId) {
+  const burg = findBurgForCity(map, city);
+  return Boolean(city && burg && normalizeStateId(city.state) === stateId && normalizeStateId(burg.state) === stateId
+    && isPackLandCell(map, burg.cell) && normalizeStateId(map.pack.cells.state?.[burg.cell]) === stateId);
+}
+
+function setStateCapitalCity(map, stateId, city) {
+  const burg = findBurgForCity(map, city);
+  if (!burg) return;
+  const scale = cityScaleForMap(map, city, burg);
+  city.capital = true;
+  city.group = scale;
+  burg.capital = 1;
+  burg.group = scale;
+  assignStateCapitalAnchor(map, stateId, {
+    capital: burg.i ?? city.burgId,
+    capitalName: city.name || burg.name || "",
+    center: burg.cell,
+    gridCenter: map.pack.cells.g?.[burg.cell] ?? city.cell
+  });
+}
+
+function repairStateColorConflicts(map, stateIds) {
+  const recolored = [];
+  for (const stateId of [...stateIds].sort((a, b) => b - a)) {
+    const state = map?.politics?.states?.[stateId];
+    if (!state || state.removed || !state.color) continue;
+    if (!(state.neighbors || []).some(id => map.politics.states[id]?.color?.toLowerCase() === state.color.toLowerCase())) continue;
+    const next = chooseNewStateColor(state, map.politics.states);
+    if (next.toLowerCase() === state.color.toLowerCase()) continue;
+    state.color = next;
+    const packState = map?.pack?.states?.[stateId];
+    if (packState && packState !== state) packState.color = next;
+    recolored.push(stateId);
+  }
+  return recolored;
 }
 
 function repairPoliticalDerivativesForStateBrush(map, changes, settlementSnapshot) {
@@ -956,6 +1084,23 @@ function syncMovedCityProvinces(map, settlementSnapshot) {
 function restoreSettlementSnapshot(map, snapshot) {
   if (!snapshot) return;
   for (const stateSnapshot of snapshot.states || []) restoreState(map, stateSnapshot);
+  for (const {packCell, before} of snapshot.createdCapitalCells || []) {
+    if (map?.pack?.cells?.burg) map.pack.cells.burg[packCell] = before;
+  }
+  if (map?.pack?.cells && snapshot.packBurgArray && map.pack.cells.burg !== snapshot.packBurgArray) map.pack.cells.burg = snapshot.packBurgArray;
+  if (map?.settlements?.cities) map.settlements.cities.length = snapshot.cityLength;
+  if (map?.pack?.burgs) map.pack.burgs.length = snapshot.burgLength;
+  if (map?.settlements?.metadata && snapshot.settlementMetadata) Object.assign(map.settlements.metadata, snapshot.settlementMetadata);
+  for (const item of snapshot.capitalCitySnapshots || []) {
+    const city = map?.settlements?.cities?.[item.cityId];
+    const burg = map?.pack?.burgs?.[item.burgId];
+    if (city) Object.assign(city, item.city);
+    if (burg && item.burg) Object.assign(burg, item.burg);
+  }
+  for (const item of snapshot.capitalBurgSnapshots || []) {
+    const burg = map?.pack?.burgs?.[item.burgId];
+    if (burg) Object.assign(burg, item.burg);
+  }
   for (const item of snapshot.replacementCapitalSnapshots || []) {
     const city = map?.settlements?.cities?.[item.cityId];
     const burg = map?.pack?.burgs?.[item.burgId];
@@ -1116,7 +1261,7 @@ function assignStateCapitalAnchor(map, stateId, anchor) {
 
 function chooseReplacementCapitalCandidate(map, stateId, excludedCityIds = new Set()) {
   return (map?.settlements?.cities || [])
-    .filter(city => city && city.state === stateId && !excludedCityIds.has(city.id))
+    .filter(city => city && isCityInStateLand(map, city, stateId) && !excludedCityIds.has(city.id))
     .sort((a, b) => Number(b.provincial) - Number(a.provincial) || (b.population || 0) - (a.population || 0) || a.id - b.id)[0];
 }
 
@@ -1653,6 +1798,7 @@ function snapshotState(map, stateId) {
     stateId,
     state: {
       capital: state.capital,
+      color: state.color,
       capitalName: state.capitalName,
       center: state.center,
       gridCenter: state.gridCenter,
@@ -1666,6 +1812,7 @@ function snapshotState(map, stateId) {
     },
     packState: packState && packState !== state ? {
       capital: packState.capital,
+      color: packState.color,
       capitalName: packState.capitalName,
       center: packState.center,
       gridCenter: packState.gridCenter,

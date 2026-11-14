@@ -24,6 +24,22 @@ export const STATE_COLOR_PALETTE = [
   "#e5c3a6", "#c7bfdc", "#f7c7dc", "#bde7ef", "#e8eca8", "#d0e0bd",
   "#d7c2a7", "#c7d6ee", "#f0c0a8", "#bee1c8", "#e2c3d7", "#cfd2b5"
 ];
+// 原有地图继续使用基础调色盘；后备颜色只供玩家连续创建国家时使用。
+export const NEW_STATE_COLOR_PALETTE = [...new Set([
+  ...STATE_COLOR_PALETTE,
+  ...Array.from({length: 120}, (_, index) => pastelColor((index * 137.508) % 360, 0.45 + (index % 4) * 0.045, 0.68 + (Math.floor(index / 4) % 3) * 0.045))
+])];
+
+function pastelColor(hueDegrees, saturation, lightness) {
+  const chroma = saturation * Math.min(lightness, 1 - lightness);
+  const hue = hueDegrees / 30;
+  const channel = offset => {
+    const position = (offset + hue) % 12;
+    const value = lightness - chroma * Math.max(-1, Math.min(position - 3, 9 - position, 1));
+    return Math.round(value * 255).toString(16).padStart(2, "0");
+  };
+  return `#${channel(0)}${channel(8)}${channel(4)}`;
+}
 
 export function buildPolitics(grid, features, society, rivers, random, options, pack) {
   if (pack?.burgs?.some?.(burg => burg?.capital)) return buildPackPolitics(grid, features, society, rivers, random, options, pack);
@@ -1280,16 +1296,16 @@ function findGridStateNeighbors(grid, states) {
   }
 }
 
-function chooseStateColor(state, states, coloredCount, usedColors) {
+function chooseStateColor(state, states, coloredCount, usedColors, candidates = STATE_COLOR_PALETTE) {
   const neighborColors = (state.neighbors || []).map(id => states[id]?.color).filter(Boolean);
   const globalColors = Array.from(usedColors);
-  const fallbackIndex = coloredCount % STATE_COLOR_PALETTE.length;
-  let bestColor = STATE_COLOR_PALETTE[fallbackIndex];
+  const fallbackIndex = coloredCount % candidates.length;
+  let bestColor = candidates[fallbackIndex];
   let bestScore = -Infinity;
 
-  for (let index = 0; index < STATE_COLOR_PALETTE.length; index++) {
-    const color = STATE_COLOR_PALETTE[(fallbackIndex + index) % STATE_COLOR_PALETTE.length];
-    const sameAsNeighbor = neighborColors.includes(color);
+  for (let index = 0; index < candidates.length; index++) {
+    const color = candidates[(fallbackIndex + index) % candidates.length];
+    const sameAsNeighbor = neighborColors.some(other => other.toLowerCase() === color);
     const unusedBonus = usedColors.has(color) ? 0 : 0.05;
     const neighborDistance = minColorDistance(color, neighborColors, 2);
     const globalDistance = minColorDistance(color, globalColors, 1);
@@ -1304,7 +1320,13 @@ function chooseStateColor(state, states, coloredCount, usedColors) {
 
 export function chooseNewStateColor(state, states) {
   const existing = states.filter(item => isStateColorTarget(item) && item !== state);
-  return chooseStateColor(state, states, existing.length, new Set(existing.map(item => item.color).filter(Boolean)));
+  const usedColors = new Set(existing.map(item => item.color?.toLowerCase()).filter(Boolean));
+  const unusedBase = STATE_COLOR_PALETTE.filter(color => !usedColors.has(color));
+  const unused = NEW_STATE_COLOR_PALETTE.filter(color => !usedColors.has(color));
+  const neighborColors = new Set((state.neighbors || []).map(id => states[id]?.color?.toLowerCase()).filter(Boolean));
+  const nonNeighbor = NEW_STATE_COLOR_PALETTE.filter(color => !neighborColors.has(color));
+  const candidates = unusedBase.length ? unusedBase : unused.length ? unused : nonNeighbor.length ? nonNeighbor : NEW_STATE_COLOR_PALETTE;
+  return chooseStateColor(state, states, existing.length, usedColors, candidates);
 }
 
 function minColorDistance(color, colors, emptyValue) {
