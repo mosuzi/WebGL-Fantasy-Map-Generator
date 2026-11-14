@@ -138,6 +138,7 @@ import {
   applyCellAttributePatch,
   createCellAttributeStore,
   deleteCellAttributeStore,
+  ensureCellAttributePaletteEntry,
   prepareCellAttributePatch,
   refreshCellAttributePalette,
   restoreCellAttributeStore as restoreGpuCellAttributeStore,
@@ -1596,6 +1597,15 @@ export class PlaceholderMapRenderer {
   refreshEditedColorPalette(mode) {
     if (!this.map || !this.cellAttributeStore) return false;
     return refreshCellAttributePalette(this.gl, this.cellAttributeStore, this.map, mode, this.viewOptions);
+  }
+
+  ensurePoliticalPaletteEntries({stateId, provinceId, gridCell}) {
+    if (!this.map || !this.cellAttributeStore) return false;
+    for (const mode of ["states", "governments", "diplomacy"]) {
+      installRendererCellAttributeStore(this, ensureCellAttributePaletteEntry(this.gl, this.cellAttributeStore, this.map, mode, stateId, gridCell, this.viewOptions));
+    }
+    installRendererCellAttributeStore(this, ensureCellAttributePaletteEntry(this.gl, this.cellAttributeStore, this.map, "provinces", provinceId, gridCell, this.viewOptions));
+    return true;
   }
 
   refreshEditedCellColors(gridCells, {draw = true, binding = null} = {}) {
@@ -6852,6 +6862,9 @@ function installRendererCellAttributeStore(renderer, replacement) {
   const previous = renderer.cellAttributeStore;
   if (previous === replacement) return replacement;
   renderer.cellAttributeStore = replacement;
+  if (renderer.surfaceResourceBinding?.cellAttributeStore === previous && renderer.surfaceResourceOwner) {
+    renderer.surfaceResourceBinding = Object.freeze({...renderer.surfaceResourceBinding, cellAttributeStore: replacement});
+  }
   deleteCellAttributeStore(renderer.gl, previous, {preserve: replacement});
   return replacement;
 }

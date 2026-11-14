@@ -66,7 +66,6 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "edit.notes.deleteBatch",
   "edit.cities.delete",
   "edit.provinces.delete",
-  "edit.states.delete",
   "edit.cultures.delete",
   "edit.religions.delete",
   "edit.rivers.delete",

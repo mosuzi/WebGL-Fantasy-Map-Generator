@@ -1750,7 +1750,7 @@
       "mutates": "map-or-persistent-state",
       "undoable": true,
       "async": false,
-      "requiresConfirm": true,
+      "requiresConfirm": false,
       "capabilityGroup": "edit",
       "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"edit.states.delete\")",
       "handbook": "docs/ai/safe-change-boundaries.md"

@@ -79,6 +79,36 @@ export function refreshCellAttributePalette(gl, store, map, mode, viewOptions = 
   return true;
 }
 
+export function ensureCellAttributePaletteEntry(gl, store, map, mode, id, gridCell, viewOptions = {}) {
+  const current = assertStore(store);
+  if (!CELL_ATTRIBUTE_PALETTE_MODES.includes(mode)) throw new RangeError(`不支持的 cell attribute palette：${mode}`);
+  if (String(map?.metadata?.mapIdentity || map?.metadata?.id || "") !== current.snapshot.mapIdentity) throw new Error("cell attribute palette 地图 identity 已变化");
+  if (!Number.isInteger(id) || id < 0 || !Number.isInteger(gridCell) || gridCell < 0 || gridCell >= current.snapshot.cellCount) throw new RangeError("cell attribute palette 条目无效");
+  const previous = current.snapshot.palettes[mode];
+  const offset = (id + 1) * 4;
+  const bytes = Uint8Array.from(colorForCell(gridCell, map, mode, viewOptions).map(colorByte));
+  if (offset + 4 <= previous.length) {
+    gl.bindTexture(gl.TEXTURE_2D, current.textures.palettes[mode]);
+    try {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, id + 1, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+    } catch (error) {
+      try { gl.texSubImage2D(gl.TEXTURE_2D, 0, id + 1, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, previous.subarray(offset, offset + 4)); } catch {}
+      throw error;
+    }
+    previous.set(bytes, offset);
+    return current;
+  }
+  const next = new Uint8Array(offset + 4);
+  next.set(previous);
+  next.set(bytes, offset);
+  const texture = uploadTexture(gl, next, {width: next.length / 4, height: 1, texelCount: next.length / 4}, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE);
+  return Object.freeze({
+    snapshot: Object.freeze({...current.snapshot, palettes: Object.freeze({...current.snapshot.palettes, [mode]: next})}),
+    layout: current.layout,
+    textures: Object.freeze({...current.textures, palettes: Object.freeze({...current.textures.palettes, [mode]: texture})})
+  });
+}
+
 export function deleteCellAttributeStore(gl, store, {preserve = null} = {}) {
   if (!store) return 0;
   const protectedTextures = preserve instanceof Set ? preserve : new Set(collectCellAttributeTextures(preserve));

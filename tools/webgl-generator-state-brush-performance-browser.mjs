@@ -81,6 +81,7 @@ async function exercise(browserInstance, localPort, cellsTarget) {
       throw new Error("视口中找不到可涂抹的非目标国家 cell");
     });
     const before = await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo);
+    const gestureStartedAt = await page.evaluate(() => performance.now());
     const startedAt = performance.now();
     await page.mouse.move(sample.x, sample.y);
     await page.mouse.down();
@@ -119,6 +120,8 @@ async function exercise(browserInstance, localPort, cellsTarget) {
     assert.ok(observed.preview.every(item => item.durationMs < 100), "画笔预览响应超过 100ms");
     assert.equal(observed.webglError, 0, "WebGL 错误");
     assert.equal(observed.boundaryError, null, "异步国界计算错误");
+    const gestureLongTasks = observed.health.filter(item => item.type === "main-thread-long-task" && item.detail?.startTime >= gestureStartedAt && item.detail?.durationMs > 200);
+    assert.deepEqual(gestureLongTasks, [], "画笔手势期间不应出现超过 200ms 的 LongTask");
     const undoStartedAt = performance.now();
     const undone = await page.evaluate(() => window.__webglGeneratorApp.runtimeActions.history.undo());
     const undoWallMs = round(performance.now() - undoStartedAt);
@@ -136,6 +139,7 @@ async function exercise(browserInstance, localPort, cellsTarget) {
       previews: observed.preview.map(item => ({durationMs: item.durationMs, sampleMs: item.sampleMs, renderMs: item.renderMs, cells: item.cells})),
       commit: observed.commit,
       browser: observed.browser,
+      gestureLongTasks,
       health: observed.health.map(item => ({type: item.type, detail: item.detail})),
       debugVisible: observed.debugVisible,
       lineRefresh: observed.lineRefresh,

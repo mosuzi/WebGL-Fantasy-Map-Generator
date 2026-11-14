@@ -17,7 +17,7 @@ const REGION_NAMES = ["北境", "南陆", "西岭", "东湾", "中原", "湖泽"
 const STATE_CARDINAL_PREFIXES = ["东", "西", "南", "北"];
 const STATE_NEUTRAL_VARIANT_PREFIXES = ["新", "古", "上", "中"];
 const BIOME_COST = [10, 200, 150, 60, 50, 70, 70, 80, 90, 200, 1000, 5000, 150];
-const STATE_COLOR_PALETTE = [
+export const STATE_COLOR_PALETTE = [
   "#b7c8f3", "#f6b6c8", "#abe7c1", "#f8dda1", "#cbbdf1", "#aee3e8",
   "#f3b7a8", "#d5eda2", "#e9b9db", "#b6d7a8", "#c5d8f2", "#ffd0a6",
   "#b6e3d4", "#e8d1a6", "#d4c2ea", "#f1c0b9", "#c8e6a0", "#b9d2dc",
@@ -1300,6 +1300,11 @@ function chooseStateColor(state, states, coloredCount, usedColors) {
   }
 
   return bestColor;
+}
+
+export function chooseNewStateColor(state, states) {
+  const existing = states.filter(item => isStateColorTarget(item) && item !== state);
+  return chooseStateColor(state, states, existing.length, new Set(existing.map(item => item.color).filter(Boolean)));
 }
 
 function minColorDistance(color, colors, emptyValue) {

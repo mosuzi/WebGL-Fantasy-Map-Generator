@@ -5,7 +5,7 @@ import {applyNestedEditCommand, revertNestedEditCommand} from "./edit-history.js
 import {restoreMapSnapshot} from "./climate-downstream-rebuild.js";
 
 const PROTECTED_NEUTRAL_KINDS = new Set([OBJECT_KIND.STATE, OBJECT_KIND.PROVINCE, OBJECT_KIND.CULTURE, OBJECT_KIND.RELIGION]);
-const ALWAYS_CONFIRM_KINDS = new Set([OBJECT_KIND.STATE, OBJECT_KIND.PROVINCE, OBJECT_KIND.CITY, OBJECT_KIND.CULTURE, OBJECT_KIND.RELIGION, OBJECT_KIND.RIVER, OBJECT_KIND.LAKE]);
+const ALWAYS_CONFIRM_KINDS = new Set([OBJECT_KIND.PROVINCE, OBJECT_KIND.CITY, OBJECT_KIND.CULTURE, OBJECT_KIND.RELIGION, OBJECT_KIND.RIVER, OBJECT_KIND.LAKE]);
 
 export function inspectDeleteImpact(map, kind, ids) {
   const requested = Array.isArray(ids) ? ids : [ids];
@@ -38,7 +38,8 @@ export function inspectDeleteImpact(map, kind, ids) {
   const deleteIds = details.deleteIds || normalized;
   const cascadeIds = deleteIds.filter(id => !normalized.includes(id));
   const dependencyCount = countConfirmationDependencies(kind, details.dependencies);
-  const requiresConfirm = Boolean(normalized.length && (ALWAYS_CONFIRM_KINDS.has(kind) || deleteIds.length > 1 || cascadeIds.length || dependencyCount));
+  const highImpact = Boolean(normalized.length && (ALWAYS_CONFIRM_KINDS.has(kind) || kind === OBJECT_KIND.STATE || deleteIds.length > 1 || cascadeIds.length || dependencyCount));
+  const requiresConfirm = kind !== OBJECT_KIND.STATE && highImpact;
   const preview = {
     kind,
     kindLabel: OBJECT_KIND_LABEL[kind] || kind,
@@ -51,7 +52,7 @@ export function inspectDeleteImpact(map, kind, ids) {
     cascadeCount: cascadeIds.length,
     dependencies: details.dependencies || {},
     requiresConfirm,
-    impactLevel: requiresConfirm ? "high" : "low",
+    impactLevel: highImpact ? "high" : "low",
     valid: normalized.length > 0
   };
   preview.summary = formatDeleteImpactSummary(preview);
@@ -136,7 +137,7 @@ export function createDeleteBatchCommand({kind, ids, createCommand, label = `批
       affected: entries.map(entry => ({kind, id: entry.id}))
     },
     apply(context) {
-      const beforeMap = structuredClone(context.map);
+      const beforeMap = kind === OBJECT_KIND.STATE && entries.length === 1 ? null : structuredClone(context.map);
       const optionsReference = context.map?.options;
       appliedEntries = [];
       const skipped = [...initialSkipped];
@@ -154,8 +155,12 @@ export function createDeleteBatchCommand({kind, ids, createCommand, label = `批
           subresults.push({id: entry.id, result: clonePlain(entry.command.getResult?.() ?? null)});
         }
       } catch (error) {
-        restoreMapSnapshot(context.map, beforeMap);
-        preserveOptionsReference(context.map, optionsReference);
+        if (beforeMap) {
+          restoreMapSnapshot(context.map, beforeMap);
+          preserveOptionsReference(context.map, optionsReference);
+        } else {
+          for (const entry of [...appliedEntries].reverse()) revertNestedEditCommand(entry.command, context);
+        }
         appliedEntries = [];
         result = {
           ...emptyBatchResult(requested, skipped),
@@ -166,6 +171,9 @@ export function createDeleteBatchCommand({kind, ids, createCommand, label = `批
       if (!appliedEntries.length) throw new Error("批量删除没有可执行的对象");
       const affected = collectAppliedAffected(kind, appliedEntries);
       command.effects.affected = affected;
+      if (baseEffects.cellAttributePatch === true) {
+        command.effects.changedGridCells = [...new Set(appliedEntries.flatMap(entry => entry.command.effects?.changedGridCells || []))];
+      }
       result = {
         requested: requested.length,
         succeeded: appliedEntries.length,

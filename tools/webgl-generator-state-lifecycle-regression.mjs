@@ -4,6 +4,7 @@ import {readFileSync} from "node:fs";
 import {resolve} from "node:path";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {STATE_COLOR_PALETTE, chooseNewStateColor} from "../app/webgl-generator/src/generator/politics.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, createMapFeatureGeoJson, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {resolveObject} from "../app/webgl-generator/src/runtime/object-resolver.js";
@@ -11,24 +12,48 @@ import {captureLockedRegenerationObjects} from "../app/webgl-generator/src/runti
 import {createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, inspectStateCreation} from "../app/webgl-generator/src/runtime/state-edit-commands.js";
 
 const map = generatePlaceholderMap({seed: "state-lifecycle-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
+const syntheticNeighbors = STATE_COLOR_PALETTE.map((color, index) => ({id: index + 1, i: index + 1, color}));
+const syntheticState = {id: syntheticNeighbors.length + 1, i: syntheticNeighbors.length + 1, neighbors: syntheticNeighbors.map(item => item.id)};
+const availableColor = STATE_COLOR_PALETTE.at(-1);
+syntheticNeighbors.at(-1).color = "#123456";
+assert.equal(chooseNewStateColor(syntheticState, [null, ...syntheticNeighbors, syntheticState]), availableColor,
+  "仍有可用调色队列颜色时不得与任何邻国同色");
+syntheticNeighbors.at(-1).color = availableColor;
+assert.ok(STATE_COLOR_PALETTE.includes(chooseNewStateColor(syntheticState, [null, ...syntheticNeighbors, syntheticState])),
+  "邻国用尽全部队列颜色时允许回退复用其中一种");
 const history = new EditHistory();
-const protectedSample = findProtectedProvinceSample(map);
-const beforeRejected = snapshotStateCollections(map);
-
-for (const gridCell of [protectedSample.capitalGridCell, protectedSample.otherGridCell]) {
-  const inspection = inspectStateCreation(map, gridCell);
-  assert.equal(inspection.valid, false);
-  assert.equal(inspection.code, "capital-province-protected");
-  assert.equal(inspection.provinceId, protectedSample.provinceId);
-  assert.equal(inspection.protectedStateId, protectedSample.stateId);
-  const command = createAddStateAtCellCommand(gridCell);
-  assert.equal(command.isNoop({map}), true);
-  assert.match(command.getInspection().summary, /首都所在的省份/u);
-  assert.throws(() => command.apply({map}), /首都所在的省份/u, "直接 apply 也必须重新拒绝首都省份");
-}
-
-assert.deepEqual(snapshotStateCollections(map), beforeRejected, "拒绝路径不能修改国家、省份、城市或 cell 归属");
-assert.equal(history.getStats().undo, 0, "拒绝路径不能写入编辑历史");
+const capitalSource = generatePlaceholderMap({seed: "state-lifecycle-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
+const capitalMap = parseMapDocument(stringifyMapDocument(createMapDocument(capitalSource, capitalSource.options))).map;
+assert.notEqual(capitalMap.pack.states, capitalMap.politics.states, "导入旧图的 pack 国家镜像应单独参与回归");
+const capitalSample = findProtectedProvinceSample(capitalMap);
+const capitalBefore = snapshotStateCollections(capitalMap);
+const oldCapital = capitalMap.settlements.cities.find(city => city?.burgId === capitalMap.politics.states[capitalSample.stateId].capital);
+const oldCityFields = {id: oldCapital.id, burgId: oldCapital.burgId, name: oldCapital.name, population: oldCapital.population, culture: oldCapital.culture};
+assert.equal(inspectStateCreation(capitalMap, capitalSample.capitalGridCell).valid, true, "旧首都处应允许建国");
+assert.equal(inspectStateCreation(capitalMap, capitalSample.otherGridCell).valid, true, "旧首都所在省的其他陆地应允许建国");
+const capitalHistory = new EditHistory();
+const capitalCommand = createAddStateAtCellCommand(capitalSample.capitalGridCell);
+capitalHistory.execute(capitalCommand, {map: capitalMap});
+const capitalCreated = capitalCommand.getResult();
+assert.equal(capitalCreated.burgId, oldCityFields.burgId, "点击旧首都应直接将原城市单列为新国首都");
+assert.equal(capitalMap.politics.states[capitalCreated.stateId].capital, oldCityFields.burgId);
+assert.deepEqual(Object.fromEntries(Object.keys(oldCityFields).map(key => [key, capitalMap.settlements.cities[oldCityFields.id][key]])), oldCityFields, "城市自有资料应保留");
+const replacementBurgId = capitalMap.politics.states[capitalSample.stateId].capital;
+assert.ok(replacementBurgId && replacementBurgId !== oldCityFields.burgId, "旧国应自动重选首都");
+assert.equal(capitalMap.pack.burgs[replacementBurgId].state, capitalSample.stateId);
+assert.equal(capitalMap.pack.states[capitalSample.stateId].capital, replacementBurgId, "旧图 pack 镜像应同步替补首都");
+const newState = capitalMap.politics.states[capitalCreated.stateId];
+assert.equal(capitalMap.pack.states[capitalCreated.stateId].color, newState.color, "旧图 pack 镜像应同步新国颜色");
+assert.ok(newState.governmentKey && newState.formName && newState.coa && newState.expansionism, "新国资料应独立生成");
+assert.ok(newState.neighbors.every(id => capitalMap.politics.states[id]?.color?.toLowerCase() !== newState.color.toLowerCase()), "新国颜色应避开全部邻国");
+capitalHistory.undo({map: capitalMap});
+assert.deepEqual(snapshotStateCollections(capitalMap), capitalBefore, "首都建国撤销应精确恢复");
+capitalHistory.redo({map: capitalMap});
+assert.equal(capitalMap.politics.states[capitalCreated.stateId].capital, oldCityFields.burgId, "首都建国重做应恢复");
+const capitalRoundTrip = parseMapDocument(stringifyMapDocument(createMapDocument(capitalMap, capitalMap.options))).map;
+assert.equal(capitalRoundTrip.politics.states[capitalCreated.stateId].capital, oldCityFields.burgId, "保存回读应保留新国首都");
+assert.equal(capitalRoundTrip.politics.states[capitalSample.stateId].capital, replacementBurgId, "保存回读应保留旧国替补首都");
+assert.equal(capitalRoundTrip.settlements.cities[oldCityFields.id].population, oldCityFields.population, "保存回读应保留原城镇人口");
 
 const allowedGridCell = findAllowedGridCell(map);
 const allowedInspection = inspectStateCreation(map, allowedGridCell);
@@ -58,6 +83,11 @@ const inconsistentCommand = createAddStateAtCellCommand(inconsistentGridCell);
 inconsistentHistory.execute(inconsistentCommand, {map: inconsistentLegacyMap});
 const inconsistentCreated = inconsistentCommand.getResult();
 assert.ok(inconsistentLegacyMap.politics.states[inconsistentCreated.stateId], "高度与 feature 不一致的旧图必须仍可创建国家");
+assert.equal(inconsistentLegacyMap.grid.cells.state[inconsistentGridCell], inconsistentCreated.stateId, "旧图 grid 归属须更新");
+const legacyPackCells = Array.from(inconsistentLegacyMap.pack.cells.i).filter(cell => inconsistentLegacyMap.pack.cells.g[cell] === inconsistentGridCell
+  && inconsistentLegacyMap.features.features[inconsistentLegacyMap.pack.cells.f[cell]]?.land);
+assert.ok(legacyPackCells.length > 0 && legacyPackCells.every(cell => inconsistentLegacyMap.pack.cells.state[cell] === inconsistentCreated.stateId
+  && inconsistentLegacyMap.pack.cells.province[cell] === inconsistentCreated.provinceId), "旧图 pack 国家与省份归属须同步");
 inconsistentHistory.undo({map: inconsistentLegacyMap});
 assert.equal(inconsistentLegacyMap.politics.states[inconsistentCreated.stateId], undefined, "旧图兼容创建仍必须完整支持撤销");
 
@@ -168,7 +198,7 @@ assert.match(statePanelVueSource, /!stateItem\.removed/, "国家 Vue 列表必�
 
 console.log(JSON.stringify({
   ok: true,
-  protected: protectedSample,
+  capital: capitalSample,
   allowed: {gridCell: allowedGridCell, provinceId: allowedInspection.provinceId},
   created,
   inconsistentLegacy: {

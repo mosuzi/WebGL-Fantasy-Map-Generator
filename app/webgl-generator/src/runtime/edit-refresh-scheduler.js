@@ -49,6 +49,7 @@ export const EDIT_REFRESH_PRESETS = Object.freeze({
 });
 
 export function createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel, applyVisualTheme}) {
+  let deferredLabelToken = 0;
   return {
     run(commandOrEffects = null, {binding = null} = {}) {
       // 锁命令的撤销 / 重做也要发布新快照，不能只在点击锁按钮时刷新。
@@ -71,6 +72,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
 
       const editedPalette = editedColorPaletteMode(effects.derived);
       if (editedPalette) state.renderer.refreshEditedColorPalette?.(editedPalette);
+      if (sourceEffects?.politicalPaletteEntries) state.renderer.ensurePoliticalPaletteEntries?.(sourceEffects.politicalPaletteEntries);
 
       if (!queuedPoliticalPatch && !terrainCaches && effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
         measureStateBrush("politicalVisualCaches", () => state.renderer.refreshPoliticalVisualCaches());
@@ -128,11 +130,18 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
-        measureStateBrush("refreshLabels", () => state.renderer.refreshLabels(retainedBinding, {
+        const labelToken = ++deferredLabelToken;
+        const map = state.map;
+        const refreshLabels = () => measureStateBrush("refreshLabels", () => state.renderer.refreshLabels(retainedBinding, {
           ...labelRefreshOptions(effects),
           politicalOnly: politicalPatch,
           stateIds: politicalPatch ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
         }));
+        if (sourceEffects?.deferLabels === true && documentRef.defaultView?.requestAnimationFrame) {
+          documentRef.defaultView.requestAnimationFrame(() => {
+            if (labelToken === deferredLabelToken && state.map === map) refreshLabels();
+          });
+        } else refreshLabels();
       }
 
       if (effects.selection === "refresh") {
@@ -204,6 +213,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
       const editedPalette = editedColorPaletteMode(effects.derived);
       if (editedPalette) await runStep(() => state.renderer.refreshEditedColorPalette?.(editedPalette));
+      if (sourceEffects?.politicalPaletteEntries) await runStep(() => state.renderer.ensurePoliticalPaletteEntries?.(sourceEffects.politicalPaletteEntries));
       if (!queuedPoliticalPatch && !terrainCaches && effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
         await runStep(() => state.renderer.refreshPoliticalVisualCaches());
       }

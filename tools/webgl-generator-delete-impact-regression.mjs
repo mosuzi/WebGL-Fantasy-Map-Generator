@@ -36,7 +36,7 @@ assert.deepEqual(statePreview.dependencies, {
   regiments: 1,
   notes: 1
 });
-assert(statePreview.requiresConfirm && statePreview.summary.includes("省份 1") && statePreview.summary.includes("军团 1"));
+assert(!statePreview.requiresConfirm && statePreview.summary.includes("省份 1") && statePreview.summary.includes("军团 1"));
 
 const routeMap = createRouteFixture();
 const routeBefore = snapshotRouteMap(routeMap);

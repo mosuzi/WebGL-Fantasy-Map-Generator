@@ -136,12 +136,13 @@ export function resolveCityVisual(city = {}, culture = null, fallbackVisual = nu
   };
 }
 
-export function refreshCityScaleVisuals(map) {
+export function refreshCityScaleVisuals(map, {cityIds = null} = {}) {
   const cities = map?.settlements?.cities || [];
   const burgs = map?.pack?.burgs || [];
   const context = createCityScaleContext(cities, burgs);
+  const targets = cityIds ? new Set(cityIds) : null;
   for (const city of cities) {
-    if (!city || city.removed) continue;
+    if (!city || city.removed || (targets && !targets.has(city.id))) continue;
     const burg = findCityBurg(map, city);
     const scale = deriveCityScale(city, context, burg);
     city.group = scale;

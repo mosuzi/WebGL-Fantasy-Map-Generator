@@ -1334,7 +1334,7 @@ function cellScanSchema() {
 function createAtCellMethodOverrides() {
   const entries = {};
   const codesByDomain = {
-    states: ["ok", "grid-cell-invalid", "grid-cell-water", "pack-cell-missing", "capital-province-protected"],
+    states: ["ok", "grid-cell-invalid", "grid-cell-water", "pack-cell-missing"],
     provinces: ["ok", "grid-cell-invalid", "grid-cell-water", "pack-cell-missing", "state-missing"],
     cities: ["ok", "grid-cell-invalid", "grid-cell-water", "pack-cell-missing", "burg-cell-occupied"]
   };
@@ -1375,7 +1375,7 @@ function existingRuleMethodOverrides() {
   ];
   const deleteCodes = ["delete-invalid-id", "delete-duplicate-id", "delete-protected-neutral", "delete-not-found", "delete-not-allowed"];
   const deleteDomains = [
-    ["states", "stateId", "国家 ID", true],
+    ["states", "stateId", "国家 ID", false],
     ["provinces", "provinceId", "省份 ID", true],
     ["cities", "cityId", "城市 ID", true],
     ["routes", "routeId", "路线 ID", false],

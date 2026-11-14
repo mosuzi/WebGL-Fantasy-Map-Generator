@@ -90,7 +90,7 @@ try {
   await assert.rejects(() => bridgeRequest("POST", "/v1/request", token, {...writeBody, arguments: [1, {name: "冲突值"}]}), /bridge_request_id_conflict/);
 
   const rejectedPromise = bridgeRequest("POST", "/v1/request", token, {
-    method: "edit.states.delete",
+    method: "edit.provinces.delete",
     arguments: [2],
     requestId: "reject-danger",
     expectedRevision: 5
@@ -103,7 +103,7 @@ try {
   assert.equal(state.highRiskCalls, 0);
 
   const approvedPromise = bridgeRequest("POST", "/v1/request", token, {
-    method: "edit.states.delete",
+    method: "edit.provinces.delete",
     arguments: [2],
     requestId: "approve-danger",
     expectedRevision: 5
@@ -155,7 +155,7 @@ function createFakeApi(state) {
     "data.exportCompressedAll": {mutates: "download-or-export-result", requiresConfirm: false},
     "data.importMap": {mutates: "map", requiresConfirm: true},
     "edit.notes.set": {mutates: "notes", requiresConfirm: false},
-    "edit.states.delete": {mutates: "political-entities", requiresConfirm: true}
+    "edit.provinces.delete": {mutates: "political-entities", requiresConfirm: true}
   };
   return {
     info: {
@@ -183,7 +183,7 @@ function createFakeApi(state) {
           return success({name: state.note});
         }
       },
-      states: {
+      provinces: {
         delete: id => {
           state.highRiskCalls += 1;
           state.revision += 1;

@@ -88,7 +88,6 @@ assert.deepEqual(groupQualifiedMethodNames(CONFIRM_REQUIRED_METHODS).edit, [
   "notes.deleteBatch",
   "cities.delete",
   "provinces.delete",
-  "states.delete",
   "cultures.delete",
   "religions.delete",
   "rivers.delete",

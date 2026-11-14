@@ -4,7 +4,7 @@ const ACTION_ROWS = Object.freeze([
   row("height.applyCells", "高度笔刷", "grid cell set + changes + range", "cells.inspectAction:height.applyCells", "edit.height.applyChanges", "height:brush"),
   row("states.assignCells", "国家归属笔刷", "grid cell set + changes", "cells.inspectAction:states.assignCells", "edit.states.applyChanges", "state:brush"),
   row("states.createAtCell", "新增国家", "grid CellRef", "edit.states.inspectCreateAtCell", "edit.states.createAtCell", "state:add", {legacy: "edit.states.add"}),
-  row("states.delete", "删除国家", "state ref or picked CellRef", "cells.inspectAction:states.delete", "edit.states.delete", "state:delete", {requiresConfirm: true}),
+  row("states.delete", "删除国家", "state ref or picked CellRef", "cells.inspectAction:states.delete", "edit.states.delete", "state:delete"),
   row("provinces.assignCells", "省份归属笔刷", "grid cell set + changes", "cells.inspectAction:provinces.assignCells", "edit.provinces.applyChanges", "province:brush"),
   row("provinces.createAtCell", "新增省份", "grid CellRef", "edit.provinces.inspectCreateAtCell", "edit.provinces.createAtCell", "province:add", {legacy: "edit.provinces.add"}),
   row("provinces.delete", "删除省份", "province ref or picked CellRef", "cells.inspectAction:provinces.delete", "edit.provinces.delete", "province:delete", {requiresConfirm: true}),

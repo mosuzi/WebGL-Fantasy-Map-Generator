@@ -19,7 +19,7 @@ const FILES = Object.freeze({
 });
 
 const DESTRUCTIVE_UI_ACTIONS = Object.freeze([
-  action("delete-state-canvas", "国家画布删除", "state", "delete-impact", "native-confirm", "one-batch-command", "undo-after-success", FILES.runtime, "label: \"画布删除国家\""),
+  action("delete-state-canvas", "国家画布删除", "state", "delete-impact", "no-user-confirm", "one-batch-command", "undo-after-success", FILES.runtime, "label: \"画布删除国家\""),
   action("delete-province-canvas", "省份画布删除", "province", "delete-impact", "native-confirm", "one-batch-command", "undo-after-success", FILES.runtime, "label: \"画布删除省份\""),
   action("delete-city-canvas", "城市画布删除", "city", "delete-impact", "native-confirm", "one-batch-command", "undo-after-success", FILES.runtime, "label: \"画布删除城市\""),
   action("delete-culture", "删除文化", "culture", "delete-impact", "native-confirm", "one-batch-command", "undo-after-success", FILES.runtime, "kind: OBJECT_KIND.CULTURE"),
@@ -35,7 +35,6 @@ const DESTRUCTIVE_UI_ACTIONS = Object.freeze([
   action("delete-orphan-note", "删除孤儿备注", "note", "command-validation", "no-user-confirm", "one-command", "undo-after-success", FILES.runtime, "deleteNoteViaApi"),
   action("delete-note-batch", "删除选中备注", "note", "command-validation", "native-confirm", "one-command", "undo-after-success", "app/webgl-generator/src/ui/vue/components/NotesPanel.vue", "确定批量删除"),
   action("delete-measurement", "删除测量", "measurement", "command-validation", "no-user-confirm", "one-command", "undo-after-success", FILES.runtime, "deleteMeasurementViaApi"),
-  action("delete-zone", "删除地区", "zone", "command-validation", "no-user-confirm", "one-command", "undo-after-success", FILES.runtime, "deleteZoneViaApi"),
   action("delete-visual-theme", "删除用户主题", "visual-theme", "ui-validation", "no-user-confirm", "one-command", "undo-after-success", FILES.runtime, "deleteRuntimeVisualTheme"),
   action("reset-label-styles", "重置全部标签样式", "label-style", "command-validation", "native-confirm", "one-command", "undo-after-success", FILES.controlPanel, "确定重置全部标签样式"),
   action("delete-namebase", "删除用户名称库", "namebase", "shared-namebase-action", "native-confirm", "one-command", "undo-after-success", FILES.runtime, "deleteNamebaseViaAction"),
@@ -48,6 +47,8 @@ const DESTRUCTIVE_UI_ACTIONS = Object.freeze([
 ]);
 
 const LOW_IMPACT_API_DANGER_POLICY_METHODS = Object.freeze([
+  "edit.states.delete",
+  "edit.labels.resetStyles",
   "edit.labels.delete",
   "edit.markers.delete",
   "edit.measurements.delete",

@@ -163,7 +163,7 @@
 | `edit.states.inspectCreateAtCell` | stable | map-or-persistent-state | 否 | `docs/ai/safe-change-boundaries.md` |
 | `edit.states.createAtCell` | stable | map-or-persistent-state | 否 | `docs/ai/safe-change-boundaries.md` |
 | `edit.states.inspectDelete` | stable | map-or-persistent-state | 否 | `docs/ai/safe-change-boundaries.md` |
-| `edit.states.delete` | stable | map-or-persistent-state | 是 | `docs/ai/safe-change-boundaries.md` |
+| `edit.states.delete` | stable | map-or-persistent-state | 否 | `docs/ai/safe-change-boundaries.md` |
 | `edit.states.inspectMerge` | stable | map-or-persistent-state | 否 | `docs/ai/safe-change-boundaries.md` |
 | `edit.states.merge` | stable | map-or-persistent-state | 是 | `docs/ai/safe-change-boundaries.md` |
 | `edit.states.inspectSplit` | stable | map-or-persistent-state | 否 | `docs/ai/safe-change-boundaries.md` |

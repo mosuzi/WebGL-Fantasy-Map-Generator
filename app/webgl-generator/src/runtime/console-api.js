@@ -719,7 +719,7 @@ export function buildMethodMetadata() {
       "states.inspectCreateAtCell": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "states.createAtCell": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.inspectDelete": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
-      "states.delete": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: true},
+      "states.delete": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.inspectMerge": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "states.merge": {stable: "draft", mutates: "political-topology", undoable: true, async: false, requiresConfirm: true},
       "states.inspectSplit": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},

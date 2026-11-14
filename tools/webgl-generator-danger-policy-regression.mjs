@@ -15,7 +15,6 @@ const [appSource, consoleApiSource, heightPanelSource, heightComponentSource, co
 ]);
 
 const highImpactMethods = [
-  "edit.states.delete",
   "edit.provinces.delete",
   "edit.cities.delete",
   "edit.cultures.delete",
@@ -31,6 +30,7 @@ for (const method of highImpactMethods) {
   assert(CONFIRM_REQUIRED_METHODS.includes(method), `${method} 缺少显式确认元数据`);
 }
 for (const method of [
+  "edit.states.delete",
   "edit.routes.delete",
   "edit.markers.delete",
   "edit.labels.delete",
@@ -52,7 +52,7 @@ const preview = inspectDeleteImpact({
 const failure = apiCall(() => {
   throw createDeleteConfirmationRequiredError(preview);
 });
-assert.equal(preview.impactLevel, "high", "国家删除影响等级必须可判定为 high");
+assert.equal(preview.requiresConfirm, false, "国家删除可直接执行并由撤销恢复");
 assert.equal(failure.ok, false);
 assert.equal(failure.error.code, "confirmation_required");
 assert.deepEqual(failure.error.preview, preview);
@@ -85,7 +85,7 @@ assert.match(heightComponentSource, /恢复上次删除/, "高度面板缺少恢
 assert.match(controlPanelSource, /CUSTOM_UNIT_RECYCLE_STORAGE_KEY[\s\S]*?window\.confirm[\s\S]*?restoreLastDeletedCustomUnit/, "自定义单位缺少确认与跨刷新回收恢复");
 
 const publicMethods = Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0);
-assert.equal(publicMethods, 309, "公开 API 分母漂移");
+assert.equal(publicMethods, 329, "公开 API 分母漂移");
 assert(API_METHODS.edit.includes("labels.resetStyles"), "公开 labels.resetStyles 没有进入危险动作清单");
 const publicDangerMethods = Object.entries(API_METHODS).flatMap(([namespace, methods]) => methods
   .map(method => `${namespace}.${method}`)

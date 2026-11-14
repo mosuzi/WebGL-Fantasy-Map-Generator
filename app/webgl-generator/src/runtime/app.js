@@ -1393,6 +1393,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         ids: [stateId],
         createCommand: id => createDeleteStateCommand(id),
         label: "删除国家",
+        confirmation: "none",
         executeOptions: {
           refresh: refreshAfterStateEdit,
           preparePanelRefresh: targetState => {
@@ -8992,7 +8993,7 @@ function executeDeleteWithPreflight(state, documentRef, {
   if (options.inspectOnly === true) {
     return {executed: false, cancelled: false, inspectOnly: true, preview, result: null};
   }
-  if (preview.requiresConfirm && options.confirm !== true) {
+  if (preview.requiresConfirm && options.confirm !== true && confirmation !== "none") {
     if (confirmation === "explicit") throw createDeleteConfirmationRequiredError(preview);
     const confirmed = requestDeleteConfirmation(preview, message => documentRef.defaultView?.confirm?.(message));
     if (!confirmed) {
@@ -11076,7 +11077,7 @@ function deleteStateViaApi(state, documentRef, stateId, options = {}) {
     createCommand: targetId => createDeleteStateCommand(targetId),
     label: "API 删除国家",
     options: stripRuleInspectionMetadata(options),
-    confirmation: "explicit",
+    confirmation: "none",
     executeOptions: {
       noopStatus: "国家不存在、为中立国家或已被删除。",
       refresh: refreshAfterStateEdit,
@@ -18276,6 +18277,7 @@ function bindStateEditing(canvas, state, documentRef) {
         ids: [stateId],
         createCommand: id => createDeleteStateCommand(id),
         label: "画布删除国家",
+        confirmation: "none",
         executeOptions: {
           refresh: refreshAfterStateEdit,
           preparePanelRefresh: targetState => {
