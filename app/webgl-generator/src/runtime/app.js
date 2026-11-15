@@ -1429,7 +1429,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const context = {map: state.map};
       const beforeColor = state.map?.politics?.states?.[stateId]?.color || null;
       const command = createSetStateColorCommand(stateId, color, {beforeColor});
-      executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
+      executeStateColorWithTrace(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
     onGovernmentChange: (stateId, governmentKey, formName) => {
@@ -9150,7 +9150,7 @@ function executeEditCommand(state, documentRef, command, options = {}) {
     throw error;
   }
   try {
-    if (command.isNoop?.(context)) {
+    if (measureHeightBrushCommitStage(options.performanceTrace, "noopCheck", () => command.isNoop?.(context))) {
       const noopStatus = options.noopStatus || renameCommandNoopStatus(command);
       if (noopStatus) setFileOperationStatus(documentRef, messageFromOption(noopStatus, command));
       return {executed: false, command, result: null, error: null};
@@ -11042,6 +11042,7 @@ function deleteProvinceViaApi(state, documentRef, provinceId, options = {}) {
 function addStateViaApi(state, documentRef, gridCell) {
   const targetGridCell = normalizeApiInteger(gridCell, "grid cell");
   const command = createAddStateAtCellCommand(targetGridCell);
+  const trace = createHeightBrushCommitTrace({kind: "state-add", gridCell: targetGridCell});
   const result = executeEditCommand(state, documentRef, command, {
     noopStatus: current => current.getInspection?.()?.summary || "目标 grid cell 无效或不能创建国家。",
     status: command => {
@@ -11060,11 +11061,23 @@ function addStateViaApi(state, documentRef, gridCell) {
       targetState.panels.state?.setTargetStateId(created.stateId);
       targetState.selectionStore.setSelection({object});
     },
-    throwOnError: false
+    throwOnError: false,
+    performanceTrace: trace
   });
-  state.panels.state?.updateAddMode?.(false);
-  updateRuntimePanel(documentRef, state);
-  updateEditingInteractionLock(state, documentRef);
+  measureHeightBrushCommitStage(trace, "completeMode", () => {
+    state.panels.state?.updateAddMode?.(false);
+    updateRuntimePanel(documentRef, state);
+    updateEditingInteractionLock(state, documentRef);
+  });
+  if (result.executed) {
+    const sample = finishHeightBrushCommitTrace(trace);
+    state.healthMonitor?.recordCanvasSample?.("state-add", {
+      durationMs: sample.totalMs,
+      cells: result.result?.cells || 0,
+      stages: sample.stages,
+      apply: command.getLastApplyPerformance?.() || null
+    });
+  }
   return editApiResult(state, result);
 }
 
@@ -11396,7 +11409,7 @@ function setStateColorViaApi(state, documentRef, stateId, color) {
   const nextColor = normalizeApiHexColor(color, "国家颜色");
   const beforeColor = state.map?.politics?.states?.[id]?.color || null;
   const command = createSetStateColorCommand(id, nextColor, {beforeColor});
-  const result = executeEditCommand(state, documentRef, command, {
+  const result = executeStateColorWithTrace(state, documentRef, command, {
     context: {map: state.map},
     refresh: refreshAfterStateEdit,
     noopStatus: "国家不存在或颜色未变化。",
@@ -11406,6 +11419,23 @@ function setStateColorViaApi(state, documentRef, stateId, color) {
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
+}
+
+function executeStateColorWithTrace(state, documentRef, command, options) {
+  const trace = createHeightBrushCommitTrace({kind: "state-color"});
+  const previousTrace = state.stateEdit.activeCommitTrace;
+  state.stateEdit.activeCommitTrace = trace;
+  let result;
+  try {
+    result = executeEditCommand(state, documentRef, command, {...options, performanceTrace: trace});
+  } finally {
+    state.stateEdit.activeCommitTrace = previousTrace;
+  }
+  if (result.executed) {
+    const sample = finishHeightBrushCommitTrace(trace);
+    state.healthMonitor?.recordCanvasSample?.("state-color", {durationMs: sample.totalMs, stages: sample.stages});
+  }
+  return result;
 }
 
 function setStateGovernmentViaApi(state, documentRef, stateId, governmentKey, options = {}) {
@@ -18299,6 +18329,7 @@ function bindStateEditing(canvas, state, documentRef) {
       const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
       if (!Number.isInteger(pick?.gridCell) || pick.gridCell < 0) return;
       const command = createAddStateAtCellCommand(pick.gridCell);
+      const trace = createHeightBrushCommitTrace({kind: "state-add", gridCell: pick.gridCell});
       const execution = executeEditCommand(state, canvas.ownerDocument || document, command, {
         context: {map: state.map},
         noopStatus: current => current.getInspection?.()?.summary || "目标 grid cell 无效或不能创建国家。",
@@ -18312,10 +18343,18 @@ function bindStateEditing(canvas, state, documentRef) {
           targetState.panels.state?.setTargetStateId(result.stateId);
           targetState.selectionStore.setSelection({object: stateObject});
         },
-        throwOnError: false
+        throwOnError: false,
+        performanceTrace: trace
       });
       if (!execution.executed) return;
-      completeCanvasToolMode(state, canvas.ownerDocument || document, CANVAS_TOOL_MODE.STATE_ADD, {command: execution.command});
+      measureHeightBrushCommitStage(trace, "completeMode", () => completeCanvasToolMode(state, canvas.ownerDocument || document, CANVAS_TOOL_MODE.STATE_ADD, {command: execution.command}));
+      const sample = finishHeightBrushCommitTrace(trace);
+      state.healthMonitor?.recordCanvasSample?.("state-add", {
+        durationMs: sample.totalMs,
+        cells: execution.result?.cells || 0,
+        stages: sample.stages,
+        apply: command.getLastApplyPerformance?.() || null
+      });
       return;
     }
     if (!state.panels.state?.getBrush().active || !state.map) return;
@@ -19336,7 +19375,11 @@ function applyStateBrushAtEvent(state, event) {
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
   state.stateEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
   const changes = getStateBrushChanges(state.map, point, brush, stroke.originals);
-  if (!changes.length) return;
+  if (!changes.length) {
+    const durationMs = Math.round((performance.now() - startedAt) * 10) / 10;
+    if (durationMs >= 8) state.healthMonitor?.recordCanvasSample?.("state-brush-noop", {durationMs});
+    return;
+  }
 
   const sampledAt = performance.now();
   applyStateBrushPreview(state.map, changes);

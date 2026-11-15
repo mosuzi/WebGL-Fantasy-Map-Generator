@@ -497,10 +497,13 @@ function renderCanvasPerformance(documentRef, samples, support = {}) {
   const recent = samples.filter(item => item.pageTimeMs >= latestTime - 10000);
   const previews = recent.filter(item => item.phase === "state-brush-preview").map(item => Number(item.durationMs)).filter(Number.isFinite).sort((a, b) => a - b);
   const commits = recent.filter(item => item.phase === "state-brush-commit").map(item => Number(item.durationMs)).filter(Number.isFinite).sort((a, b) => a - b);
+  const stateAdds = recent.filter(item => item.phase === "state-add").map(item => Number(item.durationMs)).filter(Number.isFinite).sort((a, b) => a - b);
+  const stateColors = recent.filter(item => item.phase === "state-color").map(item => Number(item.durationMs)).filter(Number.isFinite).sort((a, b) => a - b);
+  const labels = recent.filter(item => item.phase === "state-label-refresh").map(item => Number(item.durationMs)).filter(Number.isFinite).sort((a, b) => a - b);
   const p95 = values => values.length ? values[Math.min(values.length - 1, Math.ceil(values.length * 0.95) - 1)] : null;
   const format = value => Number.isFinite(value) ? `${value}ms` : "暂无";
   const browser = [support.longTask && "长任务", support.longAnimationFrame && "长帧", support.eventTiming && "输入事件"].filter(Boolean).join("、") || "无浏览器性能条目";
-  summary.textContent = `近 10 秒：预览 ${previews.length} 次，P95 ${format(p95(previews))}，最大 ${format(previews.at(-1))}；提交 ${commits.length} 次，最大 ${format(commits.at(-1))}。浏览器采集：${browser}。主线程卡住期间由浏览器缓冲，恢复后显示。`;
+  summary.textContent = `近 10 秒：预览 ${previews.length} 次，P95 ${format(p95(previews))}，最大 ${format(previews.at(-1))}；画笔提交 ${commits.length} 次，最大 ${format(commits.at(-1))}；新增国家 ${stateAdds.length} 次，最大 ${format(stateAdds.at(-1))}；国家改色 ${stateColors.length} 次，最大 ${format(stateColors.at(-1))}；标签刷新 ${labels.length} 次，最大 ${format(labels.at(-1))}。浏览器采集：${browser}。主线程卡住期间由浏览器缓冲，恢复后显示。`;
   if (!samples.length) return;
   list.replaceChildren(...samples.slice(-16).reverse().map(sample => {
     const item = documentRef.createElement("li");
@@ -508,8 +511,10 @@ function renderCanvasPerformance(documentRef, samples, support = {}) {
     const cells = Number.isInteger(sample.cells) ? `，${sample.cells} 格` : "";
     const detail = sample.phase === "state-brush-preview"
       ? `（采样 ${sample.sampleMs} / 写入 ${sample.applyMs} / 绘制 ${sample.renderMs}ms）`
-      : sample.phase === "state-brush-commit"
+      : sample.phase === "state-brush-commit" || sample.phase === "state-add" || sample.phase === "state-color"
         ? formatCanvasCommitStages(sample)
+        : sample.phase === "state-label-refresh"
+          ? `（等待 ${sample.waitMs}ms / 构建 ${sample.buildMs}ms / 布局 ${sample.layoutMs}ms / 队列到更新 ${sample.queueToReadyMs}ms）`
         : sample.phase === "browser-event"
           ? `（${sample.eventName}，派发等待 ${sample.inputDelayMs}ms，处理 ${sample.processingMs}ms）`
           : Number.isFinite(sample.blockingMs) ? `（阻塞 ${sample.blockingMs}ms）` : "";

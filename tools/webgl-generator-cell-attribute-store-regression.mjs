@@ -95,13 +95,24 @@ assert.equal(rollbackCellAttributePatch(gl, patch), true);
 assert.equal(rollbackCellAttributePatch(gl, patch), false);
 assertArraysEqual(snapshot, before);
 
+const stateOnlyMap = createMap();
+stateOnlyMap.grid.cells.state[2] = 2;
+const stateOnlyPatch = prepareCellAttributePatch(store, stateOnlyMap, [2]);
+assert.deepEqual(stateOnlyPatch.changedKeys, ["identities"], "只改国家归属应只上传身份纹理");
+const identityCallsBefore = gl.subImageCalls.length;
+assert.equal(applyCellAttributePatch(gl, stateOnlyPatch), true);
+assert.equal(gl.subImageCalls.length - identityCallsBefore, 1);
+assert.equal(gl.subImageCalls.at(-1).texture, store.textures.identities);
+assert.equal(rollbackCellAttributePatch(gl, stateOnlyPatch), true);
+assertArraysEqual(snapshot, before);
+
 const callsBeforeReject = gl.subImageCalls.length;
 assert.throws(() => prepareCellAttributePatch(store, map, [-1]), /越界/);
 const wrongMap = createMap(); wrongMap.metadata.mapIdentity = "other";
 assert.throws(() => prepareCellAttributePatch(store, wrongMap, [1]), /identity/);
 assert.equal(gl.subImageCalls.length, callsBeforeReject);
 
-const faultMap = createMap(); faultMap.grid.cells.h[2] = 88;
+const faultMap = createMap(); faultMap.grid.cells.h[2] = 88; faultMap.grid.cells.state[2] = 2;
 const faultPatch = prepareCellAttributePatch(store, faultMap, [2]);
 const cpuBeforeFault = cloneArrays(snapshot);
 const gpuBeforeFault = store.textures.identities.values.slice();

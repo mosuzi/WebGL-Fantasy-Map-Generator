@@ -50,7 +50,8 @@ export function prepareCellAttributePatch(store, map, changedCells) {
   if (String(map?.metadata?.mapIdentity || map?.metadata?.id || "") !== current.snapshot.mapIdentity) throw new Error("cell attribute patch 地图 identity 已变化");
   const before = captureCells(current.snapshot, cells);
   const after = createPatchValues(map, cells);
-  return Object.freeze({store: current, map, cells: Uint32Array.from(cells), before, after, applied: {value: false}});
+  const changedKeys = Object.freeze(["identities", "terrain", "numeric"].filter(key => !sameAttributeBytes(before[key], after[key])));
+  return Object.freeze({store: current, map, cells: Uint32Array.from(cells), before, after, changedKeys, applied: {value: false}});
 }
 
 export function applyCellAttributePatch(gl, patch) {
@@ -164,9 +165,9 @@ function writeCellAttributePatch(gl, patch, values, applied) {
   if (!applied && !patch.applied.value) return false;
   const fallback = applied ? patch.before : patch.after;
   try {
-    uploadPatchValues(gl, store, patch.cells, values);
+    uploadPatchValues(gl, store, patch.cells, values, patch.changedKeys);
   } catch (error) {
-    try { uploadPatchValues(gl, store, patch.cells, fallback); } catch {}
+    try { uploadPatchValues(gl, store, patch.cells, fallback, patch.changedKeys); } catch {}
     throw error;
   }
   writePatchArrays(store.snapshot, patch.cells, values);
@@ -174,12 +175,20 @@ function writeCellAttributePatch(gl, patch, values, applied) {
   return true;
 }
 
-function uploadPatchValues(gl, store, cells, values) {
+function uploadPatchValues(gl, store, cells, values, changedKeys) {
   for (const [key, format, type] of [
     ["identities", gl.RGBA_INTEGER, gl.UNSIGNED_INT],
     ["terrain", gl.RGBA_INTEGER, gl.UNSIGNED_INT],
     ["numeric", gl.RGBA, gl.FLOAT]
-  ]) uploadPatchRuns(gl, store.textures[key], store.layout, cells, values[key], format, type);
+  ]) if (changedKeys.includes(key)) uploadPatchRuns(gl, store.textures[key], store.layout, cells, values[key], format, type);
+}
+
+function sameAttributeBytes(left, right) {
+  if (left.byteLength !== right.byteLength) return false;
+  const leftBytes = new Uint8Array(left.buffer, left.byteOffset, left.byteLength);
+  const rightBytes = new Uint8Array(right.buffer, right.byteOffset, right.byteLength);
+  for (let index = 0; index < leftBytes.length; index++) if (leftBytes[index] !== rightBytes[index]) return false;
+  return true;
 }
 
 function uploadPatchRuns(gl, texture, layout, cells, values, format, type) {

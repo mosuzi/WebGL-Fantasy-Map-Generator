@@ -29,6 +29,7 @@ try {
     previewMaxMs: Math.max(...result.previews.map(item => item.durationMs)),
     workerWarmMaxMs: Math.max(0, ...result.workerWarm),
     boundaryApplyMs: result.lineRefresh?.assembleMs + result.lineRefresh?.uploadMs + result.lineRefresh?.drawMs,
+    labelMs: result.label?.durationMs ?? null,
     undoWallMs: result.undoWallMs,
     interactionStalls: result.health.filter(item => item.type === "canvas-interaction-stall").length,
     debugVisible: result.debugVisible,
@@ -124,6 +125,8 @@ async function exercise(browserInstance, localPort, cellsTarget) {
       const renderer = window.__webglGeneratorApp?.renderer;
       return renderer?.politicalBrushAppliedRequest === renderer?.politicalBrushRequest || renderer?.politicalBrushLastError;
     });
+    await page.waitForFunction(start => window.__webglGeneratorApp.healthMonitor.getCanvasSamples()
+      .some(item => item.phase === "state-label-refresh" && item.pageTimeMs >= start), gestureStartedAt);
     const observed = await page.evaluate(cell => {
       const app = window.__webglGeneratorApp;
       const samples = app.healthMonitor.getCanvasSamples();
@@ -133,6 +136,7 @@ async function exercise(browserInstance, localPort, cellsTarget) {
         preview: samples.filter(item => item.phase === "state-brush-preview"),
         warm: samples.filter(item => item.phase === "state-brush-worker-warm"),
         commit: samples.filter(item => item.phase === "state-brush-commit").at(-1),
+        label: samples.filter(item => item.phase === "state-label-refresh").at(-1),
         browser: samples.filter(item => item.phase.startsWith("browser-")),
         health: app.healthMonitor.getEvents().filter(item => /long-task|stall|frame-gap/.test(item.type)).slice(-12),
         debugVisible: Boolean(document.getElementById("development-canvas-summary")?.textContent),
@@ -146,6 +150,7 @@ async function exercise(browserInstance, localPort, cellsTarget) {
     assert.equal(observed.history.undo, before + 1, "一笔应只提交一条历史");
     assert.ok(observed.preview.length, "未收集画笔预览耗时");
     assert.ok(observed.commit, "未收集画笔提交耗时");
+    assert.ok(observed.label && observed.label.durationMs < 200, "画笔落定后的标签刷新卡顿");
     assert.ok(observed.commit.durationMs < 200, `画笔提交卡顿 ${observed.commit.durationMs}ms`);
     assert.ok(observed.preview.every(item => item.durationMs < 100), "画笔预览响应超过 100ms");
     assert.equal(observed.webglError, 0, "WebGL 错误");
@@ -168,6 +173,7 @@ async function exercise(browserInstance, localPort, cellsTarget) {
       workerWarm: observed.warm.map(item => item.durationMs),
       previews: observed.preview.map(item => ({durationMs: item.durationMs, sampleMs: item.sampleMs, renderMs: item.renderMs, cells: item.cells})),
       commit: observed.commit,
+      label: observed.label,
       browser: observed.browser,
       gestureLongTasks,
       health: observed.health.map(item => ({type: item.type, detail: item.detail})),

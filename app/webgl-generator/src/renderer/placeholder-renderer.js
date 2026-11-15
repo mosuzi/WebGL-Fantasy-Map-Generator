@@ -1600,6 +1600,26 @@ export class PlaceholderMapRenderer {
     return refreshCellAttributePalette(this.gl, this.cellAttributeStore, this.map, mode, this.viewOptions);
   }
 
+  refreshEditedPaletteSurface(mode, affected = [], {draw = true, binding = null} = {}) {
+    if (!this.canPresentGpuResidentColorMode(this.colorMode)) return false;
+    if (this.colorMode === mode && this.viewOptions.smoothCellBorders !== false && shouldDrawShoreVisualBands(mode)) {
+      const field = mode === "states" ? "state" : mode === "provinces" ? "province" : null;
+      const kind = mode === "states" ? "state" : "province";
+      const ids = new Set(affected.filter(item => item.kind === kind).map(item => Number(item.id)));
+      if (!field || !ids.size) return false;
+      const cells = new Set();
+      for (const ranges of Object.values(this.shoreSurfaceCellRanges || {})) {
+        for (const cell of ranges?.keys?.() || []) {
+          if (ids.has(Number(this.map.grid.cells[field]?.[cell]))) cells.add(cell);
+        }
+      }
+      if (cells.size) refreshShoreSurfaceCellColors(this, [...cells]);
+    }
+    if (binding) this.rebindEditedRendererResources(binding);
+    if (draw) this.draw();
+    return true;
+  }
+
   ensurePoliticalPaletteEntries({stateId, provinceId, gridCell}) {
     if (!this.map || !this.cellAttributeStore) return false;
     for (const mode of ["states", "governments", "diplomacy"]) {
@@ -2226,10 +2246,20 @@ export class PlaceholderMapRenderer {
 
   refreshLabels(binding = null, options = {}) {
     if (!this.map) return;
+    const startedAt = performance.now();
     const resourceBinding = binding || this.labelLayoutResourceOwner || this.activeRenderResourceBinding || this.surfaceResourceOwner;
     this.buildLabels(this.map, options);
+    const builtAt = performance.now();
     if (resourceBinding) adoptOverlayLabelResourceBinding(this, resourceBinding);
     this.updateLabels();
+    const finishedAt = performance.now();
+    this.lastLabelRefreshProfile = {
+      buildMs: roundMs(builtAt - startedAt),
+      layoutMs: roundMs(finishedAt - builtAt),
+      totalMs: roundMs(finishedAt - startedAt),
+      politicalOnly: options.politicalOnly === true,
+      stateIds: options.stateIds?.length || 0
+    };
   }
 
   getLabelLayoutSnapshot(targetKind, targetId) {

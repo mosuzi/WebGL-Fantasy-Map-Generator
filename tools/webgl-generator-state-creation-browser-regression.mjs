@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import {existsSync} from "node:fs";
 import {createRequire} from "node:module";
 import {join, resolve} from "node:path";
 import {preview} from "vite";
@@ -23,10 +24,25 @@ try {
   console.log("stage:domcontentloaded");
   await waitForApiReady(page, 30000);
   console.log("stage:ready");
-  const cellsTarget = process.argv.includes("--100k") ? 100000 : 3000;
-  const generated = await page.evaluate(target => window.webglGeneratorApi.generate.newMap({confirm: true, seed: `state-creation-${target}`, cellsTarget: target}), cellsTarget);
-  console.log("stage:generated", generated.ok);
-  assert.equal(generated.ok, true, JSON.stringify(generated.error));
+  const archivePath = process.env.FMG_REAL_ARCHIVE || "C:\\Users\\mosuzi\\Downloads\\krichars (3).webfmg";
+  const useArchive = process.argv.includes("--archive");
+  const cellsTarget = useArchive || process.argv.includes("--100k") ? 100000 : 3000;
+  if (useArchive) {
+    assert.ok(existsSync(archivePath), `指定存档不存在：${archivePath}`);
+    await page.evaluate(() => {window.__stateCreationPreviousMap = window.__webglGeneratorApp?.map;});
+    await page.locator("#import-map-file").setInputFiles(archivePath);
+    await page.waitForFunction(() => {
+      const app = window.__webglGeneratorApp;
+      return app?.map && app.map !== window.__stateCreationPreviousMap
+        && app.map.grid?.cells?.i?.length === 100000
+        && !app.runtimeOperationSnapshot?.busy;
+    });
+    console.log("stage:archive-imported");
+  } else {
+    const generated = await page.evaluate(target => window.webglGeneratorApi.generate.newMap({confirm: true, seed: `state-creation-${target}`, cellsTarget: target}), cellsTarget);
+    console.log("stage:generated", generated.ok);
+    assert.equal(generated.ok, true, JSON.stringify(generated.error));
+  }
   await waitForApiReady(page, 180000);
   console.log("stage:map-ready");
   await page.evaluate(() => window.__webglGeneratorApp.renderer.setColorMode("states"));
@@ -65,9 +81,10 @@ try {
     const result = window.webglGeneratorApi.edit.states.add(gridCell);
     const wallMs = Math.round((performance.now() - startedAt) * 10) / 10;
     restore.reverse().forEach(fn => fn());
-    return {result, before, after: app.editHistory.getStats().undo, wallMs, stages};
+    return {result, before, after: app.editHistory.getStats().undo, wallMs, stages,
+      addSample: app.healthMonitor.getCanvasSamples().filter(item => item.phase === "state-add").at(-1)};
   }, sample.ordinary);
-  console.log("stage:profiled", profile.wallMs, profile.result.ok, JSON.stringify(profile.result.data?.error || profile.result.error || profile.result.data?.result));
+  console.log("stage:profiled", profile.wallMs, profile.result.ok, JSON.stringify(profile.addSample), JSON.stringify(profile.result.data?.error || profile.result.error || profile.result.data?.result));
   assert.equal(profile.result.ok, true, JSON.stringify(profile.result.error));
   assert.equal(profile.result.data?.executed, true, JSON.stringify(profile.result.data));
   const visualColor = await page.evaluate(stateId => {
@@ -81,6 +98,14 @@ try {
   assert.equal(visualColor.glError, 0);
   await page.waitForFunction(id => Boolean(document.querySelector(`.state-label[data-label-target-id="${id}"]`)),
     profile.result.data?.result?.stateId);
+  const newCapitalOverlay = await page.evaluate(cityId => {
+    const renderer = window.__webglGeneratorApp.renderer;
+    return {
+      icon: renderer.cityIconItems.some(item => Number(item.id) === cityId),
+      label: renderer.labelItems.some(item => item.targetKind === "city" && Number(item.targetId) === cityId)
+    };
+  }, profile.result.data?.result?.cityId);
+  assert.deepEqual(newCapitalOverlay, {icon: true, label: true}, "新建国家补建的首都城市应立即出现在地图图标和标签中");
   const labelStyles = await page.evaluate(({createdId, originalId}) => {
     const read = id => {
       const node = document.querySelector(`.state-label[data-label-target-id="${id}"]`);
@@ -105,11 +130,11 @@ try {
     const wallMs = Math.round((performance.now() - startedAt) * 10) / 10;
     const newStateId = result.data?.result?.stateId;
     const state = app.map.politics.states[newStateId];
-    return {result, wallMs, oldStateId, oldCapital, newStateId, newCapital: state?.capital,
+    return {result, wallMs, addSample: app.healthMonitor.getCanvasSamples().filter(item => item.phase === "state-add").at(-1), oldStateId, oldCapital, newStateId, newCapital: state?.capital,
       replacementCapital: app.map.politics.states[oldStateId].capital,
       color: state?.color, neighborColors: state?.neighbors?.map(id => app.map.politics.states[id]?.color)};
   }, sample.capital);
-  console.log("stage:capital-profiled", capitalProfile.wallMs, capitalProfile.result.ok);
+  console.log("stage:capital-profiled", capitalProfile.wallMs, capitalProfile.result.ok, JSON.stringify(capitalProfile.addSample));
   assert.equal(capitalProfile.result.ok, true, JSON.stringify(capitalProfile.result.error));
   assert.equal(capitalProfile.newCapital, capitalProfile.oldCapital);
   assert.notEqual(capitalProfile.replacementCapital, capitalProfile.oldCapital);
