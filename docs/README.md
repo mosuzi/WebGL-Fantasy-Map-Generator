@@ -27,6 +27,7 @@
   - `performance/canvas-performance-investigation-report.md`：权威任务第 269 项正式画布性能实际调查，记录冷 / 暖态、连续视口、idle commit、消融、状态动作、Trace、盲区和分级优化建议。
   - `performance/canvas-performance-optimization-report.md`：权威任务第 270～272 项实际优化结果，记录交互事件收敛、100k 装载收益、状态动作、回归门禁、真实浏览器结论和剩余风险。
   - `performance/task-412-webgpu-cell-comparison.md`：现行正式画布专项、用户原图健康告警和同输入 WebGPU / WebGL2 cell 对照结论。
+  - `performance/task-413-webgpu-complex-scene.md`：固定 100k 快照的双后端复合图层、平滑与晕染近景、控制组和分阶段耗时对照。
   - `task-notes/canvas-performance-optimization-plan.md`：权威任务第 270～272 项封闭施工图，冻结交互快路径、装载 / 颜色优化、事件预算与真实浏览器验收边界。
 - `audits/`：审查、复盘和整改方案。
   - `audits/ui-function-and-information-architecture-audit.md`：现有功能入口、复杂度、分组、低优先级能力和浮层遮挡审计。

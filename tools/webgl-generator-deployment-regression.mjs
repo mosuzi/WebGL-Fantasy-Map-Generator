@@ -59,6 +59,8 @@ try {
   await access(path.join(outputRoot, "prototype", "webgl-cells", "src", "webgpu-demo.js"));
   await access(path.join(outputRoot, "prototype", "webgl-cells", "src", "webgpu-backends.js"));
   await access(path.join(outputRoot, "prototype", "webgl-cells", "src", "webgpu-data-worker.js"));
+  await access(path.join(outputRoot, "prototype", "webgl-cells", "src", "webgpu-scene.js"));
+  await access(path.join(outputRoot, "prototype", "webgl-cells", "src", "webgpu-haze.js"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "src", "app.js"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "src", "styles.css"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "assets", "mosuzi-seal.png"));

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WebGPU / WebGL2 Cell 对照 · FMG 实验室</title>
+    <title>WebGPU / WebGL2 地图场景对照 · FMG 实验室</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./src/webgpu-demo.css" />
     <script type="module" src="./src/webgpu-demo.js"></script>
@@ -13,17 +13,23 @@
       <header class="lab-header">
         <div>
           <a class="back-link" href="./">返回 WebGL cells 原型</a>
-          <h1>WebGPU / WebGL2 Cell 对照</h1>
-          <p id="demo-status" role="status">正在读取固定地图快照…</p>
+          <h1>WebGPU / WebGL2 地图场景对照</h1>
+          <p id="demo-status" role="status">正在准备固定地图场景…</p>
         </div>
         <div class="header-data" id="build-result" aria-live="polite">准备数据中</div>
       </header>
 
       <div class="controls" aria-label="对照操作">
-        <div class="mode-group" role="group" aria-label="专题颜色">
-          <button type="button" class="active" data-mode="height" aria-pressed="true" disabled>高度</button>
-          <button type="button" data-mode="states" aria-pressed="false" disabled>国家</button>
+        <div class="mode-group" role="group" aria-label="场景复杂度">
+          <button type="button" data-scene="complex" class="active" aria-pressed="true" disabled>复合场景</button>
+          <button type="button" data-scene="cells" aria-pressed="false" disabled>仅格网</button>
         </div>
+        <div class="mode-group" role="group" aria-label="专题颜色">
+          <button type="button" data-mode="height" aria-pressed="false" disabled>高度</button>
+          <button type="button" class="active" data-mode="states" aria-pressed="true" disabled>国家</button>
+        </div>
+        <button type="button" id="smooth-border" class="active" aria-pressed="true" disabled>平滑边界</button>
+        <button type="button" id="border-haze" class="active" aria-pressed="true" disabled>国界晕染</button>
         <button type="button" id="fit-view" disabled>适配视图</button>
         <button type="button" id="run-benchmark" disabled>测量 60 帧</button>
       </div>
@@ -33,11 +39,14 @@
           <div class="renderer-heading">
             <div>
               <h2 id="webgl-title">WebGL2</h2>
-              <p>同一批 cell 三角形</p>
+              <p>当前图形 API · 共享地图图层</p>
             </div>
             <span class="backend-badge">当前图形 API</span>
           </div>
-          <canvas id="webgl-canvas" aria-label="WebGL2 固定地图预览"></canvas>
+          <div class="canvas-stage" id="webgl-stage">
+            <canvas id="webgl-canvas" aria-label="WebGL2 固定地图预览"></canvas>
+            <div class="label-layer" id="webgl-labels" aria-hidden="true"></div>
+          </div>
           <p class="renderer-result" id="webgl-result">等待绘制</p>
         </section>
 
@@ -49,15 +58,25 @@
             </div>
             <span class="backend-badge proposed">实验图形 API</span>
           </div>
-          <canvas id="webgpu-canvas" aria-label="WebGPU 固定地图预览"></canvas>
+          <div class="canvas-stage" id="webgpu-stage">
+            <canvas id="webgpu-canvas" aria-label="WebGPU 固定地图预览"></canvas>
+            <div class="label-layer" id="webgpu-labels" aria-hidden="true"></div>
+          </div>
           <p class="renderer-result" id="webgpu-result">等待绘制</p>
         </section>
       </div>
 
       <section class="results" aria-labelledby="results-title">
         <h2 id="results-title">测量结果</h2>
+        <p id="scene-result">准备图层中…</p>
         <p id="benchmark-result" aria-live="polite">在两侧画面就绪后，点击“测量 60 帧”。</p>
-        <p class="measurement-note">两侧共享固定快照、顶点、颜色、视口尺寸和相机路径，只画 cell 色面。CPU 提交时间测的是 JavaScript 编码与提交命令，不代表 GPU 完成时间；帧间隔也会受浏览器调度和设备负载影响。此页不包含正式地图的边界、标签、画笔事务及晕染合成。</p>
+        <div class="metric-scroll">
+          <table id="benchmark-table" hidden>
+            <thead><tr><th scope="col">当前场景指标</th><th scope="col">WebGL2</th><th scope="col">WebGPU</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="measurement-note">复合场景包含湖岸、海岸、平滑行政边界、路线、河流、城市图标、标记、标签和国界晕染。两侧使用相同数据、画布尺寸、层序、相机路径与效果参数。准备和上传在页面启动时共享一次，表中拆分地表与复合图层；仅格网组比较逐帧绘制。绘制流程墙钟到 GPU 命令完成及标签 DOM 更新为止，不含浏览器最后的屏幕绘制与合成。固定快照缺正式地图的部分拓扑与编辑事务，结果不能直接代表正式整图速度。</p>
       </section>
     </main>
   </body>
