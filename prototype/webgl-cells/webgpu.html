@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebGPU / WebGL2 Cell 对照 · FMG 实验室</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./src/webgpu-demo.css" />
+    <script type="module" src="./src/webgpu-demo.js"></script>
+  </head>
+  <body>
+    <main class="lab">
+      <header class="lab-header">
+        <div>
+          <a class="back-link" href="./">返回 WebGL cells 原型</a>
+          <h1>WebGPU / WebGL2 Cell 对照</h1>
+          <p id="demo-status" role="status">正在读取固定地图快照…</p>
+        </div>
+        <div class="header-data" id="build-result" aria-live="polite">准备数据中</div>
+      </header>
+
+      <div class="controls" aria-label="对照操作">
+        <div class="mode-group" role="group" aria-label="专题颜色">
+          <button type="button" class="active" data-mode="height" aria-pressed="true" disabled>高度</button>
+          <button type="button" data-mode="states" aria-pressed="false" disabled>国家</button>
+        </div>
+        <button type="button" id="fit-view" disabled>适配视图</button>
+        <button type="button" id="run-benchmark" disabled>测量 60 帧</button>
+      </div>
+
+      <div class="comparison">
+        <section class="renderer-panel" aria-labelledby="webgl-title">
+          <div class="renderer-heading">
+            <div>
+              <h2 id="webgl-title">WebGL2</h2>
+              <p>同一批 cell 三角形</p>
+            </div>
+            <span class="backend-badge">当前图形 API</span>
+          </div>
+          <canvas id="webgl-canvas" aria-label="WebGL2 固定地图预览"></canvas>
+          <p class="renderer-result" id="webgl-result">等待绘制</p>
+        </section>
+
+        <section class="renderer-panel" aria-labelledby="webgpu-title">
+          <div class="renderer-heading">
+            <div>
+              <h2 id="webgpu-title">WebGPU</h2>
+              <p id="webgpu-status">正在检查浏览器支持…</p>
+            </div>
+            <span class="backend-badge proposed">实验图形 API</span>
+          </div>
+          <canvas id="webgpu-canvas" aria-label="WebGPU 固定地图预览"></canvas>
+          <p class="renderer-result" id="webgpu-result">等待绘制</p>
+        </section>
+      </div>
+
+      <section class="results" aria-labelledby="results-title">
+        <h2 id="results-title">测量结果</h2>
+        <p id="benchmark-result" aria-live="polite">在两侧画面就绪后，点击“测量 60 帧”。</p>
+        <p class="measurement-note">两侧共享固定快照、顶点、颜色、视口尺寸和相机路径，只画 cell 色面。CPU 提交时间测的是 JavaScript 编码与提交命令，不代表 GPU 完成时间；帧间隔也会受浏览器调度和设备负载影响。此页不包含正式地图的边界、标签、画笔事务及晕染合成。</p>
+      </section>
+    </main>
+  </body>
+</html>

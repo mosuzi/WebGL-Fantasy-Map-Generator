@@ -24,11 +24,20 @@ try {
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   const page = await browser.newPage({viewport: {width: 1360, height: 900}});
   page.setDefaultTimeout(180000);
+  await page.addInitScript(() => {
+    window.__borderLongTasks = [];
+    window.__borderLongTaskSupported = PerformanceObserver.supportedEntryTypes?.includes("longtask") === true;
+    if (window.__borderLongTaskSupported) {
+      window.__borderLongTaskObserver = new PerformanceObserver(list => window.__borderLongTasks.push(...list.getEntries().map(entry => entry.duration)));
+      window.__borderLongTaskObserver.observe({type: "longtask", buffered: true});
+    }
+  });
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/?healthClear=1&debug=1`, {waitUntil: "domcontentloaded"});
   await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2);
   await page.waitForFunction(() => !window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy && document.getElementById("generation-loading")?.hidden !== false);
+  assert.equal(await page.evaluate(() => window.__borderLongTaskSupported), true, "国界专项浏览器未开放 LongTask 监控");
   const generated = await page.evaluate(target => window.webglGeneratorApi.generate.newMap({confirm: true, seed: "state-color-border-regression", cellsTarget: target}), cellsTarget);
   assert.equal(generated.ok, true, generated.error?.message);
   await page.waitForFunction(() => window.__webglGeneratorApp?.map?.metadata?.seed === "state-color-border-regression" && !window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy);
@@ -59,6 +68,7 @@ try {
     return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, "0")).join("");
   });
   const beforePanel = await canvasPixelHash();
+  const baselineDrawMs = await page.evaluate(() => window.__webglGeneratorApp.renderer.getStats().draw.drawMs);
   await page.getByRole("button", {name: "调整颜色"}).evaluate(button => button.click());
   await page.getByRole("dialog", {name: "调整颜色"}).waitFor();
   const whilePanel = await canvasPixelHash();
@@ -92,6 +102,10 @@ try {
   assert.deepEqual(restored.palette, initial.palette, "撤销后 GPU palette 未恢复");
   const restoredPixels = await canvasPixelHash();
   assert.equal(restoredPixels, beforePanel, "改色撤销后地图像素未恢复");
+  await page.evaluate(() => {
+    window.__borderLongTasks.length = 0;
+    window.__borderLongTaskObserver?.takeRecords();
+  });
   const borderEffect = await page.evaluate(() => {
     const renderer = window.__webglGeneratorApp.renderer;
     renderer.setViewOptions({stateBorderBlend: {enabled: true, widthWorld: 9.5, strength: 1}});
@@ -99,9 +113,19 @@ try {
   });
   assert.equal(borderEffect, true);
   const blendedPixels = await canvasPixelHash();
+  const blendedDraw = await page.evaluate(() => {
+    const stats = window.__webglGeneratorApp.renderer.getStats();
+    return {drawMs: stats.draw.drawMs, haze: stats.stateBorderHaze};
+  });
   assert.notEqual(blendedPixels, beforePanel, "开启国界过渡没有改变画面");
   await page.evaluate(() => window.__webglGeneratorApp.renderer.setViewOptions({stateBorderBlend: {enabled: false, widthWorld: 9.5, strength: 1}}));
   assert.equal(await canvasPixelHash(), beforePanel, "关闭国界过渡后地图像素未恢复");
+  const borderLongTasks = await page.evaluate(() => {
+    window.__borderLongTasks.push(...(window.__borderLongTaskObserver?.takeRecords() || []).map(entry => entry.duration));
+    const values = window.__borderLongTasks;
+    return {count: values.length, maxMs: Math.max(0, ...values), over200: values.filter(value => value > 200).length};
+  });
+  assert.equal(borderLongTasks.over200, 0, "国界过渡出现超过 200ms 的 LongTask");
   const brushEdge = await page.evaluate(shoreCell => {
     const {map, renderer} = window.__webglGeneratorApp;
     const states = map.politics.states;
@@ -124,7 +148,7 @@ try {
   assert.equal(after.glError, 0);
   assert.equal(restored.glError, 0);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ok: true, cellsTarget, initial, afterColor, after, restored, colorPanelPixelsStable: true, blendRoundTrip: true, brushEdge}, null, 2));
+  console.log(JSON.stringify({ok: true, cellsTarget, initial, afterColor, after, restored, colorPanelPixelsStable: true, blendRoundTrip: true, baselineDrawMs, blendedDraw, borderLongTasks, brushEdge}, null, 2));
 } finally {
   await browser?.close();
   await new Promise(done => server.close(done));

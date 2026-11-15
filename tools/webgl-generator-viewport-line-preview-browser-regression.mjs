@@ -22,7 +22,7 @@ const pageErrors = [];
 const setupPerformanceSignals = [];
 
 try {
-  const finalReport = {ok: false, initial: null, zoom: null, pan: null, setupPerformanceSignals, consoleErrors, pageErrors};
+  const finalReport = {ok: false, gridCells: 0, initial: null, zoom: null, pan: null, longTasks: null, setupPerformanceSignals, consoleErrors, pageErrors};
   const compactReport = {initial: {canvasWidth: 0, canvasHeight: 0}, zoom: null, pan: null, setupPerformanceSignals, consoleErrors, pageErrors};
   evidence.setResult(finalReport, compactReport);
   assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
@@ -33,6 +33,14 @@ try {
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   const page = await browser.newPage({viewport: {width: 1440, height: 900}});
   page.setDefaultTimeout(120000);
+  await page.addInitScript(() => {
+    window.__viewportLongTasks = [];
+    window.__viewportLongTaskSupported = PerformanceObserver.supportedEntryTypes?.includes("longtask") === true;
+    if (window.__viewportLongTaskSupported) {
+      window.__viewportLongTaskObserver = new PerformanceObserver(list => window.__viewportLongTasks.push(...list.getEntries().map(entry => entry.duration)));
+      window.__viewportLongTaskObserver.observe({type: "longtask", buffered: true});
+    }
+  });
   page.on("console", message => message.type() === "error" && consoleErrors.push(message.text()));
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://${host}:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
@@ -44,6 +52,12 @@ try {
     renderer.setLayerVisible("rivers", true);
   });
   await waitForViewportIdle(page);
+  assert.equal(await page.evaluate(() => window.__viewportLongTaskSupported), true, "视口浏览器未开放 LongTask 监控");
+  finalReport.gridCells = await page.evaluate(() => window.__webglGeneratorApp.map.grid.cells.i.length);
+  await page.evaluate(() => {
+    window.__viewportLongTasks.length = 0;
+    window.__viewportLongTaskObserver?.takeRecords();
+  });
   const activeConsoleErrors = consoleErrors.filter(message => !/^\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)\b/u.test(message));
   setupPerformanceSignals.push(...consoleErrors.filter(message => !activeConsoleErrors.includes(message)));
   consoleErrors.length = 0;
@@ -66,6 +80,8 @@ try {
     zoomSamples.push(await readPreviewStats(page));
   }
   const zoomIdle = await waitForViewportIdle(page);
+  const zoomLongTasks = await readViewportLongTasks(page);
+  await page.evaluate(() => { window.__viewportLongTasks.length = 0; });
 
   const panSamples = [];
   await page.mouse.move(center.x - 120, center.y - 50);
@@ -77,9 +93,11 @@ try {
   }
   await page.mouse.up({button: "middle"});
   const panIdle = await waitForViewportIdle(page);
+  const panLongTasks = await readViewportLongTasks(page);
 
   finalReport.zoom = summarizeSamples(zoomSamples, zoomIdle);
   finalReport.pan = summarizeSamples(panSamples, panIdle);
+  finalReport.longTasks = {zoom: summarizeLongTasks(zoomLongTasks), pan: summarizeLongTasks(panLongTasks)};
   compactReport.zoom = {
     ...finalReport.zoom,
     routeVertexCounts: zoomSamples.map(sample => sample.routeVertexCount),
@@ -110,6 +128,7 @@ try {
   assertCameraConverged(panIdle, "平移");
   assert.equal(zoomIdle.glError, 0);
   assert.equal(panIdle.glError, 0);
+  assert.equal(finalReport.longTasks.zoom.over200 + finalReport.longTasks.pan.over200, 0, "视口操作出现超过 200ms 的 LongTask");
   assert.deepEqual(consoleErrors, []);
   assert.deepEqual(pageErrors, []);
   finalReport.ok = true;
@@ -188,6 +207,17 @@ function summarizeMs(values) {
     p95: round(sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)]),
     max: round(sorted.at(-1))
   };
+}
+
+function summarizeLongTasks(values) {
+  return {count: values.length, maxMs: round(Math.max(0, ...values)), over200: values.filter(value => value > 200).length};
+}
+
+function readViewportLongTasks(page) {
+  return page.evaluate(() => {
+    window.__viewportLongTasks.push(...(window.__viewportLongTaskObserver?.takeRecords() || []).map(entry => entry.duration));
+    return [...window.__viewportLongTasks];
+  });
 }
 
 async function waitForViewportIdle(page) {

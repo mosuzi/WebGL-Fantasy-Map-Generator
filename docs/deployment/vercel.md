@@ -29,11 +29,12 @@ pnpm run preview
 控制面板“简介 → 实验室”使用下列预览链接：
 
 - [WebGL 单元格实验室](https://fmg.mosuzi.top/prototype/web-cells/)
+- [WebGPU / WebGL2 Cell 对照](https://fmg.mosuzi.top/prototype/webgl-cells/webgpu.html)（与 WebGL 单元格实验室同目录）
 - [共享边界拓扑实验室](https://fmg.mosuzi.top/prototype/boundary-topology-lab/)
 - [画卷加载页文字视觉概念稿](https://fmg.mosuzi.top/prototype/loading-scroll-showcase/)
 - [河流网络算法实验室](https://fmg.mosuzi.top/prototype/river-network-lab/)
 
-线上可达性应在每次部署后单独验证；本地构建会装配当前四个目录，不能用历史部署记录替代本次检查。实验室用途、正式应用边界和 AI 操作规则见 [`../architecture/laboratory-prototypes.md`](../architecture/laboratory-prototypes.md)。路由细节以 `vercel.json` 与部署回归为准，不在面向使用者的说明中重复展开。
+线上可达性应在每次部署后单独验证；本地构建会装配当前四个目录及 WebGL 单元格实验室内的 WebGPU 对照页，不能用历史部署记录替代本次检查。实验室用途、正式应用边界和 AI 操作规则见 [`../architecture/laboratory-prototypes.md`](../architecture/laboratory-prototypes.md)。路由细节以 `vercel.json` 与部署回归为准，不在面向使用者的说明中重复展开。
 
 ## Vercel 控制台导入
 
@@ -67,6 +68,7 @@ dist/webgl-generator/index.html
 dist/webgl-generator/cloud-provider-config.js
 dist/webgl-generator/oauth/dropbox/callback/index.html
 dist/webgl-generator/prototype/webgl-cells/index.html
+dist/webgl-generator/prototype/webgl-cells/webgpu.html
 dist/webgl-generator/prototype/webgl-cells/data/sample-map.json
 dist/webgl-generator/prototype/boundary-topology-lab/index.html
 dist/webgl-generator/prototype/boundary-topology-lab/assets/*.js
