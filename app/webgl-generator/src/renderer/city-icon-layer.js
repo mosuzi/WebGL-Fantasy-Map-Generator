@@ -1,4 +1,5 @@
 import {createProgram} from "./gl-utils.js";
+import {ancientDisplayColor, isAncientTheme} from "./ancient-colors.js";
 
 export const CITY_ICON_SHAPE_IDS = Object.freeze({
   hamlet: 0,
@@ -227,7 +228,7 @@ export class CityIconWebglLayer {
     return changedIndices.length;
   }
 
-  draw({mapSize, camera, canvas, canvasSize = null, timeMs = 0, layerVisible = true, restoreState = true} = {}) {
+  draw({mapSize, camera, canvas, canvasSize = null, timeMs = 0, layerVisible = true, visualTheme = null, restoreState = true} = {}) {
     if (!layerVisible || !this.instances.length) {
       this.stats.lastDrawInstances = 0;
       return 0;
@@ -255,10 +256,11 @@ export class CityIconWebglLayer {
     gl.uniform1f(this.locations.timeMs, Number(timeMs) || 0);
     gl.uniform1f(this.locations.transitionMs, this.transitionMs);
     gl.uniform1f(this.locations.scaleFadeWidth, this.scaleFadeWidth);
-    gl.uniform4fv(this.locations.darkOutline, DARK_OUTLINE);
-    gl.uniform4fv(this.locations.whiteInner, WHITE_INNER_LINE);
-    gl.uniform4fv(this.locations.selectedOuter, SELECTED_OUTER_LINE);
-    gl.uniform4fv(this.locations.selectedInner, SELECTED_INNER_LINE);
+    const displayColor = isAncientTheme(visualTheme) ? ancientDisplayColor : color => color;
+    gl.uniform4fv(this.locations.darkOutline, displayColor(DARK_OUTLINE));
+    gl.uniform4fv(this.locations.whiteInner, displayColor(WHITE_INNER_LINE));
+    gl.uniform4fv(this.locations.selectedOuter, displayColor(SELECTED_OUTER_LINE));
+    gl.uniform4fv(this.locations.selectedInner, displayColor(SELECTED_INNER_LINE));
     gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
     gl.enable(gl.BLEND);

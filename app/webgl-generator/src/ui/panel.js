@@ -3,6 +3,7 @@ import {bindLabelNamingPanelTrigger} from "./label-naming-panel-trigger.js";
 import {OBJECT_KIND} from "../runtime/object-kinds.js";
 import {DIPLOMACY_RELATIONS} from "../generator/diplomacy.js";
 import {GOVERNMENT_FAMILY_LEGEND} from "../renderer/color-modes.js";
+import {ancientDisplayColor, ancientDisplayHex, ancientMetricStops, isAncientTheme} from "../renderer/ancient-colors.js";
 import {normalizeVisualThemeId} from "../renderer/themes.js";
 import {windDirectionLabelFromAngle} from "../generator/climate-options.js";
 import {listBiomeDescriptors} from "../generator/biome-registry.js";
@@ -847,12 +848,13 @@ function updateMapLegend(documentRef, map, stats) {
   if (!legend) return;
   const unitPreferences = readControlPreferences(documentRef).units;
   const colorMode = stats.colorMode;
+  const ancient = isAncientTheme(stats.viewOptions?.visualTheme);
 
   if (colorMode === "temperature") {
     legend.hidden = false;
     legend.replaceChildren(
       legendTitle(documentRef, "温度"),
-      legendBar(documentRef, "temperature"),
+      legendBar(documentRef, "temperature", ancient),
       legendTicks(documentRef, `${map.climate.metadata.temperatureMin}°C`, "0°C", `${map.climate.metadata.temperatureMax}°C`)
     );
     return;
@@ -862,7 +864,7 @@ function updateMapLegend(documentRef, map, stats) {
     legend.hidden = false;
     legend.replaceChildren(
       legendTitle(documentRef, "降水"),
-      legendBar(documentRef, "precipitation"),
+      legendBar(documentRef, "precipitation", ancient),
       legendTicks(
         documentRef,
         formatDisplayPrecipitation(map.climate.metadata.precipitationMin, unitPreferences),
@@ -877,7 +879,7 @@ function updateMapLegend(documentRef, map, stats) {
     legend.hidden = false;
     legend.replaceChildren(
       legendTitle(documentRef, "生物群系"),
-      biomeLegendList(documentRef, map)
+      biomeLegendList(documentRef, map, ancient)
     );
     return;
   }
@@ -888,7 +890,7 @@ function updateMapLegend(documentRef, map, stats) {
     legend.hidden = false;
     legend.replaceChildren(
       legendTitle(documentRef, `外交：${subject?.fullName || subject?.name || "未选主体"}`),
-      diplomacyLegendList(documentRef)
+      diplomacyLegendList(documentRef, ancient)
     );
     return;
   }
@@ -897,7 +899,7 @@ function updateMapLegend(documentRef, map, stats) {
     legend.hidden = false;
     legend.replaceChildren(
       legendTitle(documentRef, "政体"),
-      governmentLegendList(documentRef, map)
+      governmentLegendList(documentRef, map, ancient)
     );
     return;
   }
@@ -962,9 +964,12 @@ function legendTitle(documentRef, text) {
   return title;
 }
 
-function legendBar(documentRef, type) {
+function legendBar(documentRef, type, ancient = false) {
   const bar = documentRef.createElement("div");
   bar.className = `legend-bar ${type}`;
+  if (ancient) {
+    bar.style.background = `linear-gradient(90deg, ${ancientMetricStops(type).map(biomeColorCss).join(", ")})`;
+  }
   return bar;
 }
 
@@ -979,36 +984,36 @@ function legendTicks(documentRef, min, mid, max) {
   return ticks;
 }
 
-function diplomacyLegendList(documentRef) {
+function diplomacyLegendList(documentRef, ancient = false) {
   const list = documentRef.createElement("div");
   list.className = "legend-list diplomacy";
-  list.append(legendSwatch(documentRef, "#ffbf42", "主体"));
+  list.append(legendSwatch(documentRef, "#ffbf42", "主体", ancient));
   for (const key of ["Ally", "Friendly", "Neutral", "Suspicion", "Rival", "Enemy", "Vassal", "Suzerain", "Unknown"]) {
     const relation = DIPLOMACY_RELATIONS[key];
-    list.append(legendSwatch(documentRef, relation.color, relation.label));
+    list.append(legendSwatch(documentRef, relation.color, relation.label, ancient));
   }
   return list;
 }
 
-function governmentLegendList(documentRef, map) {
+function governmentLegendList(documentRef, map, ancient = false) {
   const list = documentRef.createElement("div");
   list.className = "legend-list governments";
   const rows = governmentFamilyCounts(map);
   if (!rows.length) {
-    list.append(legendSwatch(documentRef, GOVERNMENT_FAMILY_LEGEND.unknown.color, "未归类"));
+    list.append(legendSwatch(documentRef, GOVERNMENT_FAMILY_LEGEND.unknown.color, "未归类", ancient));
     return list;
   }
   for (const row of rows) {
-    list.append(legendSwatch(documentRef, row.color, `${row.label} ${row.count}`));
+    list.append(legendSwatch(documentRef, row.color, `${row.label} ${row.count}`, ancient));
   }
   return list;
 }
 
-function biomeLegendList(documentRef, map) {
+function biomeLegendList(documentRef, map, ancient = false) {
   const list = documentRef.createElement("div");
   list.className = "legend-list biomes";
   for (const biome of listBiomeDescriptors(map?.climate?.biomes)) {
-    list.append(legendSwatch(documentRef, biomeColorCss(biome.color), biome.name));
+    list.append(legendSwatch(documentRef, biomeColorCss(ancient ? ancientDisplayColor(biome.color) : biome.color), biome.name));
   }
   return list;
 }
@@ -1032,11 +1037,11 @@ function governmentFamilyCounts(map) {
   }).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-CN"));
 }
 
-function legendSwatch(documentRef, color, label) {
+function legendSwatch(documentRef, color, label, ancient = false) {
   const item = documentRef.createElement("span");
   item.className = "legend-swatch-item";
   const swatch = documentRef.createElement("i");
-  swatch.style.background = color;
+  swatch.style.background = ancient ? ancientDisplayHex(color) : color;
   item.append(swatch, documentRef.createTextNode(label));
   return item;
 }

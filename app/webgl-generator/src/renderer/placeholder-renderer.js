@@ -4,6 +4,7 @@ import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {colorForCell, colorForHeight, isLandCell} from "./color-modes.js";
+import {ANCIENT_COLOR_PROJECTION_GLSL, ancientDisplayColor, ancientDisplayHex, isAncientTheme} from "./ancient-colors.js";
 import {buildCompactGridCellSurfaceGeometry, buildGridCellSurfacePatchFromBase, politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, refreshCellVisualMeshCells, summarizeCellVisualMesh} from "./cell-visual-layer.js";
 import {buildSelectionMeshBundle, drawSelectionMeshBatches, emptySelectionDrawRanges, selectionHighlightMode} from "./selection-layer.js";
@@ -401,7 +402,8 @@ function initializeWebGlResources(renderer) {
   renderer.locations = {
     position: gl.getAttribLocation(renderer.program, "a_position"), color: gl.getAttribLocation(renderer.program, "a_color"),
     scale: gl.getUniformLocation(renderer.program, "u_scale"), offset: gl.getUniformLocation(renderer.program, "u_offset"),
-    pointMode: gl.getUniformLocation(renderer.program, "u_pointMode"), surfaceSideMode: gl.getUniformLocation(renderer.program, "u_surfaceSideMode")
+    pointMode: gl.getUniformLocation(renderer.program, "u_pointMode"), surfaceSideMode: gl.getUniformLocation(renderer.program, "u_surfaceSideMode"),
+    ancientPalette: gl.getUniformLocation(renderer.program, "u_ancientPalette")
   };
   renderer.surfaceLocations = {
     position: gl.getAttribLocation(renderer.surfaceProgram, "a_position"), identity: gl.getAttribLocation(renderer.surfaceProgram, "a_packedCellIdAndSide"),
@@ -412,7 +414,8 @@ function initializeWebGlResources(renderer) {
     terrainTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_terrainTexture"), numericTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_numericTexture"),
     identityTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_identityTexture"), paletteTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_paletteTexture"),
     paletteWidth: gl.getUniformLocation(renderer.surfaceProgram, "u_paletteWidth"), heightColors: gl.getUniformLocation(renderer.surfaceProgram, "u_heightColors[0]"),
-    maxPopulation: gl.getUniformLocation(renderer.surfaceProgram, "u_maxPopulation"), oceanColor: gl.getUniformLocation(renderer.surfaceProgram, "u_oceanColor")
+    maxPopulation: gl.getUniformLocation(renderer.surfaceProgram, "u_maxPopulation"), oceanColor: gl.getUniformLocation(renderer.surfaceProgram, "u_oceanColor"),
+    ancientPalette: gl.getUniformLocation(renderer.surfaceProgram, "u_ancientPalette")
   };
   renderer.surfaceBaseBufferSet = createSurfaceBaseBufferSet(gl, new Float32Array(), {usage: gl.STATIC_DRAW});
   renderer.vertexBuffer = flattenSurfaceBaseBufferSet(renderer.surfaceBaseBufferSet)[0];
@@ -1836,6 +1839,12 @@ export class PlaceholderMapRenderer {
         item.resolvedStyle = resolvedStyle;
         item.metrics = estimateLabelTextBox(item.text, resolvedStyle);
         applyResolvedLabelStyle(item.node, resolvedStyle);
+        if (performance.now() - sliceStartedAt < budgetMs) continue;
+        await yieldToMain();
+        sliceStartedAt = performance.now();
+      }
+      for (const item of this.markerIconItems) {
+        applyMarkerIconPalette(item.node, item, this.visualTheme);
         if (performance.now() - sliceStartedAt < budgetMs) continue;
         await yieldToMain();
         sliceStartedAt = performance.now();
@@ -3329,6 +3338,7 @@ export class PlaceholderMapRenderer {
     gl.clearDepth(0.5);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.program);
+    gl.uniform1i(this.locations.ancientPalette, isAncientTheme(this.visualTheme) ? 1 : 0);
     gl.uniform1i(this.locations.pointMode, 0);
     gl.uniform1i(this.locations.surfaceSideMode, 1);
     gl.uniform1f(this.locations.scale, this.camera.scale);
@@ -3362,6 +3372,7 @@ export class PlaceholderMapRenderer {
       map: this.map,
       camera: this.camera,
       canvas: this.canvas,
+      visualTheme: this.visualTheme,
       visibility: this.layerVisibility,
       onReady: () => {
         if (this.cellMetricLayer === cellMetricLayer && this.map === cellMetricLayer.map && !this.webGlContextLost) this.draw({updateOverlay: false});
@@ -3517,6 +3528,7 @@ export class PlaceholderMapRenderer {
       canvasSize: this.canvasSize,
       timeMs: performance.now(),
       layerVisible: drawCityIcons && this.layerVisibility.cities !== false,
+      visualTheme: this.visualTheme,
       restoreState: false
     });
     gl.bindVertexArray(null);
@@ -4720,7 +4732,7 @@ export class PlaceholderMapRenderer {
       node.setAttribute("aria-label", item.tooltip);
       node.dataset.markerId = String(item.id);
       node.dataset.markerCategory = item.category || "marker";
-      applyMarkerIconPalette(node, item);
+      applyMarkerIconPalette(node, item, this.visualTheme);
       const content = documentRef.createElement("span");
       content.className = "marker-map-icon-content map-overlay-fixed-content";
       content.innerHTML = markerIconSvg(item);
@@ -4906,7 +4918,7 @@ export class PlaceholderMapRenderer {
       node.setAttribute("aria-label", item.tooltip);
       node.dataset.markerId = String(item.id);
       node.dataset.markerCategory = item.category || "marker";
-      applyMarkerIconPalette(node, item);
+      applyMarkerIconPalette(node, item, this.visualTheme);
       const content = documentRef.createElement("span");
       content.className = "marker-map-icon-content map-overlay-fixed-content";
       content.innerHTML = markerIconSvg(item);
@@ -5385,7 +5397,7 @@ export class PlaceholderMapRenderer {
 
     for (const item of this.militaryIconItems) {
       const selected = isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.MILITARY, item.id);
-      applyMilitaryLabelStatePalette(item, this.map);
+      applyMilitaryLabelStatePalette(item, this.map, this.visualTheme);
       if (this.layerVisibility.military === false || scale < item.minScale) {
         if (item.visible !== false) item.node.classList.toggle("visible", false);
         item.node.classList.toggle("buffered", false);
@@ -5676,6 +5688,7 @@ function buildUndevelopedPickResult(map, world, reason, candidates = 0) {
 function applyMapStageBackground(stage, map, theme) {
   const background = theme?.canvas?.background || map?.layers?.background;
   if (!stage) return;
+  if (stage.dataset) stage.dataset.visualTheme = theme?.id || "default";
   if (background) stage.style.backgroundColor = rgbaCss(background);
   applyVisualThemeCssVariables(stage, theme);
 }
@@ -6428,14 +6441,17 @@ function militaryIconClassName(item) {
   return classes.join(" ");
 }
 
-function applyMilitaryLabelStatePalette(item, map) {
+function applyMilitaryLabelStatePalette(item, map, theme) {
   const state = map?.politics?.states?.[item.stateId] || map?.pack?.states?.[item.stateId];
+  const ancient = isAncientTheme(theme);
   const palette = resolveMilitaryLabelPalette(state?.color);
-  if (item.stateColorValue === palette.stateColor) return;
-  item.node.style.setProperty("--military-label-bg", palette.background);
-  item.node.style.setProperty("--military-label-border", palette.border);
-  item.node.dataset.stateColor = palette.stateColor;
-  item.stateColorValue = palette.stateColor;
+  const border = ancient ? ancientDisplayHex(palette.stateColor) : palette.border;
+  const colorKey = `${ancient}:${border}`;
+  if (item.stateColorValue === colorKey) return;
+  item.node.style.setProperty("--military-label-bg", ancient ? "rgba(54, 38, 18, 0.42)" : palette.background);
+  item.node.style.setProperty("--military-label-border", border);
+  item.node.dataset.stateColor = border;
+  item.stateColorValue = colorKey;
 }
 
 function militaryObjectFromIconItem(item) {
@@ -6507,23 +6523,25 @@ function findRegiment(map, object) {
   return (state?.military || []).find(regiment => regiment.i === regimentId || regiment.id === object.id) || null;
 }
 
-function applyMarkerIconPalette(node, item) {
-  const palette = markerIconPalette(item);
+function applyMarkerIconPalette(node, item, theme) {
+  const palette = markerIconPalette(item, theme);
   node.style.setProperty("--marker-fill", palette.fill);
   node.style.setProperty("--marker-stroke", palette.stroke);
   node.style.setProperty("--marker-symbol", palette.symbol);
 }
 
-function markerIconPalette(item) {
+function markerIconPalette(item, theme) {
   const visual = item.visual || {};
-  const categoryColor = normalizedCssColor(visual.categoryColor);
+  const categoryColor = normalizedCssColor(visual.categoryColor, theme);
   const palette = MARKER_ICON_PALETTES[visual.palette] || MARKER_ICON_PALETTES[item.category] || MARKER_ICON_PALETTES.mystery;
-  return categoryColor ? {...palette, fill: categoryColor} : palette;
+  const source = categoryColor ? {...palette, fill: categoryColor} : palette;
+  return isAncientTheme(theme) ? Object.fromEntries(Object.entries(source).map(([key, color]) => [key, ancientDisplayHex(color)])) : source;
 }
 
-function normalizedCssColor(color) {
+function normalizedCssColor(color, theme) {
   if (!Array.isArray(color) || color.length < 3) return null;
-  const [r, g, b] = color.map(value => Math.round(clamp(value, 0, 1) * 255));
+  const display = isAncientTheme(theme) ? ancientDisplayColor(color) : color;
+  const [r, g, b] = display.map(value => Math.round(clamp(value, 0, 1) * 255));
   return `rgb(${r} ${g} ${b})`;
 }
 
@@ -7324,6 +7342,7 @@ function drawCellVisualCorrection(gl, renderer) {
 }
 
 function configureGpuResidentSurfaceColors(gl, renderer) {
+  gl.uniform1i(renderer.surfaceLocations.ancientPalette, isAncientTheme(renderer.visualTheme) ? 1 : 0);
   const mode = GPU_RESIDENT_COLOR_MODES[renderer.colorMode] || 0;
   const store = renderer.cellAttributeStore;
   gl.uniform1i(renderer.surfaceLocations.cellColorMode, mode && store ? mode : 0);
@@ -7349,7 +7368,7 @@ function configureGpuResidentSurfaceColors(gl, renderer) {
   gl.uniform1ui(renderer.surfaceLocations.paletteWidth, store.snapshot.palettes[paletteMode].length / 4);
   gl.uniform4fv(renderer.surfaceLocations.heightColors, surfaceHeightColorTable(renderer));
   gl.uniform1f(renderer.surfaceLocations.maxPopulation, Math.max(1, Number(renderer.map?.settlements?.metadata?.maxPopulation) || 1));
-  gl.uniform4fv(renderer.surfaceLocations.oceanColor, renderer.map?.layers?.ocean || [0.2, 0.4, 0.6, 1]);
+  gl.uniform4fv(renderer.surfaceLocations.oceanColor, renderer.visualTheme?.water?.fill || renderer.map?.layers?.ocean || [0.2, 0.4, 0.6, 1]);
   gl.activeTexture(gl.TEXTURE0);
 }
 
@@ -8808,10 +8827,12 @@ uniform float u_scale;
 uniform vec2 u_offset;
 uniform bool u_pointMode;
 uniform bool u_surfaceSideMode;
+uniform bool u_ancientPalette;
 out vec4 v_color;
+${ANCIENT_COLOR_PROJECTION_GLSL}
 
 void main() {
-  v_color = a_color;
+  v_color = u_ancientPalette ? projectAncientColor(a_color) : a_color;
   gl_PointSize = 4.0;
   float z = u_surfaceSideMode ? (a_color.a < 0.5 ? -0.5 : 0.5) : 0.0;
   gl_Position = vec4(a_position * u_scale + u_offset, z, 1.0);
@@ -8825,6 +8846,7 @@ uniform float u_scale;
 uniform vec2 u_offset;
 uniform bool u_pointMode;
 uniform bool u_surfaceSideMode;
+uniform bool u_ancientPalette;
 uniform int u_cellColorMode;
 uniform uint u_cellCount;
 uniform ivec2 u_cellTextureSize;
@@ -8837,6 +8859,7 @@ uniform vec4 u_heightColors[101];
 uniform float u_maxPopulation;
 uniform vec4 u_oceanColor;
 out vec4 v_color;
+${ANCIENT_COLOR_PROJECTION_GLSL}
 
 vec4 resolveCellColor(uint cellId) {
   if (u_cellColorMode == 0 || cellId >= u_cellCount) return a_color;
@@ -8879,7 +8902,8 @@ vec4 resolveCellColor(uint cellId) {
 
 void main() {
   uint cellId = a_packedCellIdAndSide >> 1u;
-  v_color = resolveCellColor(cellId);
+  vec4 color = resolveCellColor(cellId);
+  v_color = u_ancientPalette ? projectAncientColor(color) : color;
   gl_PointSize = 4.0;
   bool water = (a_packedCellIdAndSide & 1u) == 1u;
   float z = u_surfaceSideMode ? (water ? 0.5 : -0.5) : 0.0;

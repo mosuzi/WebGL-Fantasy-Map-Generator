@@ -1812,6 +1812,18 @@ select:disabled {
   text-shadow: 0 0 1px rgba(86, 0, 9, 0.96), 0 0 5px rgba(255, 40, 62, 0.96), 0 0 10px rgba(205, 8, 30, 0.72);
 }
 
+.map-stage[data-visual-theme="ancient"] .city-label.selected .map-label-content {
+  color: #8b5a17;
+  -webkit-text-stroke-color: rgba(255, 239, 193, 0.96);
+  text-shadow: 0 0 1px rgba(77, 48, 16, 0.96), 0 0 5px rgba(183, 125, 35, 0.86), 0 0 10px rgba(145, 91, 21, 0.65);
+}
+
+.map-stage[data-visual-theme="ancient"] .custom-label.selected .map-label-content,
+.map-stage[data-visual-theme="ancient"] .zone-label.selected .map-label-content {
+  background: rgba(71, 48, 21, 0.92);
+  color: #f3dfad;
+}
+
 .zone-label {
   max-width: 150px;
   pointer-events: none;
@@ -2235,6 +2247,14 @@ select:disabled {
   color: #d9f0ff;
 }
 
+.map-stage[data-visual-theme="ancient"] .military-map-icon--fleet {
+  color: #f1d899;
+}
+
+.map-stage[data-visual-theme="ancient"] .military-map-icon-symbol {
+  background: rgba(188, 148, 76, 0.92);
+}
+
 .military-map-icon--fleet .military-map-icon-symbol {
   background: rgba(94, 170, 222, 0.9);
 }
@@ -2288,6 +2308,12 @@ select:disabled {
   border-color: #ff2f45;
   background: rgba(255, 47, 69, 0.08);
   box-shadow: 0 0 0 2px rgba(55, 0, 8, 0.78), 0 0 16px rgba(255, 40, 62, 0.72);
+}
+
+.map-stage[data-visual-theme="ancient"] .selection-marker--city {
+  border-color: #9a681e;
+  background: rgba(154, 104, 30, 0.08);
+  box-shadow: 0 0 0 2px rgba(69, 44, 16, 0.78), 0 0 16px rgba(183, 127, 40, 0.65);
 }
 
 .floating-panel-layer {

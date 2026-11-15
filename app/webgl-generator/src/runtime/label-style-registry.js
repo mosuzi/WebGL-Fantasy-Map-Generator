@@ -1,3 +1,5 @@
+import {ancientDisplayHex, isAncientTheme} from "../renderer/ancient-colors.js";
+
 export const LABEL_STYLE_VERSION = 1;
 
 export const LABEL_STYLE_TYPE = Object.freeze({
@@ -97,7 +99,10 @@ export function resolveLabelStyle(mapOrStore, styleType, visualTheme = null) {
     ...themeStyleForType(visualTheme, styleType),
     ...override
   };
-  return Object.freeze({...resolved, fontFamily: resolveLabelFontFamily(resolved.fontFamilyId, resolved.fontFamilyName)});
+  const display = isAncientTheme(visualTheme)
+    ? {...resolved, color: ancientDisplayHex(resolved.color), strokeColor: ancientDisplayHex(resolved.strokeColor), shadowColor: ancientDisplayHex(resolved.shadowColor)}
+    : resolved;
+  return Object.freeze({...display, fontFamily: resolveLabelFontFamily(display.fontFamilyId, display.fontFamilyName)});
 }
 
 export function readLabelStyleOverride(mapOrStore, styleType) {

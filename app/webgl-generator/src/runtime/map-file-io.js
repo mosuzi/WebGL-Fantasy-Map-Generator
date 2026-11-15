@@ -1,6 +1,7 @@
 import {readObjectNote} from "./object-notes.js";
 import {markerPresentationCount, markerPresentationRecords} from "../domains/markers/presentation.js";
 import {normalizeVisualThemeDocument} from "../renderer/themes.js";
+import {ancientMetricStops} from "../renderer/ancient-colors.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
 import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
 import {PNG_FIXED_TEXT_ELEMENT_IDS, PNG_MILITARY_TEXT_SELECTOR, PNG_SEMANTIC_LABEL_SELECTORS} from "./canvas-text-contract.js";
@@ -2668,7 +2669,13 @@ function drawLegendBarElement(context, element, canvasRect, scale) {
   const box = elementBox(element, canvasRect, scale);
   if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
   const gradient = context.createLinearGradient(box.x, box.y, box.x + box.width, box.y);
-  if (element.classList.contains("precipitation")) {
+  const ancient = element.closest(".map-stage")?.dataset.visualTheme === "ancient";
+  if (ancient) {
+    const stops = ancientMetricStops(element.classList.contains("precipitation") ? "precipitation" : "temperature");
+    const css = color => `rgb(${color.slice(0, 3).map(channel => Math.round(channel * 255)).join(" ")})`;
+    gradient.addColorStop(0, css(stops[0]));
+    gradient.addColorStop(1, css(stops[1]));
+  } else if (element.classList.contains("precipitation")) {
     gradient.addColorStop(0, "#d8c179");
     gradient.addColorStop(0.52, "#75a663");
     gradient.addColorStop(1, "#1f7c8f");

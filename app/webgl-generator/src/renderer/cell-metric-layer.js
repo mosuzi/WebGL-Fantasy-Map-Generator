@@ -1,4 +1,5 @@
 import {createProgram} from "./gl-utils.js";
+import {ANCIENT_COLOR_PROJECTION_GLSL, isAncientTheme} from "./ancient-colors.js";
 
 const INSTANCE_WORDS = 4;
 const BUILD_SLICE_CELLS = 2048;
@@ -171,7 +172,7 @@ export function createCellMetricLayer(gl) {
         this.ensureReady();
       });
     },
-    draw({map, camera, canvas, visibility, onReady}) {
+    draw({map, camera, canvas, visibility, visualTheme = null, onReady}) {
       this.setMap(map);
       const populationVisible = visibility.populationColumns === true;
       const precipitationVisible = visibility.precipitationDots === true;
@@ -186,12 +187,14 @@ export function createCellMetricLayer(gl) {
       if (populationVisible && this.populationCount) {
         gl.useProgram(this.populationProgram);
         bindMetricUniforms(gl, this.populationProgram, camera, mapSize, canvas, this.maxPopulation);
+        gl.uniform1i(gl.getUniformLocation(this.populationProgram, "u_ancientPalette"), isAncientTheme(visualTheme) ? 1 : 0);
         gl.bindVertexArray(this.populationVao);
         gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.populationCount);
       }
       if (precipitationVisible && this.precipitationCount) {
         gl.useProgram(this.precipitationProgram);
         bindMetricUniforms(gl, this.precipitationProgram, camera, mapSize, canvas, this.maxPrecipitation);
+        gl.uniform1i(gl.getUniformLocation(this.precipitationProgram, "u_ancientPalette"), isAncientTheme(visualTheme) ? 1 : 0);
         gl.bindVertexArray(this.precipitationVao);
         gl.drawArraysInstanced(gl.POINTS, 0, 1, this.precipitationCount);
       }
@@ -268,7 +271,9 @@ precision highp float;
 in vec2 v_local;
 in float v_lift;
 in float v_strength;
+uniform bool u_ancientPalette;
 out vec4 outColor;
+${ANCIENT_COLOR_PROJECTION_GLSL}
 void main() {
   const float halfWidth = ${POPULATION_COLUMN_GEOMETRY.halfWidthScale.toFixed(2)};
   const float capDepth = ${POPULATION_COLUMN_GEOMETRY.capDepthScale.toFixed(2)};
@@ -293,7 +298,8 @@ void main() {
   float shadowAlpha = shadow * (1.0 - capAlpha - sideAlpha);
   float alpha = capAlpha + sideAlpha + shadowAlpha;
   vec3 color = (capColor * capAlpha + sideColor * sideAlpha + vec3(0.22, 0.16, 0.09) * shadowAlpha) / max(alpha, 0.0001);
-  outColor = vec4(color, alpha);
+  vec4 displayColor = vec4(color, alpha);
+  outColor = u_ancientPalette ? projectAncientColor(displayColor) : displayColor;
 }`;
 
 const precipitationVertexSource = `#version 300 es
@@ -322,12 +328,15 @@ void main() {
 const precipitationFragmentSource = `#version 300 es
 precision highp float;
 in float v_strength;
+uniform bool u_ancientPalette;
 out vec4 outColor;
+${ANCIENT_COLOR_PROJECTION_GLSL}
 void main() {
   vec2 fromCenter = gl_PointCoord - vec2(0.5);
   float distance = length(fromCenter);
   if (distance > 0.5) discard;
   vec3 color = mix(vec3(0.34, 0.64, 0.78), vec3(0.12, 0.45, 0.77), v_strength);
   color *= mix(1.12, 0.68, smoothstep(0.23, 0.5, distance));
-  outColor = vec4(color, 0.88 * (1.0 - smoothstep(0.42, 0.5, distance)));
+  vec4 displayColor = vec4(color, 0.88 * (1.0 - smoothstep(0.42, 0.5, distance)));
+  outColor = u_ancientPalette ? projectAncientColor(displayColor) : displayColor;
 }`;

@@ -56,10 +56,11 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   const inputBinding = options.binding || prepared.binding;
   assertRenderPreparationBinding(prepared, inputBinding);
   const binding = normalizeRenderResourceBinding(inputBinding, "preparedInstall.binding");
+  const displayPresentation = options.displayPresentation || renderer;
   assertPreparedDisplayIntent(prepared.presentation?.display, {
     binding,
-    colorMode: renderer.colorMode,
-    viewOptions: renderer.viewOptions
+    colorMode: displayPresentation.colorMode,
+    viewOptions: displayPresentation.viewOptions
   }, binding, {required: options.requireDisplayIntent === true});
   assertRenderBindingLatest(renderer, binding);
   const signal = options.signal || null;

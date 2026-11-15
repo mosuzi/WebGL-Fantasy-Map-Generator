@@ -4112,6 +4112,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     try {
       install = await prepareRendererWorkerInstall(renderer, map, prepared, {
         binding: renderRequest.binding,
+        displayPresentation: {colorMode: renderRequest.colorMode, viewOptions: renderRequest.viewOptions},
         signal: operation?.signal,
         isCurrent: isSourceCurrent,
         inPlaceSurfaceColorPatch,

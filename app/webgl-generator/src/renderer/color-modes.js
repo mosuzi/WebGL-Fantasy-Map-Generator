@@ -1,6 +1,7 @@
 import {mix} from "./geometry.js";
 import {diplomacyRelationColor} from "../generator/diplomacy.js";
 import {DEFAULT_HEIGHT_RAMP} from "./themes.js";
+import {isAncientTheme} from "./ancient-colors.js";
 
 export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode !== "height" && colorMode !== "temperature" && !isLandCell(cellIndex, map)) {
@@ -27,14 +28,14 @@ export function isLandCell(cellIndex, map) {
 
 export function colorForHeight(height, layers, viewOptions = {}) {
   const water = viewOptions.visualTheme?.water?.fill || layers.ocean;
-  if (height < 20) return viewOptions.showOceanHeight ? colorForOceanHeight(height, {...layers, ocean: water}) : water;
+  if (height < 20) return viewOptions.showOceanHeight ? colorForOceanHeight(height, water, viewOptions.visualTheme) : water;
   return viewOptions.visualTheme?.land?.fill || colorForLandHeight(height, viewOptions.visualTheme?.terrain?.heightRamp);
 }
 
-function colorForOceanHeight(height, layers) {
+function colorForOceanHeight(height, water, theme) {
   const t = Math.max(0, Math.min(1, height / 20));
-  const deep = mix(layers.ocean, [0.25, 0.37, 0.54, 1], 0.58);
-  const shelf = mix(layers.ocean, [0.62, 0.75, 0.84, 1], 0.46);
+  const deep = mix(water, isAncientTheme(theme) ? [0.43, 0.34, 0.19, 1] : [0.25, 0.37, 0.54, 1], 0.58);
+  const shelf = mix(water, isAncientTheme(theme) ? [0.87, 0.78, 0.57, 1] : [0.62, 0.75, 0.84, 1], 0.46);
   return mix(deep, shelf, t ** 0.75);
 }
 

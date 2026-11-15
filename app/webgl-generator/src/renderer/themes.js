@@ -69,9 +69,9 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
   {
     id: "ancient",
     label: "古地图",
-    canvas: {background: [0.55, 0.49, 0.36, 1]},
-    effects: {canvasFilter: "sepia(0.32) saturate(0.82) contrast(1.06) brightness(1.03)"},
-    water: {fill: [0.51, 0.62, 0.63, 1]},
+    canvas: {background: [0.78, 0.69, 0.5, 1]},
+    effects: {canvasFilter: "none"},
+    water: {fill: [0.76, 0.66, 0.46, 1]},
     lines: {
       coastline: [0.42, 0.36, 0.24, 0.46],
       lakeShore: [0.45, 0.42, 0.28, 0.4],
