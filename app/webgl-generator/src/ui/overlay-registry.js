@@ -101,10 +101,34 @@ export class OverlayRegistry {
   activate(id) {
     const entry = this.entries.get(id);
     if (!entry) return false;
+    this.assignZIndex(entry);
+    if (entry.kind === "panel") {
+      const fixedOverlays = [...this.entries.values()]
+        .filter(other => other.open && other.kind === "fixed")
+        .sort((left, right) => left.zIndex - right.zIndex);
+      for (const overlay of fixedOverlays) this.assignZIndex(overlay);
+    }
+    return true;
+  }
+
+  assignZIndex(entry) {
+    // 框架下拉候选使用更高的独立层级；长会话中将已打开浮层压回受管区间。
+    if (this.nextZIndex >= 1500) this.rebaseOpenLayers();
     entry.zIndex = this.nextZIndex++;
     entry.element.style.zIndex = String(entry.zIndex);
     entry.element.style.setProperty("--managed-overlay-z-index", String(entry.zIndex));
-    return true;
+  }
+
+  rebaseOpenLayers() {
+    const openEntries = [...this.entries.values()]
+      .filter(entry => entry.open)
+      .sort((left, right) => Number(left.kind === "fixed") - Number(right.kind === "fixed") || left.zIndex - right.zIndex);
+    this.nextZIndex = 900;
+    for (const entry of openEntries) {
+      entry.zIndex = this.nextZIndex++;
+      entry.element.style.zIndex = String(entry.zIndex);
+      entry.element.style.setProperty("--managed-overlay-z-index", String(entry.zIndex));
+    }
   }
 
   reflow(id) {

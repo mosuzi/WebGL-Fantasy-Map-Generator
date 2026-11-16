@@ -86,7 +86,7 @@ let panelDragSession = null;
 let positionObserver = null;
 let positionFrame = 0;
 
-useManagedOverlay(panel, () => Boolean(props.active), {
+useManagedOverlay(panel, () => props.active, {
   id: overlayId.value,
   onClose: () => closePanel()
 });
@@ -111,11 +111,11 @@ watch(() => props.active, active => {
 });
 
 onMounted(() => {
-  document.addEventListener("pointerdown", onDocumentPointerDown);
+  document.addEventListener("pointerdown", onDocumentPointerDown, true);
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener("pointerdown", onDocumentPointerDown);
+  document.removeEventListener("pointerdown", onDocumentPointerDown, true);
   panelDragSession?.cancel("unmount");
   removePositionListeners();
   disconnectPositionObserver();
@@ -184,7 +184,13 @@ function focusQuickInput() {
 
 function onDocumentPointerDown(event) {
   if (!props.active) return;
-  if (root.value?.contains(event.target) || panel.value?.contains(event.target)) return;
+  if (panel.value?.contains(event.target)) return;
+  if (root.value?.contains(event.target)) {
+    const action = event.target?.closest?.("button[data-action-id]");
+    if (action && !action.disabled) return;
+    closePanel();
+    return;
+  }
   if (isElementPlusOverlayTarget(event.target)) return;
   closePanel();
 }

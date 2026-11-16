@@ -163,6 +163,10 @@ const secondaryHandle = registry.register("secondary", secondary, {kind: "fixed"
 mainHandle.show({focus: false});
 secondaryHandle.show({focus: false});
 mainHandle.activate();
+assert(Number(secondary.style.zIndex) > Number(mainPanel.style.zIndex), "父面板再次激活时不得盖住已打开的二级浮层");
+for (let index = 0; index < 610; index++) mainHandle.activate();
+assert(Number(secondary.style.zIndex) > Number(mainPanel.style.zIndex), "长会话中二级浮层仍须位于父面板上方");
+assert(Number(secondary.style.zIndex) < 1500, "受管层级不能无限增长并盖住框架下拉候选");
 focusDocument.dispatchEvent(keyEvent("Escape"));
 assert.equal(secondaryCloseRequests, 1, "fixed / secondary 浮层必须先于主面板关闭");
 assert.equal(mainCloseRequests, 0, "首次 Escape 不得同时关闭主面板");

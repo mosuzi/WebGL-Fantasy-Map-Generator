@@ -14,7 +14,7 @@ export function useManagedOverlay(elementRef, openSource, {id, onClose} = {}) {
     const element = elementRef.value;
     if (!element) return;
     await waitForLayoutFrame(element.ownerDocument?.defaultView);
-    if (!readOpen() || elementRef.value !== element) return;
+    if (readOpen() !== open || elementRef.value !== element) return;
     releaseHandle({restoreFocus: false});
     handle = getOverlayRegistry(element.ownerDocument)?.register(id, element, {
       kind: "fixed",
