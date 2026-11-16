@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
 import {readFile} from "node:fs/promises";
+import {gzipSync} from "node:zlib";
 
 import {
   MAP_DOCUMENT_TYPE,
@@ -11,13 +13,74 @@ import {
   migrateMapDocument,
   migrateMapDocumentWithRegistry,
   parseMapDocument,
+  parseMapDocumentPayload,
+  parseMapDocumentPayloadAsync,
+  parseBinaryMapDocumentPayload,
   registerMapDocumentMigrator,
-  stringifyMapDocument
+  stringifyMapDocument,
+  validateMapDocumentForExport
 } from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {BROWSER_MAP_STORAGE_TYPE, BROWSER_MAP_STORAGE_VERSION, decodeBrowserMapStoragePayload} from "../app/webgl-generator/src/runtime/browser-map-storage.js";
+import {createHeadlessMapApi, loadHeadlessMapDocument} from "../app/webgl-generator/src/runtime/headless-map-api.js";
+import {encodeWebfmgV3Document} from "../app/webgl-generator/src/runtime/webfmg-v3-container.js";
 import {ensureLabelStore} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
 
 const fixtureText = await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8");
 const migrated = parseMapDocument(fixtureText);
+const legacyV2Text = await readFile(new URL("./fixtures/webgl-map-v2-legacy-city.json", import.meta.url), "utf8");
+const legacyV2Source = JSON.parse(legacyV2Text);
+assert.equal(legacyV2Source.version, 2, "历史 v2 夹具的文档版本被改写");
+assert.equal(legacyV2Source.metadata.mapSchemaVersion, 2, "历史 v2 夹具的地图 schema 被改写");
+assert.equal(legacyV2Source.map.pack.burgs[1], undefined, "历史 v2 夹具必须保留缺失 burg 的旧形态");
+const legacyV2Original = structuredClone(legacyV2Source);
+const oldCity = legacyV2Source.map.settlements.cities[0];
+function assertLegacyV2Result(document, route) {
+  assert.equal(document.version, MAP_DOCUMENT_VERSION, `${route} 未迁移到当前文档版本`);
+  assert.equal(document.map.metadata.schemaVersion, MAP_SCHEMA_VERSION, `${route} 未迁移到当前地图 schema`);
+  assert.ok(document.map.grid.cells.h instanceof Uint8Array, `${route} 丢失高度数组类型`);
+  assert.deepEqual([...document.map.grid.cells.h], [12, 33, 40], `${route} 改写了高度数据`);
+  const city = document.map.settlements.cities[0];
+  assert.deepEqual([city.name, city.population, city.culture, city.visual.shape],
+    [oldCity.name, oldCity.population, oldCity.culture, oldCity.visual.shape], `${route} 改写了旧城市自有资料`);
+  assert.equal(document.map.pack.burgs[1]?.cityId, 0, `${route} 未补齐旧城镇记录`);
+  assert.equal(document.map.pack.cells.burg[1], 1, `${route} 未补齐 pack cell 镜像`);
+  assert.equal(document.map.grid.cells.burg[1], 0, `${route} 未补齐 grid cell 镜像`);
+  validateMapDocumentForExport(document);
+}
+const legacyV2 = parseMapDocument(legacyV2Text);
+assertLegacyV2Result(legacyV2, "完整 JSON");
+const view = {defaultView: globalThis};
+assertLegacyV2Result(await parseMapDocumentPayload(view, legacyV2Text), "公开导入入口");
+assertLegacyV2Result(await parseBinaryMapDocumentPayload(view, gzipSync(legacyV2Text)), "旧压缩 JSON");
+const legacyV2BinarySource = JSON.parse(legacyV2Text, (_key, value) => {
+  const Constructor = value?.__webglGeneratorTypedArray && globalThis[value.__webglGeneratorTypedArray];
+  return typeof Constructor === "function" ? new Constructor(value.data || []) : value;
+});
+assertLegacyV2Result(await parseBinaryMapDocumentPayload(view, gzipSync(encodeWebfmgV3Document(legacyV2BinarySource))), "WEBFMG3 旧文档");
+const frozenHistoricalBinary = await readFile(new URL("./fixtures/webgl-map-v2-legacy-city-0.2.12.webfmg", import.meta.url));
+assert.equal(createHash("sha256").update(frozenHistoricalBinary).digest("hex"), "afdfcdc9b040db4c73e080266c902aacdb97bdf577591e1ff8e8ffc714164a46", "历史二进制夹具被改写");
+assertLegacyV2Result(await parseBinaryMapDocumentPayload(view, frozenHistoricalBinary), "0.2.12 冻结 WEBFMG3");
+assertLegacyV2Result(await parseBinaryMapDocumentPayload(view, gzipSync(frozenHistoricalBinary)), "0.2.12 冻结压缩 WEBFMG3");
+const futureContainer = encodeWebfmgV3Document(legacyV2BinarySource).slice();
+new DataView(futureContainer.buffer, futureContainer.byteOffset, futureContainer.byteLength).setUint16(10, MAP_SCHEMA_VERSION + 1, true);
+for (const [route, load] of [
+  ["WEBFMG3 同步解码", () => parseBinaryMapDocumentPayload(view, futureContainer)],
+  ["WEBFMG3 异步解码", () => parseMapDocumentPayloadAsync(view, futureContainer)],
+  ["WEBFMG3 压缩解码", () => parseBinaryMapDocumentPayload(view, gzipSync(futureContainer))]
+]) {
+  await assert.rejects(load, error => error?.code === "map_schema_version_unsupported" && error?.details?.scope === "container", `${route} 静默降级未来 schema`);
+}
+for (const encoded of [
+  {encoding: "plain", data: legacyV2Text},
+  {encoding: "gzip-base64", data: gzipSync(legacyV2Text).toString("base64")}
+]) {
+  const envelope = JSON.stringify({type: BROWSER_MAP_STORAGE_TYPE, version: BROWSER_MAP_STORAGE_VERSION, savedAt: "2026-07-10T00:00:00.000Z", ...encoded});
+  const decoded = await decodeBrowserMapStoragePayload(view, envelope);
+  assertLegacyV2Result(await parseMapDocumentPayload(view, decoded), `浏览器 ${encoded.encoding}`);
+}
+const legacyV2Saved = createMapDocument(legacyV2.map, legacyV2.options);
+assertLegacyV2Result(parseMapDocument(stringifyMapDocument(legacyV2Saved)), "升级后保存回读");
+assert.deepEqual(legacyV2Source, legacyV2Original, "迁移改写了历史夹具输入");
 const legacyHeaderOnly = JSON.parse(fixtureText, (_key, value) => {
   const Constructor = value?.__webglGeneratorTypedArray && globalThis[value.__webglGeneratorTypedArray];
   return typeof Constructor === "function" ? new Constructor(value.data || []) : value;
@@ -27,6 +90,16 @@ legacyHeaderOnly.metadata.documentIdentityVersion = 1;
 const migratedLegacyHeaderOnly = migrateMapDocument(legacyHeaderOnly);
 assert.equal(migratedLegacyHeaderOnly.metadata.documentId, "legacy-header-only:1", "v1 header-only identity 没有保留");
 assert.equal(migratedLegacyHeaderOnly.map.metadata.documentId, "legacy-header-only:1", "v1 header-only identity 没有在 normalization 前传给 map");
+const objectV1 = await parseMapDocumentPayload(view, legacyHeaderOnly);
+const objectV2 = await parseMapDocumentPayload(view, legacyV2);
+for (const [route, document] of [["v1 对象导入", objectV1], ["v2 对象导入", objectV2]]) {
+  assert.ok(document.map.grid.cells.h instanceof Uint8Array, `${route} 把 typed array 降成普通对象`);
+  assert.deepEqual([...document.map.grid.cells.h], route.startsWith("v1") ? [12, 20, 48] : [12, 33, 40], `${route} 改写了高度数据`);
+  assert.equal(createHeadlessMapApi(document).terrain.get().data.height.count, 3, `${route} 无头读取丢失高度数据`);
+}
+const headlessV1 = loadHeadlessMapDocument(legacyHeaderOnly);
+assert.ok(headlessV1.map.grid.cells.h instanceof Uint8Array, "无头对象载入把旧 v1 typed array 降成普通对象");
+assert.equal(createHeadlessMapApi(headlessV1).terrain.get().data.height.count, 3, "无头对象载入后高度统计丢失");
 
 assert.equal(MAP_DOCUMENT_VERSION, 2);
 assert.equal(MAP_SCHEMA_VERSION, 2);
@@ -68,6 +141,19 @@ assert.deepEqual([...currentRoundtrip.map.grid.cells.h], [20, 21], "v2 stringify
 
 assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 3, map: {}}), /暂不支持的地图格式版本：3/);
 assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 1}), /缺少 map 数据/);
+for (const [scope, metadata] of [
+  ["document", {document: true, map: false}],
+  ["map", {document: false, map: true}],
+  ["document", {document: true, map: true}]
+]) {
+  const futureSchema = structuredClone(current);
+  if (metadata.document) futureSchema.metadata.mapSchemaVersion = MAP_SCHEMA_VERSION + 1;
+  if (metadata.map) futureSchema.map.metadata.schemaVersion = MAP_SCHEMA_VERSION + 1;
+  assert.throws(() => migrateMapDocument(futureSchema), error => error?.code === "map_schema_version_unsupported" && error?.details?.scope === scope, "未来 schema 不得降级导入");
+}
+const futureExportMap = structuredClone(current.map);
+futureExportMap.metadata.schemaVersion = MAP_SCHEMA_VERSION + 1;
+assert.throws(() => createMapDocument(futureExportMap, current.options), error => error?.code === "map_schema_version_unsupported" && error?.details?.scope === "map", "未来 schema 不得降级导出");
 const incompleteV2 = structuredClone(current);
 delete incompleteV2.map.labels.hidden.city;
 delete incompleteV2.map.labels.hidden.state;

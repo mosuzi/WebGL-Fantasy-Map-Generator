@@ -44,6 +44,7 @@ import {
   encodeWebfmgV3Document,
   gunzipWebfmgV3Bytes,
   gzipWebfmgV3Bytes,
+  inspectWebfmgV3Container,
   isWebfmgV3Bytes
 } from "./webfmg-v3-container.js";
 
@@ -73,6 +74,7 @@ const TYPED_ARRAYS = Object.freeze({
 
 export function createMapDocument(map, options = {}, presentation = {}) {
   if (!map) throw new Error("当前没有可导出的地图");
+  assertSupportedMapSchemaVersion(map.metadata?.schemaVersion, "map");
   const documentOptions = {...(options || {})};
   const display = documentOptions.display;
   delete documentOptions.display;
@@ -155,7 +157,7 @@ export async function parseMapDocumentPayloadWithAdoptionBytes(documentRef, payl
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("地图导入文档必须是 JSON 字符串、对象、File/Blob 或 gzip-base64 payload");
   }
-  return {document: parseMapDocument(JSON.stringify(payload)), adoptionBytes: null};
+  return {document: parseMapDocument(stringifyMapDocument(payload)), adoptionBytes: null};
 }
 
 export async function parseMapDocumentPayloadAsync(documentRef, payload, options = {}) {
@@ -175,6 +177,7 @@ export async function parseMapDocumentPayloadAsync(documentRef, payload, options
         : new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength);
     const decodedBytes = isGzipBytes(bytes) ? await gunzipWebfmgV3Bytes(bytes, view) : bytes;
     if (isWebfmgV3Bytes(decodedBytes)) {
+      assertSupportedWebfmgSchemaVersion(decodedBytes);
       const document = await decodeWebfmgV3DocumentAsync(decodedBytes, options);
       return migrateMapDocument(document);
     }
@@ -227,11 +230,13 @@ async function parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, sourc
       ? new Uint8Array(source)
       : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
   if (isWebfmgV3Bytes(bytes)) {
+    assertSupportedWebfmgSchemaVersion(bytes);
     return {document: migrateMapDocument(decodeWebfmgV3Document(bytes)), adoptionBytes: bytes};
   }
   if (isGzipBytes(bytes)) {
     const decompressed = await gunzipWebfmgV3Bytes(bytes, view);
     if (isWebfmgV3Bytes(decompressed)) {
+      assertSupportedWebfmgSchemaVersion(decompressed);
       return {document: migrateMapDocument(decodeWebfmgV3Document(decompressed)), adoptionBytes: decompressed};
     }
     return {document: parseMapDocument(new view.TextDecoder().decode(decompressed)), adoptionBytes: null};
@@ -257,6 +262,8 @@ export function validateMapDocumentForExport(document) {
 }
 
 export function migrateMapDocument(document) {
+  assertSupportedMapSchemaVersion(document?.metadata?.mapSchemaVersion, "document");
+  assertSupportedMapSchemaVersion(document?.map?.metadata?.schemaVersion, "map");
   const identityPrepared = preparePersistedDocumentIdentityMigration(document);
   const versioned = migrateMapDocumentWithRegistry(identityPrepared, {
     targetVersion: MAP_DOCUMENT_VERSION,
@@ -303,6 +310,22 @@ export function migrateMapDocument(document) {
   diagnoseSettlementPortTopology(migrated.map);
   validateCurrentMapDocument(migrated);
   return migrated;
+}
+
+function assertSupportedWebfmgSchemaVersion(bytes) {
+  if (bytes.byteLength < 16) return;
+  assertSupportedMapSchemaVersion(inspectWebfmgV3Container(bytes).schemaVersion, "container");
+}
+
+function assertSupportedMapSchemaVersion(value, scope) {
+  const version = Number(value);
+  if (!Number.isInteger(version) || version <= MAP_SCHEMA_VERSION) return;
+  const error = new Error(`暂不支持的地图 schema 版本：${version}`);
+  error.code = "map_schema_version_unsupported";
+  error.stage = "migrate-document";
+  error.suggestion = "请使用支持该版本的生成器打开文件。";
+  error.details = {scope, sourceVersion: version, supportedVersion: MAP_SCHEMA_VERSION};
+  throw error;
 }
 
 function preparePersistedDocumentIdentityMigration(document) {

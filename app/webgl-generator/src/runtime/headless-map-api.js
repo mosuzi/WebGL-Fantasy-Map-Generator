@@ -1,6 +1,6 @@
 import {apiCall} from "./api-result.js";
 import {getCellAtPoint, getCellNeighbors, getCellSnapshot, queryCells, scanCells} from "./cell-query-api.js";
-import {parseMapDocument, parseMapDocumentPayload} from "./map-file-io.js";
+import {parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
 import {getObjectSnapshot, listObjectSnapshots, listObjectTypes, queryObjectSnapshots} from "./object-query-api.js";
 import {getPlannerRecipe, listPlannerRecipes} from "./planner-recipe-registry.js";
 import {buildMapSummary} from "./read-only-map-core.js";
@@ -87,7 +87,7 @@ function headlessPlaceAnalysisOptions(map, options = {}) {
 export function loadHeadlessMapDocument(input) {
   if (typeof input === "string") return parseMapDocument(input);
   if (!input || typeof input !== "object") throw codedError("invalid_document", "必须提供地图文档对象或 JSON 文本");
-  return parseMapDocument(JSON.stringify(input));
+  return parseMapDocument(stringifyMapDocument(input));
 }
 
 export async function loadHeadlessMapDocumentPayload(payload) {

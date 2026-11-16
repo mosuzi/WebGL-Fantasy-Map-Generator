@@ -1,0 +1,52 @@
+{
+  "type": "webgl-generator-map",
+  "version": 2,
+  "exportedAt": "2026-07-10T00:00:00.000Z",
+  "app": "fmg-webgl-reimplementation",
+  "metadata": {
+    "seed": "legacy-v2-city",
+    "checksum": "legacy-v2-city-checksum",
+    "mapSchemaVersion": 2
+  },
+  "options": {
+    "seed": "legacy-v2-city",
+    "visualTheme": "ancient"
+  },
+  "map": {
+    "metadata": {
+      "seed": "legacy-v2-city",
+      "checksum": "legacy-v2-city-checksum",
+      "schemaVersion": 2
+    },
+    "options": {
+      "seed": "legacy-v2-city",
+      "visualTheme": "ancient"
+    },
+    "grid": {
+      "points": [[0, 0], [1, 0], [2, 0]],
+      "cells": {
+        "i": [0, 1, 2],
+        "h": {"__webglGeneratorTypedArray": "Uint8Array", "data": [12, 33, 40]},
+        "f": [0, 1, 1],
+        "burg": [-1, -1, -1]
+      }
+    },
+    "features": {"features": [{"i": 0, "land": false}, {"i": 1, "land": true}]},
+    "pack": {
+      "cells": {
+        "i": [0, 1, 2],
+        "g": [0, 1, 2],
+        "h": [12, 33, 40],
+        "f": [0, 1, 1],
+        "burg": [0, 0, 0]
+      },
+      "features": [{"i": 0, "land": false}, {"i": 1, "land": true}],
+      "burgs": [null],
+      "routes": []
+    },
+    "settlements": {
+      "cities": [{"id": 0, "burgId": 1, "name": "旧港", "cell": 1, "packCell": 1, "x": 1, "y": 0, "state": 0, "population": 123, "culture": 7, "visual": {"shape": "circle"}}],
+      "routes": []
+    }
+  }
+}
