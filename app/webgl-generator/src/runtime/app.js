@@ -18961,7 +18961,7 @@ function scheduleCityPopulationPointRefresh(state, documentRef, map) {
     } catch (error) {
       if (error?.code === "operation_cancelled") return;
       state.healthMonitor?.record?.("city-population-refresh", {message: error?.message || String(error)}, "error");
-      setFileOperationStatus(documentRef, `城市已移动，但人口点后台刷新失败：${error?.message || "未知错误"}`);
+      setFileOperationStatus(documentRef, "城市已移动，但人口显示未能更新。");
     }
   };
   const queueIdle = () => {
