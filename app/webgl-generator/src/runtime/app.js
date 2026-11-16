@@ -557,7 +557,7 @@ const extraCanvasToolFeedbackIds = canvasToolFeedbackIds.filter(modeId => !CANVA
 if (missingCanvasToolFeedbackIds.length || extraCanvasToolFeedbackIds.length) {
   throw new Error(`画布模式提示契约与模式分母不一致：missing=${missingCanvasToolFeedbackIds.join(",")} extra=${extraCanvasToolFeedbackIds.join(",")}`);
 }
-export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
+export async function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
   const mapRevision = new MapRevisionTracker();
@@ -730,6 +730,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const refreshBrushCursor = () => state.brushCursorPreview?.refresh();
   const generationPanel = createGenerationPanel(documentRef, panelManager);
   state.panels.generation = generationPanel;
+  await generationPanel.ready;
   state.panels.development = createDevelopmentPanel(documentRef, panelManager);
   state.panels.climate = createClimatePanel(documentRef, panelManager, {
     onInspectDownstreamRebuild: options => runtimeActions.climate.inspectDownstreamRebuild(options),
@@ -2717,6 +2718,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.panels.zone = zonePanel;
+  await new Promise(resolve => setTimeout(resolve, 0));
   const renderer = new PlaceholderMapRenderer(canvas, viewChange => {
     if (state.map) {
       if (viewChange?.phase !== "preview") {
@@ -2736,7 +2738,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   }, selection => {
     if (state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT)) return;
     selectionStore.setSelection(selection);
-  });
+  }, {deferWebGlResources: true});
+  await renderer.initializeWebGlResourcesForStartup();
   state.renderer = renderer;
   state.riverEdit.session = createRiverWaypointSession({
     onDraftChange: draft => {

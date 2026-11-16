@@ -10,6 +10,19 @@
     <link rel="icon" href="./app-icon-64.png?v=265" sizes="64x64" type="image/png" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png?v=265" sizes="180x180" />
     <link rel="manifest" href="./site.webmanifest?v=265" />
+    <script>
+      window.__webglGeneratorModuleFailure = null;
+      window.addEventListener("error", event => {
+        const script = event.target;
+        const moduleLoad = script?.tagName === "SCRIPT" && script.type === "module";
+        const source = moduleLoad ? script.src : event.filename || "";
+        const appExecution = Boolean(event.error && source && new URL(source, location.href).origin === location.origin
+          && /\/(?:assets|src)\//.test(new URL(source, location.href).pathname));
+        if (!moduleLoad && !appExecution) return;
+        window.__webglGeneratorModuleFailure = {source, reason: moduleLoad ? "module-load" : "module-execution"};
+        window.__webglGeneratorReportModuleFailure?.();
+      }, true);
+    </script>
     <style>
       .app-loading-screen {
         position: fixed;
@@ -560,21 +573,29 @@
         }
       };
       window.__webglGeneratorPrebootHealth.record("document-boot", {readyState: document.readyState});
+      window.__webglGeneratorReportModuleFailure = () => {
+        if (window.__webglGeneratorApp || !window.__webglGeneratorModuleFailure) return null;
+        const startupLoading = document.getElementById("app-loading-screen");
+        const alreadyReported = startupLoading?.dataset.state === "error";
+        if (startupLoading) startupLoading.dataset.state = "error";
+        const message = window.__webglGeneratorModuleFailure.reason === "module-execution"
+          ? "地图画卷启动失败，请刷新页面后重试。"
+          : "地图画卷未能载入，请检查网络后刷新页面。";
+        const startupStatus = document.getElementById("app-loading-status");
+        if (startupStatus) startupStatus.textContent = message;
+        const status = document.getElementById("app-status");
+        if (status) status.textContent = message;
+        if (!alreadyReported) window.__webglGeneratorPrebootHealth.record("module-load-failed", window.__webglGeneratorModuleFailure, "error");
+        return message;
+      };
+      window.__webglGeneratorReportModuleFailure();
       window.setTimeout(() => {
         if (window.__webglGeneratorApp) return;
         const startupLoading = document.getElementById("app-loading-screen");
         const startupStatus = document.getElementById("app-loading-status");
-        if (startupLoading?.dataset.state !== "error") {
-          if (startupLoading) startupLoading.dataset.state = "error";
-          if (startupStatus) startupStatus.textContent = "脚本尚未启动，请检查网络或浏览器脚本设置";
-        }
-        const loading = document.getElementById("generation-loading");
-        const loadingText = document.getElementById("generation-loading-text");
-        if (loadingText) loadingText.textContent = "星图未启";
-        if (loading) loading.hidden = false;
-        const status = document.getElementById("app-status");
-        if (status) status.textContent = "脚本尚未启动，请检查 DevTools 是否暂停或禁用 JavaScript";
-        window.__webglGeneratorPrebootHealth.record("script-not-started", {timeoutMs: 3000}, "error");
+        if (startupLoading?.dataset.state !== "loading") return;
+        if (startupStatus) startupStatus.textContent = "正在载入地图资源，请稍候";
+        window.__webglGeneratorPrebootHealth.record("module-load-delayed", {timeoutMs: 3000});
       }, 3000);
     </script>
     <!-- __FMG_CLOUD_PROVIDER_CONFIG__ -->

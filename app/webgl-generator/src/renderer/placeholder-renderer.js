@@ -392,13 +392,33 @@ const WEBGL_INITIALIZED_RESOURCE_KEYS = Object.freeze([
   "vertexBuffer", "cellVisualCorrectionBufferSet", ...WEBGL_DIRECT_BUFFER_KEYS
 ]);
 
-function initializeWebGlResources(renderer) {
+function initializeWebGlProgram(renderer) {
   const gl = renderer.gl;
   renderer.program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
+}
+
+function initializeWebGlSurfaceProgram(renderer) {
+  const gl = renderer.gl;
   renderer.surfaceProgram = createProgram(gl, surfaceVertexShaderSource, fragmentShaderSource);
+}
+
+function initializeWebGlCityIcons(renderer) {
+  const gl = renderer.gl;
   renderer.cityIconLayer = createCityIconWebglLayer(gl);
+}
+
+function initializeWebGlCellMetrics(renderer) {
+  const gl = renderer.gl;
   renderer.cellMetricLayer = createCellMetricLayer(gl);
+}
+
+function initializeWebGlBorderHaze(renderer) {
+  const gl = renderer.gl;
   renderer.stateBorderHazeCompositor = createStateBorderHazeCompositor(gl, renderer.canvas);
+}
+
+function initializeWebGlBindingsAndBuffers(renderer) {
+  const gl = renderer.gl;
   renderer.locations = {
     position: gl.getAttribLocation(renderer.program, "a_position"), color: gl.getAttribLocation(renderer.program, "a_color"),
     scale: gl.getUniformLocation(renderer.program, "u_scale"), offset: gl.getUniformLocation(renderer.program, "u_offset"),
@@ -421,6 +441,53 @@ function initializeWebGlResources(renderer) {
   renderer.vertexBuffer = flattenSurfaceBaseBufferSet(renderer.surfaceBaseBufferSet)[0];
   renderer.cellVisualCorrectionBufferSet = createCellVisualCorrectionBufferSet(gl, new Float32Array(), gl.STATIC_DRAW);
   for (const key of WEBGL_DIRECT_BUFFER_KEYS) renderer[key] = gl.createBuffer();
+}
+
+const WEBGL_RESOURCE_STAGES = [
+  initializeWebGlProgram,
+  initializeWebGlSurfaceProgram,
+  initializeWebGlCityIcons,
+  initializeWebGlCellMetrics,
+  initializeWebGlBorderHaze,
+  initializeWebGlBindingsAndBuffers
+];
+
+function initializeWebGlResources(renderer) {
+  for (const stage of WEBGL_RESOURCE_STAGES) stage(renderer);
+}
+
+function assertStartupWebGlContext(renderer, generation) {
+  if (renderer.webGlContextLossGeneration === generation && !renderer.webGlContextLost && !renderer.gl.isContextLost?.()) return;
+  const error = new Error("启动期间 WebGL 上下文发生重建");
+  error.code = "render-startup-context-retry";
+  throw error;
+}
+
+async function initializeWebGlResourcesForStartup(renderer, generation) {
+  // 着色器和图标层在不同任务创建；上下文恢复仍使用同步路径以维持原有事务语义。
+  for (const stage of WEBGL_RESOURCE_STAGES) {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assertStartupWebGlContext(renderer, generation);
+    stage(renderer);
+    assertStartupWebGlContext(renderer, generation);
+  }
+}
+
+function waitForStartupWebGlContextRestored(renderer) {
+  if (!renderer.webGlContextLost && !renderer.gl.isContextLost?.()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const onRestored = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      renderer.canvas.removeEventListener("webglcontextrestored", onRestored);
+      const error = new Error("启动期间 WebGL 上下文未能恢复");
+      error.code = "render-startup-context-timeout";
+      reject(error);
+    }, DEBUG_CONTEXT_RESTORE_TIMEOUT_MS);
+    renderer.canvas.addEventListener("webglcontextrestored", onRestored, {once: true});
+  });
 }
 
 function captureInitializedWebGlResources(renderer) {
@@ -480,7 +547,7 @@ function invalidateInitializedWebGlResources(renderer) {
 }
 
 export class PlaceholderMapRenderer {
-  constructor(canvas, onViewChange = () => {}, onHover = () => {}, onSelect = () => {}) {
+  constructor(canvas, onViewChange = () => {}, onHover = () => {}, onSelect = () => {}, {deferWebGlResources = false} = {}) {
     this.canvas = canvas;
     this.stage = canvas.closest?.(".map-stage") || canvas.parentElement || null;
     this.overlay = canvas.parentElement?.querySelector("#map-overlay") || null;
@@ -497,7 +564,7 @@ export class PlaceholderMapRenderer {
     });
     if (!this.gl) throw new Error("当前浏览器不支持 WebGL2");
 
-    initializeWebGlResources(this);
+    if (!deferWebGlResources) initializeWebGlResources(this);
     this.cityMovePreviewCanvas = null;
     this.cityMovePreviewGl = null;
     this.cityMovePreviewLayer = null;
@@ -736,13 +803,42 @@ export class PlaceholderMapRenderer {
       getViewportSize: () => ({width: this.canvasSize.cssWidth, height: this.canvasSize.cssHeight})
     });
     this.webGlContextLost = false;
-    this.webGlContextResourceState = "ready";
+    this.webGlContextLossGeneration = 0;
+    this.startupWebGlResourcesPending = false;
+    this.webGlContextResourceState = deferWebGlResources ? "initializing" : "ready";
     this.webGlContextRestorePromise = null;
     this.debugContextLossPromise = null;
     this.lastWebGlContextRestoreError = null;
     this.webGlContextLifecycleInstalled = false;
     this.installWebGlContextLifecycleHandlers();
-    this.installDisplayResizeObserver();
+    if (!deferWebGlResources) this.installDisplayResizeObserver();
+  }
+
+  async initializeWebGlResourcesForStartup() {
+    this.startupWebGlResourcesPending = true;
+    try {
+      for (;;) {
+        const generation = this.webGlContextLossGeneration;
+        try {
+          await initializeWebGlResourcesForStartup(this, generation);
+          this.webGlContextResourceState = "ready";
+          this.retainedResourceState = "empty";
+          this.lastRetainedResourceOwnerError = null;
+          this.lastSurfaceResourceOwnerError = null;
+          this.installDisplayResizeObserver();
+          return;
+        } catch (error) {
+          const contextChanged = error?.code === "render-startup-context-retry"
+            || this.webGlContextLossGeneration !== generation || this.webGlContextLost || this.gl.isContextLost?.();
+          cleanupInitializedWebGlResources(this.gl, captureInitializedWebGlResources(this));
+          invalidateInitializedWebGlResources(this);
+          if (!contextChanged) throw error;
+          await waitForStartupWebGlContextRestored(this);
+        }
+      }
+    } finally {
+      this.startupWebGlResourcesPending = false;
+    }
   }
 
   installWebGlContextLifecycleHandlers() {
@@ -769,11 +865,17 @@ export class PlaceholderMapRenderer {
 
   handleWebGlContextLost(event) {
     event?.preventDefault?.();
+    this.webGlContextLossGeneration += 1;
     this.webGlContextLost = true;
     this.webGlContextResourceState = "lost";
   }
 
   handleWebGlContextRestored() {
+    if (this.startupWebGlResourcesPending) {
+      this.webGlContextLost = false;
+      this.webGlContextResourceState = "initializing";
+      return Promise.resolve();
+    }
     if (this.webGlContextRestorePromise) return this.webGlContextRestorePromise;
     const operation = this.restoreWebGlContextUntilCurrent().catch(error => {
       this.lastWebGlContextRestoreError = error;

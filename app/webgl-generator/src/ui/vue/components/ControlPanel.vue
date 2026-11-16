@@ -2,7 +2,7 @@
   <UiTabs v-model="activeTab" :tabs="tabs" />
 
   <div class="control-panel-tab-panels">
-    <div class="control-panel-section project-about-panel" data-control-panel="about" :hidden="activeTab !== 'about'">
+    <div v-if="startupTabCount >= 1" class="control-panel-section project-about-panel" data-control-panel="about" :hidden="activeTab !== 'about'">
       <section class="project-about-card" aria-labelledby="project-about-title">
         <h2 id="project-about-title">WebGL 地图生成器</h2>
         <p>
@@ -179,7 +179,7 @@
       </Teleport>
     </div>
 
-    <div class="generation-panel-form" data-control-panel="generation" :hidden="activeTab !== 'generation'">
+    <div v-if="startupTabCount >= 2" class="generation-panel-form" data-control-panel="generation" :hidden="activeTab !== 'generation'">
       <div class="generation-map-name-control">
         <UiField label="地图名称" input-id="map-name-input" model-value="未命名地图" :input-attrs="{autocomplete: 'off', maxlength: 120}" />
         <ElButton
@@ -381,7 +381,7 @@
       </div>
     </div>
 
-    <div class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">
+    <div v-if="startupTabCount >= 3" class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">
       <UiSelectField label="视觉主题" input-id="visual-theme-preset" :model-value="preferences.visualTheme" :options="visualThemePresetOptions" />
       <section class="visual-theme-editor" aria-labelledby="visual-theme-editor-title">
         <div class="visual-theme-editor-header">
@@ -426,7 +426,7 @@
       <p class="preference-toggle-note">“海岸与格边平滑”处理海岸、湖岸与单元格边缘；“整图外框柔化”只控制整张地图四周的渐隐。国界颜色过渡请在“样式”中调整。</p>
     </div>
 
-    <div class="control-panel-section label-style-panel" data-control-panel="styles" :hidden="activeTab !== 'styles'">
+    <div v-if="startupTabCount >= 4" class="control-panel-section label-style-panel" data-control-panel="styles" :hidden="activeTab !== 'styles'">
       <section class="style-scope-navigation" aria-labelledby="style-scope-navigation-title">
         <strong id="style-scope-navigation-title">编辑内容</strong>
         <UiSegmented
@@ -515,7 +515,7 @@
       </section>
     </div>
 
-    <div class="control-panel-section unit-control-panel" data-control-panel="units" :hidden="activeTab !== 'units'">
+    <div v-if="startupTabCount >= 5" class="control-panel-section unit-control-panel" data-control-panel="units" :hidden="activeTab !== 'units'">
       <section class="unit-settings unit-settings-standalone" aria-labelledby="unit-settings-title">
         <h2 id="unit-settings-title">显示单位</h2>
         <input id="area-unit" type="hidden" :value="unitPreferences.areaUnit" />
@@ -617,7 +617,7 @@
       </section>
     </div>
 
-    <div class="control-panel-section" data-control-panel="layers" :hidden="activeTab !== 'layers'">
+    <div v-if="startupTabCount >= 6" class="control-panel-section" data-control-panel="layers" :hidden="activeTab !== 'layers'">
       <section
         v-for="group in layerGroups"
         :key="group.id"
@@ -660,7 +660,7 @@
       />
     </div>
 
-    <div class="control-panel-section management-panel" data-control-panel="management" :hidden="activeTab !== 'management'">
+    <div v-if="startupTabCount >= 7" class="control-panel-section management-panel" data-control-panel="management" :hidden="activeTab !== 'management'">
       <section
         v-for="group in managementGroups"
         :key="group.id"
@@ -799,6 +799,15 @@ const CUSTOM_UNIT_RECYCLE_STORAGE_KEY = "webgl-generator-custom-unit-recycle-v1"
 const customUnitCanRestore = ref(Boolean(readCustomUnitRecycleRecord()));
 const CONTROL_PANEL_TAB_IDS = Object.freeze(["about", "generation", "themes", "styles", "layers", "management", "units"]);
 const activeTab = ref(normalizeControlPanelTab(preferences.value.controlPanelTab));
+const startupTabCount = ref(1);
+let resolveStartupTabsReady;
+let rejectStartupTabsReady;
+const startupTabsReady = new Promise((resolve, reject) => {
+  resolveStartupTabsReady = resolve;
+  rejectStartupTabsReady = reject;
+});
+let startupTabsCancelled = false;
+defineExpose({startupTabsReady});
 const exportPanelOpen = ref(false);
 const saveFilenameSettingsOpen = ref(false);
 const selectedMapTemplateId = ref("");
@@ -1653,9 +1662,20 @@ onMounted(() => {
   handleRuntimeOperationChanged({detail: globalThis.window?.__webglGeneratorApp?.runtimeOperationSnapshot || {}});
   window.addEventListener("resize", handleExportPanelReposition);
   window.addEventListener("scroll", handleExportPanelReposition, true);
+  // 旧运行时按 DOM id 绑定七页控件；逐页挂载后再通知绑定，避免一次渲染全部隐藏页。
+  void (async () => {
+    for (let count = 2; count <= 7; count += 1) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (startupTabsCancelled) break;
+      startupTabCount.value = count;
+      await nextTick();
+    }
+  })().then(resolveStartupTabsReady, rejectStartupTabsReady);
 });
 
 onBeforeUnmount(() => {
+  startupTabsCancelled = true;
+  resolveStartupTabsReady();
   document.removeEventListener("click", handleExportPanelOutsideClick, true);
   document.removeEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
   document.removeEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);

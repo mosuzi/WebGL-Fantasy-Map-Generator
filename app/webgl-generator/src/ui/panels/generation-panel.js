@@ -15,9 +15,10 @@ export function createGenerationPanel(documentRef, manager) {
   panelRecord.body.replaceChildren(root);
   const app = createApp(ControlPanel);
   app.use(pinia);
-  app.mount(root);
+  const component = app.mount(root);
 
   return {
+    ready: component.startupTabsReady,
     open() {
       manager.open("generation-panel");
     },

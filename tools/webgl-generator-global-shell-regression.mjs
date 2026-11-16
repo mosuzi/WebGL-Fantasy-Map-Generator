@@ -88,11 +88,15 @@ assert.equal(count(loadingMarkup, /class="app-loading-landscape app-loading-land
 assert.match(loadingMarkup, /class="app-loading-progress" aria-hidden="true"/, "加载页缺少非百分比进度装饰");
 assert.match(indexSource, /\.app-loading-screen\.is-leaving\s*\{/, "画卷加载页没有保留离场生命周期样式");
 assert.match(indexSource, /\.app-loading-screen\[data-state="error"\] \.app-loading-status/, "画卷加载页没有保留错误态样式");
-assert.match(indexSource, /startupLoading\?\.dataset\.state !== "error"/, "预启动超时会覆盖已经记录的真实启动错误");
+assert.match(indexSource, /startupLoading\?\.dataset\.state !== "loading"\) return;/, "延迟入口不得把已有错误或就绪状态覆盖为加载中");
+assert.match(indexSource, /module-load-delayed/, "入口延迟缺少可诊断的非终态记录");
+assert.match(indexSource, /module-load-failed/, "模块加载失败缺少独立的错误记录");
+assert.match(indexSource, /module-execution/, "模块执行失败缺少独立的错误记录");
+assert.doesNotMatch(indexSource, /script-not-started/, "入口延迟仍会被误报为脚本未启动");
 assert.match(viteSource, /html\.replaceAll\("__FMG_APP_VERSION__", packageJson\.version\)/, "构建没有从根 package.json 注入版本号");
 assert.match(mainSource, /updateStartupLoadingStatus\(document, "正在展开地图画卷"\)/, "主模块装配没有使用当前启动加载文案");
-assert.match(mainSource, /failStartupLoading\(document, error\)/, "同步启动失败没有保留错误加载页");
-assert.match(mainSource, /status\.textContent = startupFailureMessage\(error\)/, "普通 app status 没有复用雅化启动错误");
+assert.match(mainSource, /failStartupLoading\(document, error\)/, "启动失败没有保留错误加载页");
+assert.match(mainSource, /status\.textContent = moduleFailureMessage \|\| startupFailureMessage\(error\)/, "普通 app status 没有复用雅化启动错误或模块失败提示");
 assert.doesNotMatch(mainSource, /status\.textContent = `启动失败：\$\{message\}`/, "普通 app status 仍直接显示原始启动异常");
 assert.match(panelSource, /if \(visible\) updateStartupLoadingStatus\(documentRef, message\)/, "生成与恢复阶段没有同步到启动加载页");
 assert.match(appSource, /completeStartupLoading\(documentRef\);\s+updateGenerationLoading\(documentRef, false\);/, "地图 ready 没有关闭启动加载页");
