@@ -8741,11 +8741,22 @@ function selectedNamebaseTargetLabel(target) {
 
 const SELECTION_PANEL_HANDLERS = Object.freeze({
   [OBJECT_KIND.STATE]: (state, selection, editingObject, context) => {
-    return routeSelectionToPanel(state, selection, context, {
+    const governmentOpen = Boolean(state.panels.government?.isOpen?.());
+    if (governmentOpen && context.sourcePanelId !== "government-panel") {
+      state.panels.government.setSelectedStateId(selection.object.id);
+      updateGovernmentPanel(state);
+    }
+    if (context.sourcePanelId === "government-panel" && state.panels.state?.isOpen?.()) {
+      state.panels.state.setTargetStateId(selection.object.id);
+      updateStatePanel(state);
+    }
+    const handled = routeSelectionToPanel(state, selection, context, {
       panel: state.panels.state,
       prepare: () => state.panels.state.setTargetStateId(selection.object.id),
       update: () => updateStatePanel(state)
     });
+    if (governmentOpen) state.panels.objectDetails.clear();
+    return handled || governmentOpen;
   },
   [OBJECT_KIND.CITY]: (state, selection, editingObject, context) => {
     return routeSelectionToPanel(state, selection, context, {
@@ -9011,6 +9022,14 @@ function handleSelectionPanel(state, selection, editingObject, context) {
   if (object.kind === OBJECT_KIND.STATE && shouldSwitchDiplomacySubjectForSelection(state)) {
     state.panels.objectDetails.clear();
     setDiplomacyThemeSubject(state, context.documentRef, object.id);
+    if (state.panels.state?.isOpen?.() && context.sourcePanelId !== "state-panel") {
+      state.panels.state.setTargetStateId(object.id);
+      updateStatePanel(state);
+    }
+    if (state.panels.government?.isOpen?.() && context.sourcePanelId !== "government-panel") {
+      state.panels.government.setSelectedStateId(object.id);
+      updateGovernmentPanel(state);
+    }
     return true;
   }
   return SELECTION_PANEL_HANDLERS[object.kind]?.(state, selection, editingObject, context) || false;

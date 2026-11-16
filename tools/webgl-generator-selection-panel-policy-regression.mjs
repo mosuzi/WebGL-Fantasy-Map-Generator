@@ -57,7 +57,7 @@ assert.doesNotMatch(handlerSource, /updateOrOpenSelectionPanel|updateExistingSel
 assert.match(handlerSource, /decideSelectionPanelRoute\(/, "所有领域选择必须经过统一纯策略");
 assert.match(handlerSource, /route === SELECTION_PANEL_ROUTE\.OBJECT_DETAILS\) return false/, "关闭面板必须交给对象详情兜底");
 assert.match(handlerSource, /route === SELECTION_PANEL_ROUTE\.SOURCE_PANEL\) return true/, "来源面板必须避免重复刷新");
-assert.match(appSource, /selectionStore\.setSelection\(\{object\}, \{sourcePanelId: panelId\}\)/, "列表选择必须保留 sourcePanelId");
+assert.match(appSource, /selectionStore\.setSelection\(\{object: nextObject\}, \{sourcePanelId: panelId\}\)/, "列表选择必须保留 sourcePanelId");
 assert.match(appSource, /sourcePanelId = panelId[\s\S]*?if \(sourcePanelId\) selectFromPanel\(sourcePanelId, object\)/, "定位必须保留来源面板语义");
 assert.match(appSource, /object\.kind === OBJECT_KIND\.STATE && shouldSwitchDiplomacySubjectForSelection\(state\)/, "外交着色主题下的国家主体切换例外必须保留");
 assert.match(handlerSource, /context\.suppressNextRiverPanelOpen[\s\S]*?context\.clearRiverSuppressor\(\)/, "河流面板主动关闭抑制必须保留");

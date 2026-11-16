@@ -54,8 +54,11 @@ export function buildSelectionMeshBundle(map, camera, canvas, selection, locateF
   pushRiverWaypointPreview(landMaskedVertices, ordinaryVertices, context, riverWaypointPreview);
   const ordinaryCount = ordinaryVertices.length / 6;
   const landMaskedCount = landMaskedVertices.length / 6;
+  const vertices = new Float32Array(landMaskedVertices.length + ordinaryVertices.length);
+  vertices.set(landMaskedVertices);
+  vertices.set(ordinaryVertices, landMaskedVertices.length);
   return {
-    vertices: new Float32Array([...landMaskedVertices, ...ordinaryVertices]),
+    vertices,
     drawRanges: {
       landMasked: {first: 0, count: landMaskedCount},
       ordinary: {first: landMaskedCount, count: ordinaryCount}
@@ -323,14 +326,32 @@ function pushPoliticalSelectionMesh(vertices, context, selection, locateFlash, o
   const {map} = context;
   const field = POLITICAL_OBJECT_FIELD[selection.kind] || POLITICAL_OBJECT_FIELD[OBJECT_KIND.REGION];
   const color = overrideColor || locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[selection.kind] || SELECTION_HIGHLIGHT_COLORS[OBJECT_KIND.REGION];
+  const width = map.metadata.graphWidth;
+  const height = map.metadata.graphHeight;
+  const {scale, offsetX, offsetY} = context.camera;
+  const [red, green, blue, alpha] = color;
   for (let cellIndex = 0; cellIndex < map.grid.cells.v.length; cellIndex++) {
     if (map.grid.cells[field][cellIndex] !== selection.id) continue;
     const vertexIds = map.grid.cells.v[cellIndex];
     if (vertexIds.length < 3) continue;
-    const center = worldToScreenPixel(context, map.grid.points[map.grid.cells.p[cellIndex]]);
+    const center = map.grid.points[map.grid.cells.p[cellIndex]];
+    const centerX = ((center[0] / width) * 2 - 1) * scale + offsetX;
+    const centerY = (1 - (center[1] / height) * 2) * scale + offsetY;
+    const first = map.grid.vertices.p[vertexIds[0]];
+    let currentX = ((first[0] / width) * 2 - 1) * scale + offsetX;
+    let currentY = (1 - (first[1] / height) * 2) * scale + offsetY;
     for (let index = 0; index < vertexIds.length; index++) {
       const nextIndex = (index + 1) % vertexIds.length;
-      pushScreenTriangle(vertices, context, center, worldToScreenPixel(context, map.grid.vertices.p[vertexIds[index]]), worldToScreenPixel(context, map.grid.vertices.p[vertexIds[nextIndex]]), color);
+      const next = map.grid.vertices.p[vertexIds[nextIndex]];
+      const nextX = ((next[0] / width) * 2 - 1) * scale + offsetX;
+      const nextY = (1 - (next[1] / height) * 2) * scale + offsetY;
+      vertices.push(
+        centerX, centerY, red, green, blue, alpha,
+        currentX, currentY, red, green, blue, alpha,
+        nextX, nextY, red, green, blue, alpha
+      );
+      currentX = nextX;
+      currentY = nextY;
     }
   }
 }

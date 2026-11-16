@@ -190,7 +190,9 @@ const governmentHighlightActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中国家 ${formatNumber(selectedGovernmentStateRows.value.length)}`, icon: "◉", disabled: !selectedGovernmentStateRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
 ]);
-const selectedState = computed(() => findByObjectId(selectedStateRows.value, props.state.selectedStateId) || selectedStateRows.value[0] || null);
+const selectedState = computed(() => props.state.selectedStateId === null || props.state.selectedStateId === undefined
+  ? selectedStateRows.value[0] || null
+  : findByObjectId(selectedStateRows.value, props.state.selectedStateId) || null);
 const batchGovernmentOptions = computed(() => GOVERNMENT_OPTIONS
   .filter(option => option.value !== selectedGovernmentKey.value)
   .map(option => ({
@@ -234,7 +236,7 @@ const detailRows = computed(() => selectedGovernment.value ? [
 ] : []);
 
 watch(selectedGovernmentKey, key => {
-  if (key && key !== props.state.selectedGovernmentKey) callbacks.onSelectGovernment?.({key});
+  if (key && key !== props.state.selectedGovernmentKey && props.state.selectedStateId == null) callbacks.onSelectGovernment?.({key});
   syncBatchGovernmentKey();
 });
 

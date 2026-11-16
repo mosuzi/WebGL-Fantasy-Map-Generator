@@ -177,7 +177,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
       syncPanelHighlightCount(panelState, callbacks);
-      if (panelState.targetStateId === null) panelState.targetStateId = firstStateId(map);
+      if (!stateExists(map, panelState.targetStateId)) panelState.targetStateId = firstStateId(map);
       panelState.open = true;
       panelState.version++;
       manager.open("state-panel");
@@ -209,7 +209,9 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     },
     setTargetStateId(stateId) {
       const normalized = normalizeStateId(stateId);
-      panelState.targetStateId = stateExists(panelState.map, normalized) ? normalized : panelState.targetStateId;
+      if (normalized === null || normalized === undefined) return;
+      // 关闭的面板可能仍缓存上一张地图，打开或更新时再按当前地图校验目标。
+      panelState.targetStateId = normalized;
     },
     setActive(active) {
       const nextActive = Boolean(active);

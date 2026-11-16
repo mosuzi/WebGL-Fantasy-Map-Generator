@@ -63,11 +63,12 @@ try {
     await page.setViewportSize({width: viewport.width, height: viewport.height});
     await page.waitForTimeout(80);
     const layout = await inspectCityActions(page);
-    assert.deepEqual(layout.labels, ["定位", "打开城市管理", "名称库改名", "编辑名称"], `${viewport.label} 城市详情动作不完整或顺序错误`);
-    assert.deepEqual(layout.rowCounts, [2, 2], `${viewport.label} 城市详情动作没有形成两列两行`);
-    assert.equal(layout.gridColumns, 2, `${viewport.label} 城市详情没有固定为两列`);
+    assert.deepEqual(layout.labels, ["定位到地图", "打开城市管理", "名称库改名", "编辑名称"], `${viewport.label} 城市详情动作不完整或顺序错误`);
+    assert.equal(layout.display, "flex", `${viewport.label} 城市详情动作未按内容宽度排列`);
+    assert.equal(layout.flexWrap, "wrap", `${viewport.label} 城市详情动作不能整颗换行`);
     assert.equal(layout.horizontalOverflow, 0, `${viewport.label} 城市详情动作发生横向溢出`);
     assert.equal(layout.clippedButtons.length, 0, `${viewport.label} 城市详情按钮文字被裁切：${layout.clippedButtons.join("、")}`);
+    assert.deepEqual(layout.overlapPairs, [], `${viewport.label} 城市详情按钮相互重叠`);
     layouts.push({...viewport, ...layout});
   }
 
@@ -79,11 +80,11 @@ try {
   await page.getByRole("button", {name: "打开城市管理", exact: true}).click();
   const cityPanel = page.locator('.floating-panel[data-panel-id="city-panel"]:not(.hidden)');
   await cityPanel.waitFor({state: "visible"});
-  await cityPanel.locator(".object-table-row.selected-row").waitFor({state: "visible"});
+  await cityPanel.locator('.object-table-row[aria-current="true"]').waitFor({state: "visible"});
   const opened = await page.evaluate(cityId => ({
     selection: window.webglGeneratorApi.selection.get().data.selection,
     panelOpen: window.__webglGeneratorApp.panels.city.isOpen(),
-    selectedRowText: document.querySelector('.floating-panel[data-panel-id="city-panel"]:not(.hidden) .object-table-row.selected-row')?.textContent?.trim() || "",
+    selectedRowText: document.querySelector('.floating-panel[data-panel-id="city-panel"]:not(.hidden) .object-table-row[aria-current="true"]')?.textContent?.trim() || "",
     cityId
   }), fixture.city.id);
   assert.equal(opened.selection?.object?.kind, "city", "打开城市管理后丢失城市 selection");
@@ -120,14 +121,15 @@ async function selectObject(page, object) {
 
 async function inspectCityActions(page) {
   return page.evaluate(() => {
-    const actions = document.querySelector('.floating-panel[data-panel-id="object-details"]:not(.hidden) .object-details-actions-city');
+    const actions = document.querySelector('.floating-panel[data-panel-id="object-details"]:not(.hidden) .object-details-actions');
     if (!actions) throw new Error("城市对象详情缺少专属动作容器");
     const buttons = [...actions.querySelectorAll("button")];
     const rects = buttons.map(button => ({
-      label: button.textContent?.trim() || "",
+      label: button.getAttribute("aria-label") || button.textContent?.trim() || "",
       top: button.getBoundingClientRect().top,
       left: button.getBoundingClientRect().left,
-      width: button.getBoundingClientRect().width
+      width: button.getBoundingClientRect().width,
+      height: button.getBoundingClientRect().height
     }));
     const rows = [];
     for (const rect of rects) {
@@ -136,15 +138,27 @@ async function inspectCityActions(page) {
       else rows.push({top: rect.top, items: [rect]});
     }
     const computed = getComputedStyle(actions);
+    const overlapPairs = [];
+    for (let left = 0; left < rects.length; left++) {
+      for (let right = left + 1; right < rects.length; right++) {
+        const a = rects[left], b = rects[right];
+        if (Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left) > 1
+          && Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top) > 1) {
+          overlapPairs.push([a.label, b.label]);
+        }
+      }
+    }
     const clippedButtons = buttons
       .filter(button => button.scrollWidth > button.clientWidth + 1)
       .map(button => button.textContent?.trim() || "");
     return {
       labels: rects.map(rect => rect.label),
       rowCounts: rows.sort((a, b) => a.top - b.top).map(row => row.items.length),
-      gridColumns: computed.gridTemplateColumns.split(" ").filter(Boolean).length,
+      display: computed.display,
+      flexWrap: computed.flexWrap,
       horizontalOverflow: Math.max(0, actions.scrollWidth - actions.clientWidth),
       clippedButtons,
+      overlapPairs,
       width: actions.getBoundingClientRect().width,
       buttonWidths: rects.map(rect => Math.round(rect.width * 10) / 10)
     };
