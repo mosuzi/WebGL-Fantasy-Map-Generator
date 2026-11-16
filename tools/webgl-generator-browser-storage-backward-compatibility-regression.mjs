@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
 import {createReadStream, existsSync, statSync} from "node:fs";
+import {readFile} from "node:fs/promises";
 import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
@@ -32,6 +34,9 @@ const finalReport = {
   ok: false,
   url: "http://" + host + ":" + port + "?healthClear=1",
   restored: null,
+  currentRestore: null,
+  fileImport: null,
+  legacyWebfmgImport: null,
   missingBurgRestore: null,
   failedRestore: null,
   screenshotPath,
@@ -48,6 +53,9 @@ const finalReport = {
 const compactReport = {
   ok: false,
   restored: null,
+  currentRestore: null,
+  fileImport: null,
+  legacyWebfmgImport: null,
   missingBurgRestore: null,
   failedRestore: null,
   screenshot: {path: screenshotPath, exists: false, bytes: 0},
@@ -76,6 +84,29 @@ try {
     else consoleErrors.push(message.text());
   });
   page.on("pageerror", error => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    window.__mapUpgradeNotices = [];
+    window.__mapUpgradeConfirmCalls = [];
+    window.confirm = message => {
+      window.__mapUpgradeConfirmCalls.push(String(message));
+      return false;
+    };
+    document.addEventListener("DOMContentLoaded", () => {
+      const loading = document.getElementById("generation-loading");
+      const toast = document.getElementById("map-toast");
+      const capture = () => {
+        const opening = loading && !loading.hidden && loading.textContent.includes("旧卷待整");
+        const completed = toast && !toast.hidden && toast.textContent.includes("旧卷已依今制修整");
+        const phase = opening ? "opening" : completed ? "completed" : "";
+        if (!phase || window.__mapUpgradeNotices.at(-1)?.phase === phase) return;
+        window.__mapUpgradeNotices.push({phase, seed: window.__webglGeneratorApp?.map?.metadata?.seed || null});
+      };
+      for (const element of [loading, toast]) {
+        if (element) new MutationObserver(capture).observe(element, {attributes: true, childList: true, characterData: true, subtree: true});
+      }
+      capture();
+    }, {once: true});
+  });
   await page.goto("http://" + host + ":" + port + "?healthClear=1", {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 45000);
   evidence.mark("browser-evaluation", {active: "browser-storage-compatibility", complete: "browser-start"});
@@ -83,6 +114,7 @@ try {
   await page.reload({waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 45000);
   startupBaselineLongTasks.push(...await collectTask350LongTaskWindow(page, "clean-reload-control"));
+  assert.deepEqual(await page.evaluate(() => window.__mapUpgradeNotices), [], "无旧档的启动错误显示升级提示");
   await resetTask350LongTaskWindow(page);
 
   const legacyPreparation = await page.evaluate(async key => {
@@ -165,7 +197,9 @@ try {
       customUnitsAvailable: Array.isArray(map.display?.units?.customUnits),
       rawStorageUnchanged: localStorage.getItem(key) === raw,
       diagnostic: window.__webglGeneratorApp.lastMapImportDiagnostic,
-      status: document.getElementById("file-operation-status")?.textContent || ""
+      status: document.getElementById("file-operation-status")?.textContent || "",
+      upgradeNotices: window.__mapUpgradeNotices,
+      upgradeConfirmCalls: window.__mapUpgradeConfirmCalls
     };
   }, {key: storageKey, raw: legacyPreparation.raw});
   await page.screenshot({path: screenshotPath, fullPage: true});
@@ -193,6 +227,42 @@ try {
   assert.equal(restored.rawStorageUnchanged, true, "成功恢复时浏览器原始存档被改写");
   assert.equal(restored.diagnostic, null, "成功恢复旧 v2 存档时产生了导入诊断");
   assert.match(restored.status, /已恢复浏览器保存的地图/, "成功恢复旧 v2 存档后缺少状态反馈");
+  assert.equal(restored.upgradeNotices.some(item => item.phase === "opening" && item.seed !== restored.seed), true, "旧存档未在地图替换前显示整理提示");
+  assert.equal(restored.upgradeNotices.some(item => item.phase === "completed"), true, "旧存档整理成功后没有显示完成提示");
+  assert.deepEqual(restored.upgradeConfirmCalls, [], "旧存档升级弹出了确认框");
+
+  const savedCurrent = await page.evaluate(async () => window.webglGeneratorApi.data.saveBrowserMap());
+  assert.equal(savedCurrent?.ok, true, "当前存档保存失败");
+  await page.reload({waitUntil: "domcontentloaded"});
+  await page.waitForFunction(seed => window.__webglGeneratorApp?.map?.metadata?.seed === seed, legacyPreparation.expected.seed);
+  await waitForApiReady(page, 45000);
+  const currentRestore = await page.evaluate(() => ({notices: window.__mapUpgradeNotices, confirms: window.__mapUpgradeConfirmCalls}));
+  finalReport.currentRestore = currentRestore;
+  compactReport.currentRestore = currentRestore;
+  assert.deepEqual(currentRestore.notices, [], "当前版本存档打开时错误显示升级提示");
+  assert.deepEqual(currentRestore.confirms, [], "当前版本存档恢复弹出了确认框");
+
+  await page.evaluate(() => {
+    const exported = window.webglGeneratorApi.data.exportMap({download: false, includeText: true});
+    if (!exported?.ok) throw new Error(exported?.error?.message || "旧文件准备失败");
+    const document = JSON.parse(exported.data.text);
+    delete document.map.notes;
+    window.__legacyImportFile = new File([JSON.stringify(document)], "旧图.json", {type: "application/json"});
+  });
+  await resetTask350LongTaskWindow(page);
+  const fileImport = await page.evaluate(async () => {
+    window.__mapUpgradeNotices.length = 0;
+    const result = await window.webglGeneratorApi.data.importMap(window.__legacyImportFile, {confirm: true, source: "ui", toast: false});
+    return {ok: result?.ok, notices: window.__mapUpgradeNotices, confirms: window.__mapUpgradeConfirmCalls,
+      timings: result?.data?.timings || result?.timings || null};
+  });
+  const fileImportLongTasks = await collectTask350LongTaskWindow(page, "legacy-file-import");
+  finalReport.fileImport = fileImport;
+  compactReport.fileImport = fileImport;
+  assert.equal(fileImport.ok, true, "旧文件没有自动整理并打开");
+  assert.deepEqual(fileImport.notices.map(item => item.phase), ["opening", "completed"], "旧文件打开时缺少完整升级提示");
+  assert.deepEqual(fileImport.confirms, [], "旧文件升级弹出了确认框");
+  assert.equal(fileImport.timings?.workerTask?.canonicalDecodeMs, 0, "旧 JSON 文件仍在主线程完整解码");
 
   const missingBurgPreparation = await page.evaluate(async key => {
     const exported = window.webglGeneratorApi.data.exportMap({download: false, includeText: true});
@@ -207,7 +277,7 @@ try {
     const bytes = new Uint8Array(await new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
     let binary = "";
     for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-    const raw = JSON.stringify({type: "webgl-generator-local-map-storage", version: 1, savedAt: "2026-11-16T00:00:00.000Z", originalBytes: text.length,
+    const raw = JSON.stringify({type: "webgl-generator-local-map-storage", version: 1, savedAt: new Date(Date.now() + 60_000).toISOString(), originalBytes: text.length,
       metadata: {seed: document.map.metadata.seed}, encoding: "gzip-base64", data: btoa(binary), bytes: bytes.length});
     localStorage.setItem(key, raw);
     return {raw, cityId: city.id, burgId: city.burgId, name: city.name, population: city.population};
@@ -221,7 +291,8 @@ try {
     const city = map.settlements.cities[preparation.cityId];
     const burg = map.pack.burgs[preparation.burgId];
     return {name: city.name, population: city.population, burgCityId: burg.cityId, gridMirror: map.grid.cells.burg[city.cell], packMirror: map.pack.cells.burg[city.packCell], rawUnchanged: localStorage.getItem(key) === preparation.raw,
-      diagnostic: window.__webglGeneratorApp.lastMapImportDiagnostic, detailDisplay: getComputedStyle(document.getElementById("file-operation-error-details")).display};
+      diagnostic: window.__webglGeneratorApp.lastMapImportDiagnostic, detailDisplay: getComputedStyle(document.getElementById("file-operation-error-details")).display,
+      upgradeNotices: window.__mapUpgradeNotices, upgradeConfirmCalls: window.__mapUpgradeConfirmCalls};
   }, {key: storageKey, preparation: missingBurgPreparation});
   finalReport.missingBurgRestore = missingBurgRestore;
   compactReport.missingBurgRestore = missingBurgRestore;
@@ -235,6 +306,8 @@ try {
   assert.equal(missingBurgRestore.rawUnchanged, true, "旧档恢复覆盖了原始浏览器存档");
   assert.equal(missingBurgRestore.diagnostic, null, "可修复旧档产生了失败诊断");
   assert.equal(missingBurgRestore.detailDisplay, "none", "普通模式显示了技术诊断");
+  assert.deepEqual(missingBurgRestore.upgradeNotices.map(item => item.phase), ["opening", "completed"], "旧城镇缺失同版修复没有完整升级提示");
+  assert.deepEqual(missingBurgRestore.upgradeConfirmCalls, [], "同版城镇修复弹出了确认框");
 
   const directExportGuard = await page.evaluate(({burgId}) => {
     const map = window.__webglGeneratorApp.map;
@@ -251,10 +324,33 @@ try {
   compactReport.directExportGuard = directExportGuard;
   assert.deepEqual(directExportGuard, {ok: false, code: "settlement_cell_identity_invalid", hasText: false}, "直接 JSON 导出不得绕过保存身份校验");
 
+  const playableLegacyBinary = await readFile(new URL("./fixtures/webgl-map-v2-playable-legacy-notes.webfmg", import.meta.url));
+  assert.equal(createHash("sha256").update(playableLegacyBinary).digest("hex"), "e0418f77d6aff1b5bc5e93926542b69bf242d2ee03672c7d84c1aac87393ded3", "完整旧结构 WEBFMG3 夹具被改写");
+  await page.waitForFunction(() => document.getElementById("map-toast")?.hidden === true);
+  await page.evaluate(base64 => {
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    window.__legacyWebfmgFile = new File([bytes], "旧图.webfmg", {type: "application/gzip"});
+  }, playableLegacyBinary.toString("base64"));
+  await resetTask350LongTaskWindow(page);
+  const legacyWebfmgImport = await page.evaluate(async () => {
+    window.__mapUpgradeNotices.length = 0;
+    const result = await window.webglGeneratorApi.data.importMap(window.__legacyWebfmgFile, {confirm: true, source: "ui", toast: false});
+    return {ok: result?.ok, error: result?.error || null, notices: window.__mapUpgradeNotices,
+      confirms: window.__mapUpgradeConfirmCalls, gridCells: window.__webglGeneratorApp.map?.grid?.points?.length || 0};
+  });
+  const legacyWebfmgLongTasks = await collectTask350LongTaskWindow(page, "legacy-webfmg-import");
+  finalReport.legacyWebfmgImport = legacyWebfmgImport;
+  compactReport.legacyWebfmgImport = legacyWebfmgImport;
+  assert.equal(legacyWebfmgImport.ok, true, `完整旧结构 WEBFMG3 打开失败：${legacyWebfmgImport.error?.message || ""}`);
+  assert.equal(legacyWebfmgImport.gridCells, 10004, "旧结构 WEBFMG3 地图规模未恢复");
+  assert.deepEqual(legacyWebfmgImport.notices.map(item => item.phase), ["opening", "completed"], "完整旧结构 WEBFMG3 未显示完整升级提示");
+  assert.deepEqual(legacyWebfmgImport.confirms, [], "完整旧结构 WEBFMG3 升级弹出了确认框");
+
   const corruptRaw = JSON.stringify({
     type: "webgl-generator-local-map-storage",
     version: 1,
-    savedAt: "2026-01-02T00:00:00.000Z",
+    savedAt: new Date(Date.now() + 60_000).toISOString(),
     originalBytes: 12,
     metadata: {seed: "corrupt-browser-save"},
     encoding: "plain",
@@ -271,7 +367,8 @@ try {
     generatedSeed: window.__webglGeneratorApp.map?.metadata?.seed || "",
     status: document.getElementById("file-operation-status")?.textContent || "",
     detailDisplay: getComputedStyle(document.getElementById("file-operation-error-details")).display,
-    diagnosticSource: window.__webglGeneratorApp.lastMapImportDiagnostic?.source
+    diagnosticSource: window.__webglGeneratorApp.lastMapImportDiagnostic?.source,
+    upgradeNotices: window.__mapUpgradeNotices
   }), {key: storageKey, raw: corruptRaw});
   const corruptReloadLongTasks = await collectTask350LongTaskWindow(page, "corrupt-restore");
   reloadLongTasks.push(...corruptReloadLongTasks);
@@ -284,6 +381,7 @@ try {
   assert.equal(failedRestore.status, "", "普通菜单仍显示了恢复错误");
   assert.equal(failedRestore.detailDisplay, "none", "普通菜单仍显示了技术诊断");
   assert.equal(failedRestore.diagnosticSource, "browser-storage", "浏览器存档被误标成 API 文档");
+  assert.deepEqual(failedRestore.upgradeNotices, [], "损坏存档错误宣称升级完成");
   await page.evaluate(() => { window.__webglGeneratorDebug.enabled = true; });
   await page.waitForFunction(() => getComputedStyle(document.getElementById("file-operation-error-details")).display !== "none");
   assert.match(await page.locator("#file-operation-error-details").textContent(), /来源：浏览器保存的地图/);
@@ -298,6 +396,8 @@ try {
     sharedStartupLongTasks.push(...partition.sharedStartup);
     longTasks.push(...partition.active);
   }
+  longTasks.push(...fileImportLongTasks);
+  longTasks.push(...legacyWebfmgLongTasks);
   const performance = summarizeTask350LongTasks(longTasks, 200);
   finalReport.performance = performance;
   compactReport.performance = performance;

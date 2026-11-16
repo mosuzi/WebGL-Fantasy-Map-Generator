@@ -2,6 +2,7 @@ import {
   createCompressedMapTextBlob,
   createMapDocument,
   createMapGeoJson,
+  getMapDocumentUpgradeInfo,
   parseMapDocument,
   parseMapDocumentPayloadWithAdoptionBytes,
   stringifyMapDocument,
@@ -81,8 +82,11 @@ async function importMapFile(payload, context) {
 
   reportTaskProgress(context, "parse", 0.45, "解析、迁移并校验地图文档");
   const parseStartedAt = taskNow();
-  const parsed = await parseImportSource(source, payload);
+  const parsed = await parseImportSource(source, payload, {
+    onUpgrade: () => reportTaskProgress(context, "upgrade", 0.5, "旧卷待整，正依今制重理山河")
+  });
   const parsedDocument = parsed.document;
+  const upgrade = getMapDocumentUpgradeInfo(parsedDocument);
   const parseMs = roundTaskMs(taskNow() - parseStartedAt);
   await taskCheckpoint(context);
 
@@ -112,6 +116,7 @@ async function importMapFile(payload, context) {
       binding: context.binding || null,
       handoff: adoptionPackage?.handoff || null,
       canonicalDocumentMode: adoptionPackage ? "handoff" : "parallel-main-decode",
+      upgrade,
       preparedRender,
       metadata: createWholeMapDocumentMetadata(document),
       timings: {
@@ -141,6 +146,7 @@ async function importMapFile(payload, context) {
     binding: context.binding || null,
     document,
     map: document.map,
+    upgrade,
     preparedRender,
     metadata: createWholeMapDocumentMetadata(document),
     timings: {parseMs, renderPrepareMs, totalMs: roundTaskMs(taskNow() - startedAt)}
@@ -257,13 +263,13 @@ function normalizeImportSource(payload) {
   return source;
 }
 
-async function parseImportSource(source, payload) {
+async function parseImportSource(source, payload, options = {}) {
   const view = runtimeView();
   const decodedBrowserStorage = await decodeBrowserMapStorageImportPayload({defaultView: view}, source);
   if (decodedBrowserStorage !== source) {
-    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, decodedBrowserStorage);
+    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, decodedBrowserStorage, options);
   }
-  if (typeof source === "string") return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, source);
+  if (typeof source === "string") return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, source, options);
   if (isBinarySource(source)) {
     const bytes = binarySourceBytes(source);
     if (source?.kind === "bytes" && !isBinarySourceValue(bytes)) throw new Error("地图存档字节 packet 缺少有效 bytes");
@@ -275,15 +281,15 @@ async function parseImportSource(source, payload) {
       || isCompressedMapDocumentFilename(filename)
       || /gzip/i.test(String(payload.mimeType || source.type || source.mimeType || ""));
     if (compressed && !/gzip/i.test(blob.type)) {
-      return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, new view.Blob([blob], {type: "application/gzip"}));
+      return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, new view.Blob([blob], {type: "application/gzip"}), options);
     }
-    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, blob);
+    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, blob, options);
   }
   if (source?.encoding === "plain" || source?.encoding === "gzip-base64" || typeof source?.base64 === "string") {
-    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, source);
+    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, source, options);
   }
   if (typeof source === "object" && !Array.isArray(source)) {
-    return {document: parseMapDocument(stringifyMapDocument(source)), adoptionBytes: null};
+    return {document: parseMapDocument(stringifyMapDocument(source), options), adoptionBytes: null};
   }
   throw new Error("地图存档输入必须是 JSON、File/Blob、字节或分片字符串");
 }

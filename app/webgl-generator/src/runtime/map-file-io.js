@@ -12,13 +12,13 @@ import {backfillEconomyDisplayProperties, normalizeEconomyDisplayMap} from "../g
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {backfillProvinceNames} from "../generator/province-naming.js";
 import {normalizeDiplomacyMap} from "./diplomacy-map-compatibility.js";
-import {normalizeUnitPreferences} from "../ui/display-units.js";
+import {DEFAULT_UNIT_PREFERENCES, normalizeUnitPreferences} from "../ui/display-units.js";
 import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../generator/ocean-currents.js";
 import {normalizeRiverNetwork} from "../generator/river-network.js";
 import {normalizeRiverControlPoints} from "./river-control-points.js";
 import {isSharedCubicCurve, normalizeRiverVisualCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {normalizeLakeOverflowDiagnostics} from "../generator/lake-overflow.js";
-import {normalizeRegenerationLockStore, validateRegenerationLockStore} from "./regeneration-locks.js";
+import {REGENERATION_LOCK_VERSION, normalizeRegenerationLockStore, validateRegenerationLockStore} from "./regeneration-locks.js";
 import {normalizeZoneMap, resolveZoneContext} from "./zone-context.js";
 import {normalizeZoneTypeRecord} from "./zone-types.js";
 import {
@@ -57,6 +57,14 @@ export const GEOJSON_RANGE_MODES = Object.freeze(["full", "viewport", "bbox"]);
 const PNG_OVERLAY_DEFAULTS = Object.freeze({labels: true, cityIcons: true, markers: true, military: true, measurements: false, legend: true, scaleBar: true});
 const PNG_CROP_MODES = new Set(["viewport", "map", "pixel", "world"]);
 const GEOJSON_RANGE_MODE_SET = new Set(GEOJSON_RANGE_MODES);
+const MAP_DOCUMENT_UPGRADE_INFO = new WeakMap();
+const RIVER_COMPATIBILITY_FIELDS = Object.freeze([
+  "parent", "basin", "confluence", "outletKind", "outletFeatureId",
+  "networkStatus", "networkIssue", "legacyParent", "type", "controlPoints", "visualCurve"
+]);
+const ZONE_COMPATIBILITY_FIELDS = Object.freeze([
+  "type", "category", "source", "customTypeName", "description", "coverage", "effects", "context"
+]);
 
 const TYPED_ARRAYS = Object.freeze({
   Int8Array,
@@ -136,28 +144,28 @@ export function stringifyMapDocument(document) {
   return JSON.stringify(document, typedArrayReplacer);
 }
 
-export function parseMapDocument(text) {
+export function parseMapDocument(text, options = {}) {
   const document = JSON.parse(text, typedArrayReviver);
-  return migrateMapDocument(document);
+  return migrateMapDocument(document, options);
 }
 
 export async function parseMapDocumentPayload(documentRef, payload) {
   return (await parseMapDocumentPayloadWithAdoptionBytes(documentRef, payload)).document;
 }
 
-export async function parseMapDocumentPayloadWithAdoptionBytes(documentRef, payload) {
-  if (typeof payload === "string") return {document: parseMapDocument(payload), adoptionBytes: null};
-  if (payload instanceof ArrayBuffer || ArrayBuffer.isView(payload)) return parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, payload);
-  if (isMapDocumentFileLike(payload)) return parseMapDocumentFileWithAdoptionBytes(documentRef, payload);
+export async function parseMapDocumentPayloadWithAdoptionBytes(documentRef, payload, options = {}) {
+  if (typeof payload === "string") return {document: parseMapDocument(payload, options), adoptionBytes: null};
+  if (payload instanceof ArrayBuffer || ArrayBuffer.isView(payload)) return parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, payload, options);
+  if (isMapDocumentFileLike(payload)) return parseMapDocumentFileWithAdoptionBytes(documentRef, payload, options);
   if (isGzipBase64MapPayload(payload)) {
     const data = payload.base64 ?? payload.data;
-    return parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, await decompressGzipBase64Bytes(documentRef, data));
+    return parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, await decompressGzipBase64Bytes(documentRef, data), options);
   }
-  if (payload?.encoding === "plain") return {document: parseMapDocument(String(payload.data || "")), adoptionBytes: null};
+  if (payload?.encoding === "plain") return {document: parseMapDocument(String(payload.data || ""), options), adoptionBytes: null};
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("地图导入文档必须是 JSON 字符串、对象、File/Blob 或 gzip-base64 payload");
   }
-  return {document: parseMapDocument(stringifyMapDocument(payload)), adoptionBytes: null};
+  return {document: parseMapDocument(stringifyMapDocument(payload), options), adoptionBytes: null};
 }
 
 export async function parseMapDocumentPayloadAsync(documentRef, payload, options = {}) {
@@ -179,7 +187,7 @@ export async function parseMapDocumentPayloadAsync(documentRef, payload, options
     if (isWebfmgV3Bytes(decodedBytes)) {
       assertSupportedWebfmgSchemaVersion(decodedBytes);
       const document = await decodeWebfmgV3DocumentAsync(decodedBytes, options);
-      return migrateMapDocument(document);
+      return migrateMapDocument(document, options);
     }
   }
   return parseMapDocumentPayload(documentRef, payload);
@@ -189,11 +197,11 @@ export async function parseMapDocumentFile(documentRef, file) {
   return (await parseMapDocumentFileWithAdoptionBytes(documentRef, file)).document;
 }
 
-async function parseMapDocumentFileWithAdoptionBytes(documentRef, file) {
+async function parseMapDocumentFileWithAdoptionBytes(documentRef, file, options = {}) {
   if (!file) throw new Error("未选择地图文件");
-  if (typeof file.arrayBuffer === "function") return parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, await file.arrayBuffer());
+  if (typeof file.arrayBuffer === "function") return parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, await file.arrayBuffer(), options);
   const text = isCompressedMapDocumentFile(file) ? await decompressMapDocumentFile(documentRef, file) : await file.text();
-  return {document: parseMapDocument(text), adoptionBytes: null};
+  return {document: parseMapDocument(text, options), adoptionBytes: null};
 }
 
 export async function downloadCompressedMapDocument(documentRef, document, filename) {
@@ -222,7 +230,7 @@ export async function parseBinaryMapDocumentPayload(documentRef, source) {
   return (await parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, source)).document;
 }
 
-async function parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, source) {
+async function parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, source, options = {}) {
   const view = documentRef?.defaultView || globalThis;
   const bytes = source instanceof Uint8Array
     ? source
@@ -231,17 +239,17 @@ async function parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, sourc
       : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
   if (isWebfmgV3Bytes(bytes)) {
     assertSupportedWebfmgSchemaVersion(bytes);
-    return {document: migrateMapDocument(decodeWebfmgV3Document(bytes)), adoptionBytes: bytes};
+    return {document: migrateMapDocument(decodeWebfmgV3Document(bytes), options), adoptionBytes: bytes};
   }
   if (isGzipBytes(bytes)) {
     const decompressed = await gunzipWebfmgV3Bytes(bytes, view);
     if (isWebfmgV3Bytes(decompressed)) {
       assertSupportedWebfmgSchemaVersion(decompressed);
-      return {document: migrateMapDocument(decodeWebfmgV3Document(decompressed)), adoptionBytes: decompressed};
+      return {document: migrateMapDocument(decodeWebfmgV3Document(decompressed), options), adoptionBytes: decompressed};
     }
-    return {document: parseMapDocument(new view.TextDecoder().decode(decompressed)), adoptionBytes: null};
+    return {document: parseMapDocument(new view.TextDecoder().decode(decompressed), options), adoptionBytes: null};
   }
-  return {document: parseMapDocument(new view.TextDecoder().decode(bytes)), adoptionBytes: null};
+  return {document: parseMapDocument(new view.TextDecoder().decode(bytes), options), adoptionBytes: null};
 }
 
 export async function createCompressedMapTextBlob(documentRef, text) {
@@ -261,9 +269,20 @@ export function validateMapDocumentForExport(document) {
   return document;
 }
 
-export function migrateMapDocument(document) {
+export function getMapDocumentUpgradeInfo(document) {
+  return MAP_DOCUMENT_UPGRADE_INFO.get(document) || null;
+}
+
+export function migrateMapDocument(document, options = {}) {
   assertSupportedMapSchemaVersion(document?.metadata?.mapSchemaVersion, "document");
   assertSupportedMapSchemaVersion(document?.map?.metadata?.schemaVersion, "map");
+  const sourceVersion = Number(document?.version);
+  const needsCompatibilityBackfill = needsMapDocumentCompatibilityBackfill(document);
+  const eligibleForNotice = document?.type === MAP_DOCUMENT_TYPE
+    && document.map && typeof document.map === "object"
+    && Number.isInteger(sourceVersion) && sourceVersion >= 1 && sourceVersion <= MAP_DOCUMENT_VERSION;
+  const upgrade = {needed: true, sourceVersion, targetVersion: MAP_DOCUMENT_VERSION};
+  if (eligibleForNotice && needsCompatibilityBackfill) options.onUpgrade?.(upgrade);
   const identityPrepared = preparePersistedDocumentIdentityMigration(document);
   const versioned = migrateMapDocumentWithRegistry(identityPrepared, {
     targetVersion: MAP_DOCUMENT_VERSION,
@@ -288,6 +307,13 @@ export function migrateMapDocument(document) {
       }
     : versioned.map;
   const normalizedMap = normalizeCurrentMapSchemaV2(sourceMap, versioned.options);
+  let observedCompatibilityBackfill = sourceMap.metadata?.name !== normalizedMap.metadata.name
+    || !sameCompatibilityValue(sourceMap.options, normalizedMap.options)
+    || !sameCompatibilityValue(sourceMap.display, normalizedMap.display)
+    || !sameCompatibilityValue(sourceMap.oceanCurrents, normalizedMap.oceanCurrents)
+    || !sameCompatibilityValue(sourceMap.regenerationLocks, normalizedMap.regenerationLocks)
+    || !sameCompatibilityValue(sourceMap.pack?.rivers, normalizedMap.pack?.rivers)
+    || hasRiverNormalizationChange(sourceMap.rivers, normalizedMap.rivers);
   const migrated = normalizeMapDocumentDisplay({
     ...versioned,
     metadata: {
@@ -300,16 +326,170 @@ export function migrateMapDocument(document) {
     map: normalizedMap
   });
   backfillEconomyDisplayProperties(migrated.map);
-  backfillProvinceNames(migrated.map);
+  const provinceNames = backfillProvinceNames(migrated.map);
+  const sourceDiplomacyMap = migrated.map;
   migrated.map = normalizeDiplomacyMap(migrated.map);
+  observedCompatibilityBackfill ||= hasDiplomacyNormalizationChange(sourceDiplomacyMap, migrated.map);
   migrated.map.oceanCurrents = normalizeOceanCurrentModel(migrated.map.oceanCurrents);
+  const sourceFeatures = migrated.map.pack?.features;
   migrated.map = normalizeLakeOverflowMap(migrated.map);
+  observedCompatibilityBackfill ||= hasLakeOverflowNormalizationChange(sourceFeatures, migrated.map.pack?.features);
+  const sourceZones = migrated.map.zones?.zones || migrated.map.pack?.zones;
   migrated.map = normalizeZoneMap(migrated.map);
-  applyRegenerationLockCompatibility(migrated.map, versioned.map?.regenerationLocks);
-  reconcileSettlementCellIdentity(migrated.map, {repairMissingBurgs: true});
+  observedCompatibilityBackfill ||= hasZoneNormalizationChange(sourceZones, migrated.map.zones?.zones);
+  const lockCompatibility = applyRegenerationLockCompatibility(migrated.map, versioned.map?.regenerationLocks);
+  let repairedBurgs = 0;
+  let repairedMirrors = false;
+  reconcileSettlementCellIdentity(migrated.map, {
+    repairMissingBurgs: true,
+    onRepairBurg: () => { repairedBurgs += 1; },
+    onRepairMirror: () => { repairedMirrors = true; }
+  });
   diagnoseSettlementPortTopology(migrated.map);
   validateCurrentMapDocument(migrated);
+  if (needsCompatibilityBackfill || observedCompatibilityBackfill || provinceNames.changed > 0 || repairedBurgs > 0 || repairedMirrors || lockCompatibility.diagnostics.removed > 0) {
+    MAP_DOCUMENT_UPGRADE_INFO.set(migrated, upgrade);
+    if (!needsCompatibilityBackfill) options.onUpgrade?.(upgrade);
+  }
   return migrated;
+}
+
+function needsMapDocumentCompatibilityBackfill(document) {
+  const map = document?.map;
+  const labels = map?.labels;
+  return Number(document?.version) !== MAP_DOCUMENT_VERSION
+    || Number(document?.metadata?.mapSchemaVersion) !== MAP_SCHEMA_VERSION
+    || Number(map?.metadata?.schemaVersion) !== MAP_SCHEMA_VERSION
+    || !normalizePersistedDocumentId(document?.metadata?.documentId)
+    || !normalizePersistedDocumentId(map?.metadata?.documentId)
+    || Number(document?.metadata?.documentIdentityVersion) !== PERSISTED_DOCUMENT_IDENTITY_VERSION
+    || Number(map?.metadata?.documentIdentityVersion) !== PERSISTED_DOCUMENT_IDENTITY_VERSION
+    || map?.metadata?.cellsTarget === undefined
+    || map?.options?.cellsTarget === undefined
+    || hasIncompleteNotesStore(map?.notes)
+    || hasIncompleteMeasurementStore(map?.measurements)
+    || hasIncompleteLabelStore(labels)
+    || hasIncompleteVisualThemeStore(map?.visualTheme)
+    || hasIncompleteUnitPreferences(map?.display ?? document?.display)
+    || (document?.display !== undefined && map?.display === undefined)
+    || hasIncompleteEconomyDisplay(map)
+    || hasIncompleteDiplomacy(map)
+    || Number(map?.oceanCurrents?.version) !== OCEAN_CURRENT_MODEL_VERSION
+    || !Array.isArray(map?.oceanCurrents?.currents)
+    || Number(map?.regenerationLocks?.version) !== REGENERATION_LOCK_VERSION
+    || !Array.isArray(map?.regenerationLocks?.entries)
+    || hasIncompleteZoneStore(map)
+    || hasMissingLegacyBurg(map);
+}
+
+function hasIncompleteNotesStore(notes) {
+  return !Array.isArray(notes?.notes)
+    || Number(notes?.metadata?.formatVersion) !== 1
+    || notes.metadata.notes !== notes.notes.length;
+}
+
+function hasIncompleteMeasurementStore(measurements) {
+  return !Array.isArray(measurements?.items)
+    || Number(measurements.version) !== 1
+    || !Number.isInteger(Number(measurements.metadata?.nextId))
+    || measurements.metadata.measurements !== measurements.items.length;
+}
+
+function hasIncompleteLabelStore(labels) {
+  if (!Array.isArray(labels?.custom)
+    || !Array.isArray(labels?.hidden?.city)
+    || !Array.isArray(labels?.hidden?.state)
+    || !Array.isArray(labels?.hidden?.province)
+    || labels.styles === undefined || labels.layout === undefined) return true;
+  const hidden = labels.hidden.city.length + labels.hidden.state.length + labels.hidden.province.length;
+  return labels.metadata?.custom !== labels.custom.length || labels.metadata?.hidden !== hidden;
+}
+
+function hasIncompleteVisualThemeStore(theme) {
+  return !theme || theme.version === undefined || theme.preset === undefined
+    || !theme.overrides || typeof theme.overrides !== "object"
+    || !Array.isArray(theme.userThemes);
+}
+
+function hasIncompleteUnitPreferences(display) {
+  if (!display || typeof display !== "object") return false;
+  return !display.units || Object.keys(DEFAULT_UNIT_PREFERENCES).some(key => display.units[key] === undefined);
+}
+
+function hasIncompleteEconomyDisplay(map) {
+  for (const goods of [map?.pack?.goods, map?.economy?.goods]) {
+    if (goods?.some(good => good && typeof good === "object"
+      && ["visible", "color", "icon", "label"].some(key => good[key] === undefined))) return true;
+  }
+  for (const markets of [map?.pack?.markets, map?.economy?.markets]) {
+    if (markets?.some(market => market && typeof market === "object"
+      && ["name", "color"].some(key => market[key] === undefined))) return true;
+  }
+  return false;
+}
+
+function hasIncompleteDiplomacy(map) {
+  if (!Array.isArray(map?.diplomacy?.chronicle) || !map.diplomacy.relations || !map.diplomacy.metadata) return true;
+  return [map?.politics?.states, map?.pack?.states].some(states => states?.some(state => state && !state.removed
+    && Number(state.i ?? state.id) > 0
+    && (!Array.isArray(state.diplomacy) || !Array.isArray(state.campaigns)
+      || !state.diplomacySummary || typeof state.diplomacySummary !== "object")));
+}
+
+function hasIncompleteZoneStore(map) {
+  const zones = map?.zones?.zones || map?.pack?.zones;
+  return Array.isArray(zones) && (!Array.isArray(map?.zones?.zones)
+    || zones.some(zone => zone && typeof zone === "object"
+      && (!zone.context || !Array.isArray(zone.context.participants) || !zone.context.status)));
+}
+
+function hasMissingLegacyBurg(map) {
+  const cities = map?.settlements?.cities;
+  const burgs = map?.pack?.burgs;
+  return Array.isArray(cities) && Array.isArray(burgs)
+    && cities.some(city => city && !city.removed && Number.isInteger(Number(city.burgId))
+      && Number(city.burgId) > 0 && !burgs[Number(city.burgId)]);
+}
+
+function hasRiverNormalizationChange(source, normalized) {
+  if (!source || !normalized) return source !== normalized;
+  if (!sameCompatibilityValue(source.metadata?.networkDiagnostics, normalized.metadata?.networkDiagnostics)) return true;
+  if (!Array.isArray(source.rivers) || !Array.isArray(normalized.rivers)) return source.rivers !== normalized.rivers;
+  const oldRivers = source.rivers || [];
+  const newRivers = normalized.rivers || [];
+  if (oldRivers.length !== newRivers.length) return true;
+  return oldRivers.some((river, index) => RIVER_COMPATIBILITY_FIELDS.some(field =>
+    !sameCompatibilityValue(river?.[field], newRivers[index]?.[field])));
+}
+
+function hasDiplomacyNormalizationChange(source, normalized) {
+  return !sameCompatibilityValue(source.diplomacy, normalized.diplomacy)
+    || !sameCompatibilityValue(source.pack?.diplomacy, normalized.pack?.diplomacy)
+    || !sameCompatibilityValue(source.pack?.states, normalized.pack?.states)
+    || !sameCompatibilityValue(source.politics?.states, normalized.politics?.states);
+}
+
+function hasLakeOverflowNormalizationChange(source, normalized) {
+  if (!Array.isArray(source) || !Array.isArray(normalized)) return false;
+  return source.some((feature, index) => feature?.type === "lake"
+    && !sameCompatibilityValue(feature.overflow, normalized[index]?.overflow));
+}
+
+function hasZoneNormalizationChange(source, normalized) {
+  if (!Array.isArray(source) || !Array.isArray(normalized)) return false;
+  if (source.length !== normalized.length) return true;
+  return source.some((zone, index) => zone && typeof zone === "object"
+    && ZONE_COMPATIBILITY_FIELDS.some(field => !sameCompatibilityValue(zone[field], normalized[index]?.[field])));
+}
+
+function sameCompatibilityValue(left, right) {
+  if (left === right || Object.is(left, right)) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  if (Array.isArray(left) !== Array.isArray(right)) return false;
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every(key => Object.hasOwn(right, key) && sameCompatibilityValue(left[key], right[key]));
 }
 
 function assertSupportedWebfmgSchemaVersion(bytes) {

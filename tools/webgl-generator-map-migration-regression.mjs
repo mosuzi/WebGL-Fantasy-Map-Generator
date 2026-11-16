@@ -10,6 +10,7 @@ import {
   MAP_SCHEMA_VERSION,
   createMapDocumentMigrationRegistry,
   createMapDocument,
+  getMapDocumentUpgradeInfo,
   migrateMapDocument,
   migrateMapDocumentWithRegistry,
   parseMapDocument,
@@ -24,9 +25,13 @@ import {BROWSER_MAP_STORAGE_TYPE, BROWSER_MAP_STORAGE_VERSION, decodeBrowserMapS
 import {createHeadlessMapApi, loadHeadlessMapDocument} from "../app/webgl-generator/src/runtime/headless-map-api.js";
 import {encodeWebfmgV3Document} from "../app/webgl-generator/src/runtime/webfmg-v3-container.js";
 import {ensureLabelStore} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
+import {normalizeUnitPreferences} from "../app/webgl-generator/src/ui/display-units.js";
 
 const fixtureText = await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8");
-const migrated = parseMapDocument(fixtureText);
+const v1UpgradeEvents = [];
+const migrated = parseMapDocument(fixtureText, {onUpgrade: info => v1UpgradeEvents.push(info)});
+assert.deepEqual(getMapDocumentUpgradeInfo(migrated), {needed: true, sourceVersion: 1, targetVersion: 2}, "v1 迁移缺少打开提示来源");
+assert.deepEqual(v1UpgradeEvents, [getMapDocumentUpgradeInfo(migrated)], "v1 迁移未及时发出升级进度");
 const legacyV2Text = await readFile(new URL("./fixtures/webgl-map-v2-legacy-city.json", import.meta.url), "utf8");
 const legacyV2Source = JSON.parse(legacyV2Text);
 assert.equal(legacyV2Source.version, 2, "历史 v2 夹具的文档版本被改写");
@@ -47,7 +52,10 @@ function assertLegacyV2Result(document, route) {
   assert.equal(document.map.grid.cells.burg[1], 0, `${route} 未补齐 grid cell 镜像`);
   validateMapDocumentForExport(document);
 }
-const legacyV2 = parseMapDocument(legacyV2Text);
+const v2UpgradeEvents = [];
+const legacyV2 = parseMapDocument(legacyV2Text, {onUpgrade: info => v2UpgradeEvents.push(info)});
+assert.deepEqual(getMapDocumentUpgradeInfo(legacyV2), {needed: true, sourceVersion: 2, targetVersion: 2}, "同版历史回填缺少打开提示来源");
+assert.deepEqual(v2UpgradeEvents, [getMapDocumentUpgradeInfo(legacyV2)], "同版历史回填未及时发出升级进度");
 assertLegacyV2Result(legacyV2, "完整 JSON");
 const view = {defaultView: globalThis};
 assertLegacyV2Result(await parseMapDocumentPayload(view, legacyV2Text), "公开导入入口");
@@ -59,7 +67,9 @@ const legacyV2BinarySource = JSON.parse(legacyV2Text, (_key, value) => {
 assertLegacyV2Result(await parseBinaryMapDocumentPayload(view, gzipSync(encodeWebfmgV3Document(legacyV2BinarySource))), "WEBFMG3 旧文档");
 const frozenHistoricalBinary = await readFile(new URL("./fixtures/webgl-map-v2-legacy-city-0.2.12.webfmg", import.meta.url));
 assert.equal(createHash("sha256").update(frozenHistoricalBinary).digest("hex"), "afdfcdc9b040db4c73e080266c902aacdb97bdf577591e1ff8e8ffc714164a46", "历史二进制夹具被改写");
-assertLegacyV2Result(await parseBinaryMapDocumentPayload(view, frozenHistoricalBinary), "0.2.12 冻结 WEBFMG3");
+const frozenHistoricalDocument = await parseBinaryMapDocumentPayload(view, frozenHistoricalBinary);
+assertLegacyV2Result(frozenHistoricalDocument, "0.2.12 冻结 WEBFMG3");
+assert.equal(getMapDocumentUpgradeInfo(frozenHistoricalDocument)?.needed, true, "历史 WEBFMG3 缺少升级提示来源");
 assertLegacyV2Result(await parseBinaryMapDocumentPayload(view, gzipSync(frozenHistoricalBinary)), "0.2.12 冻结压缩 WEBFMG3");
 const futureContainer = encodeWebfmgV3Document(legacyV2BinarySource).slice();
 new DataView(futureContainer.buffer, futureContainer.byteOffset, futureContainer.byteLength).setUint16(10, MAP_SCHEMA_VERSION + 1, true);
@@ -79,7 +89,21 @@ for (const encoded of [
   assertLegacyV2Result(await parseMapDocumentPayload(view, decoded), `浏览器 ${encoded.encoding}`);
 }
 const legacyV2Saved = createMapDocument(legacyV2.map, legacyV2.options);
-assertLegacyV2Result(parseMapDocument(stringifyMapDocument(legacyV2Saved)), "升级后保存回读");
+const legacyV2Reopened = parseMapDocument(stringifyMapDocument(legacyV2Saved));
+assertLegacyV2Result(legacyV2Reopened, "升级后保存回读");
+assert.equal(getMapDocumentUpgradeInfo(legacyV2Reopened), null, "升级后保存回读再次提示升级");
+const missingBurgOnly = structuredClone(legacyV2Saved);
+missingBurgOnly.map.pack.burgs[1] = null;
+const burgUpgradeEvents = [];
+const repairedBurgDocument = migrateMapDocument(missingBurgOnly, {onUpgrade: info => burgUpgradeEvents.push(info)});
+assert.equal(repairedBurgDocument.map.pack.burgs[1]?.cityId, 0, "同版城镇修复未补回 burg");
+assert.deepEqual(burgUpgradeEvents, [getMapDocumentUpgradeInfo(repairedBurgDocument)], "单独缺失 burg 未在修复前发出升级进度");
+const missingCityMirrorOnly = structuredClone(legacyV2Saved);
+missingCityMirrorOnly.map.grid.cells.burg[1] = -1;
+const mirrorUpgradeEvents = [];
+const repairedMirrorDocument = migrateMapDocument(missingCityMirrorOnly, {onUpgrade: info => mirrorUpgradeEvents.push(info)});
+assert.equal(repairedMirrorDocument.map.grid.cells.burg[1], 0, "同版城镇镜像修复未补回 grid cell");
+assert.deepEqual(mirrorUpgradeEvents, [getMapDocumentUpgradeInfo(repairedMirrorDocument)], "单独缺失城镇镜像未提示整理");
 assert.deepEqual(legacyV2Source, legacyV2Original, "迁移改写了历史夹具输入");
 const legacyHeaderOnly = JSON.parse(fixtureText, (_key, value) => {
   const Constructor = value?.__webglGeneratorTypedArray && globalThis[value.__webglGeneratorTypedArray];
@@ -136,6 +160,77 @@ assert.equal(sourceMap.metadata.schemaVersion, undefined, "导出不得原地改
 assert.equal(sourceMap.metadata.documentId, undefined, "导出不得原地写入运行时 document identity");
 assert.equal(sourceMap.measurements, undefined, "导出不得向运行时 map 注入缺失存储");
 const currentRoundtrip = parseMapDocument(stringifyMapDocument(current));
+assert.equal(getMapDocumentUpgradeInfo(currentRoundtrip), null, "当前版本存档错误提示升级");
+const currentWithUnits = structuredClone(currentRoundtrip);
+currentWithUnits.map.display = {units: normalizeUnitPreferences({distanceUnit: "km"})};
+assert.equal(getMapDocumentUpgradeInfo(migrateMapDocument(structuredClone(currentWithUnits))), null, "完整单位设置错误提示升级");
+const currentWithEconomy = createMapDocument({
+  ...currentRoundtrip.map,
+  pack: {
+    ...(currentRoundtrip.map.pack || {}),
+    goods: [null, {i: 1, name: "Salt", visible: true, color: "#d7a84f", icon: "●", label: "Salt"}],
+    markets: [null, {i: 1, name: "Market", color: "#4f9cc9"}]
+  }
+}, currentRoundtrip.options);
+assert.equal(getMapDocumentUpgradeInfo(migrateMapDocument(structuredClone(currentWithEconomy))), null, "完整商品展示字段错误提示升级");
+for (const [label, source, remove] of [
+  ["备注内部版本", currentRoundtrip, document => { delete document.map.notes.metadata.formatVersion; }],
+  ["显示单位存储", currentWithUnits, document => { delete document.map.display.units; }],
+  ["自定义单位列表", currentWithUnits, document => { delete document.map.display.units.customUnits; }],
+  ["商品颜色", currentWithEconomy, document => { delete document.map.pack.goods[1].color; }],
+  ["市场颜色", currentWithEconomy, document => { delete document.map.pack.markets[1].color; }]
+]) {
+  const document = structuredClone(source);
+  remove(document);
+  const notices = [];
+  const upgraded = migrateMapDocument(document, {onUpgrade: info => notices.push(info)});
+  assert.equal(getMapDocumentUpgradeInfo(upgraded)?.needed, true, `同版旧档仅缺${label}时未标记升级`);
+  assert.deepEqual(notices, [getMapDocumentUpgradeInfo(upgraded)], `同版旧档仅缺${label}时未及时提示`);
+}
+const playableBinary = await readFile(new URL("./fixtures/webgl-map-v2-playable-legacy-notes.webfmg", import.meta.url));
+assert.equal(createHash("sha256").update(playableBinary).digest("hex"), "e0418f77d6aff1b5bc5e93926542b69bf242d2ee03672c7d84c1aac87393ded3", "完整地图夹具被改写");
+const playableLegacy = await parseBinaryMapDocumentPayload(view, playableBinary);
+const playableCurrent = createMapDocument(playableLegacy.map, playableLegacy.options);
+assert.equal(getMapDocumentUpgradeInfo(migrateMapDocument(structuredClone(playableCurrent))), null, "完整当前地图错误提示整理");
+const lakeIndex = playableCurrent.map.pack.features.findIndex(feature => feature?.type === "lake");
+assert.ok(lakeIndex >= 0 && playableCurrent.map.rivers.rivers.length && playableCurrent.map.zones.zones.length, "完整地图夹具须覆盖湖泊、河流及地区");
+const burgIndex = playableCurrent.map.settlements.cities.find(city => city && !city.removed)?.burgId;
+assert.ok(playableCurrent.map.pack.burgs[burgIndex]?.id >= 0, "完整地图夹具须覆盖已存在的 burg 身份");
+for (const [label, remove, read] of [
+  ["湖泊溢流", document => { delete document.map.pack.features[lakeIndex].overflow; }, document => document.map.pack.features[lakeIndex].overflow],
+  ["河网状态", document => { delete document.map.rivers.rivers[0].networkStatus; }, document => document.map.rivers.rivers[0].networkStatus],
+  ["河网诊断", document => { delete document.map.rivers.metadata.networkDiagnostics; }, document => document.map.rivers.metadata.networkDiagnostics],
+  ["地区覆盖", document => { delete document.map.zones.zones[0].coverage; }, document => document.map.zones.zones[0].coverage],
+  ["洋流算法", document => { delete document.map.oceanCurrents.algorithm; }, document => document.map.oceanCurrents.algorithm],
+  ["洋流数量", document => { delete document.map.oceanCurrents.metadata.count; }, document => document.map.oceanCurrents.metadata.count],
+  ["地图名称", document => { delete document.map.metadata.name; }, document => document.map.metadata.name],
+  ["地图选项名称", document => { delete document.map.options.mapName; }, document => document.map.options.mapName],
+  ["外交关系统计", document => { delete document.map.diplomacy.metadata.relationCounts; }, document => document.map.diplomacy.metadata.relationCounts],
+  ["外交镜像", document => { delete document.map.pack.diplomacy; }, document => document.map.pack.diplomacy],
+  ["国家外交关系", document => { delete document.map.politics.states[1].diplomacy[2]; }, document => document.map.politics.states[1].diplomacy[2]],
+  ["旧式显示设置", document => {
+    document.options.display = {units: normalizeUnitPreferences({})};
+    delete document.map.display;
+  }, document => document.map.display?.units?.distanceUnit],
+  ["地图种子选项", document => { delete document.map.options.seed; }, document => document.map.options.seed],
+  ["地图宽度选项", document => { delete document.map.options.graphWidth; }, document => document.map.options.graphWidth],
+  ["河流镜像", document => { delete document.map.pack.rivers; }, document => document.map.pack.rivers],
+  ["重复锁", document => { document.map.regenerationLocks.entries = [{kind: "city", id: 0}, {kind: "city", id: 0}]; }, document => document.map.regenerationLocks.entries[0]?.id],
+  ["字符串锁编号", document => { document.map.regenerationLocks.entries = [{kind: "city", id: "0"}]; }, document => document.map.regenerationLocks.entries[0]?.id],
+  ["城镇所属城市", document => { delete document.map.pack.burgs[burgIndex].cityId; }, document => document.map.pack.burgs[burgIndex].cityId],
+  ["城镇格点", document => { delete document.map.pack.burgs[burgIndex].cell; }, document => document.map.pack.burgs[burgIndex].cell],
+  ["城镇横坐标", document => { delete document.map.pack.burgs[burgIndex].x; }, document => document.map.pack.burgs[burgIndex].x],
+  ["城镇纵坐标", document => { delete document.map.pack.burgs[burgIndex].y; }, document => document.map.pack.burgs[burgIndex].y],
+  ["城镇身份编号", document => { delete document.map.pack.burgs[burgIndex].i; }, document => document.map.pack.burgs[burgIndex].i]
+]) {
+  const source = structuredClone(playableCurrent);
+  remove(source);
+  const notices = [];
+  const upgraded = migrateMapDocument(source, {onUpgrade: info => notices.push(info)});
+  assert.ok(read(upgraded) !== undefined, `同版旧档缺${label}未被整理`);
+  assert.equal(getMapDocumentUpgradeInfo(upgraded)?.needed, true, `同版旧档缺${label}未标记升级`);
+  assert.deepEqual(notices, [getMapDocumentUpgradeInfo(upgraded)], `同版旧档缺${label}未提示整理或重复提示`);
+}
 assert.equal(currentRoundtrip.metadata.documentId, current.metadata.documentId, "v2 往返没有保留 document identity");
 assert.deepEqual([...currentRoundtrip.map.grid.cells.h], [20, 21], "v2 stringify / parse 应保持 typed array");
 
@@ -158,6 +253,7 @@ const incompleteV2 = structuredClone(current);
 delete incompleteV2.map.labels.hidden.city;
 delete incompleteV2.map.labels.hidden.state;
 const normalizedIncompleteV2 = migrateMapDocument(incompleteV2);
+assert.equal(getMapDocumentUpgradeInfo(normalizedIncompleteV2)?.needed, true, "同版标签回填缺少升级提示来源");
 assert.deepEqual(normalizedIncompleteV2.map.labels.hidden.city, [], "旧 v2 缺少城市隐藏表时没有回填");
 assert.deepEqual(normalizedIncompleteV2.map.labels.hidden.state, [], "旧 v2 缺少国家隐藏表时没有回填");
 const oldCurrentV2 = structuredClone(current);

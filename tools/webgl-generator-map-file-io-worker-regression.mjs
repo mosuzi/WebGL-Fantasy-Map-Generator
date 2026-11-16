@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
 import {readFile} from "node:fs/promises";
 import {Worker} from "node:worker_threads";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
@@ -65,6 +66,10 @@ const workerImport = await runTaskInWorker({
 
 assert.equal(directImport.document.version, 2);
 assert.equal(workerImport.result.document.version, 2);
+assert.deepEqual(directImport.upgrade, {needed: true, sourceVersion: 1, targetVersion: 2});
+assert.deepEqual(workerImport.result.upgrade, directImport.upgrade, "真实 Worker 丢失升级来源");
+assert.equal(directProgress.some(item => item.stage === "upgrade"), true, "直跑 Worker 未提前发出旧卷整理进度");
+assert.equal(workerImport.progress.some(item => item.stage === "upgrade"), true, "真实 Worker 未提前发出旧卷整理进度");
 assert.ok(directImport.map.grid.cells.h instanceof Uint8Array, "fallback plain JSON 没有恢复 typed array");
 assert.ok(workerImport.result.map.grid.cells.h instanceof Uint8Array, "Worker plain JSON 没有恢复 typed array");
 assert.equal(directImport.map.pack.cells.s.length, directImport.map.pack.cells.i.length, "极简旧档没有补齐 pack suitability");
@@ -74,6 +79,15 @@ assert.equal(directImport.map, directImport.document.map, "fallback import DTO �
 assert.equal(workerImport.result.map, workerImport.result.document.map, "Worker import DTO 没有保留 document/map 别名");
 assert.equal(workerImport.result.metadata.checksum, directImport.metadata.checksum);
 assert.deepEqual(workerImport.progress.map(item => item.stage), directProgress.map(item => item.stage));
+
+const frozenHistoricalBinary = await readFile(new URL("./fixtures/webgl-map-v2-legacy-city-0.2.12.webfmg", import.meta.url));
+assert.equal(createHash("sha256").update(frozenHistoricalBinary).digest("hex"), "afdfcdc9b040db4c73e080266c902aacdb97bdf577591e1ff8e8ffc714164a46", "冻结历史 WEBFMG3 字节被改写");
+const historicalBinaryImport = await runTaskInWorker({
+  operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
+  input: {kind: "bytes", bytes: new Uint8Array(frozenHistoricalBinary)}
+});
+assert.deepEqual(historicalBinaryImport.result.upgrade, {needed: true, sourceVersion: 2, targetVersion: 2}, "冻结 WEBFMG3 经真实 Worker 后丢失升级来源");
+assert.equal(historicalBinaryImport.progress.some(item => item.stage === "upgrade"), true, "冻结 WEBFMG3 经真实 Worker 未提前发出整理进度");
 
 const renderMap = generatePlaceholderMap({seed: "task322-map-file-render", cellsTarget: 1000, graphWidth: 800, graphHeight: 600});
 const renderDocument = await runMapFileIoWorkerTask({operation: "export", map: renderMap, encoding: "plain", resultType: "text"});
@@ -92,6 +106,7 @@ const renderedImport = await runTaskInWorker({
   }
 });
 assert.deepEqual(renderedImport.progress.map(item => item.stage), ["read", "parse", "render", "render-prepare", "complete"]);
+assert.equal(renderedImport.result.upgrade, null, "当前导出文档错误提示升级");
 assert.deepEqual(renderedImport.result.preparedRender.binding, renderBinding);
 assert.deepEqual(Object.keys(renderedImport.result.preparedRender.layers), ["point"]);
 assert.ok(renderedImport.result.preparedRender.layers.point.vertices instanceof Float32Array);

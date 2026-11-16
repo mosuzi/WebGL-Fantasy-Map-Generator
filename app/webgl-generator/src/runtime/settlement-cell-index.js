@@ -59,7 +59,7 @@ export function rebuildSettlementCellIndex(map, {syncLegacy = false} = {}) {
   return index;
 }
 
-export function reconcileSettlementCellIdentity(map, {repairMissingBurgs = false, validateOnly = false} = {}) {
+export function reconcileSettlementCellIdentity(map, {repairMissingBurgs = false, validateOnly = false, onRepairBurg = null, onRepairMirror = null} = {}) {
   const grid = map?.grid;
   const pack = map?.pack;
   const cities = map?.settlements?.cities;
@@ -159,6 +159,7 @@ export function reconcileSettlementCellIdentity(map, {repairMissingBurgs = false
       burg = createBurgFromCity(city, {cityId, burgId, packCell, pack});
       burgById.set(burgId, burg);
       repairedBurgIds.add(burgId);
+      onRepairBurg?.(burgId);
     }
     if (!burg || burg.removed) {
       throw settlementCellIdentityError(`城镇 #${cityId} 缺少活动 burg #${burgId}`, {reason: "missing-burg", cityId, burgId});
@@ -194,9 +195,23 @@ export function reconcileSettlementCellIdentity(map, {repairMissingBurgs = false
   for (const [cell, ids] of cityIdsByGridCell) nextGridBurg[cell] = ids[0];
   const nextPackBurg = createPackBurgMirror(pack.cells.burg, packCount, maxBurgId);
   for (const [cell, ids] of burgIdsByPackCell) nextPackBurg[cell] = ids[0];
+  if (onRepairMirror && (!sameCellMirror(grid.cells.burg, nextGridBurg) || !sameCellMirror(pack.cells.burg, nextPackBurg))) {
+    onRepairMirror();
+  }
 
   for (const item of plan) {
     if (!pack.burgs[item.burgId]) pack.burgs[item.burgId] = item.burg;
+    if (!repairedBurgIds.has(item.burgId) && (
+      item.burg.i !== item.burgId
+      || Object.prototype.hasOwnProperty.call(item.burg, "id") && item.burg.id !== item.burgId
+      || item.burg.cityId !== item.cityId
+      || item.burg.cell !== item.packCell
+      || Object.prototype.hasOwnProperty.call(item.burg, "packCell") && item.burg.packCell !== item.packCell
+      || item.burg.x !== item.x || item.burg.y !== item.y
+      || item.city.id !== item.cityId || item.city.burgId !== item.burgId
+      || item.city.cell !== item.gridCell || item.city.packCell !== item.packCell
+      || item.city.x !== item.x || item.city.y !== item.y
+    )) onRepairBurg?.(item.burgId);
     item.city.id = item.cityId;
     item.city.burgId = item.burgId;
     item.city.cell = item.gridCell;
@@ -501,6 +516,14 @@ function uniqueIds(values) {
 function createPackBurgMirror(current, length, maxBurgId) {
   if (Array.isArray(current)) return new Array(length).fill(0);
   return maxBurgId > 0xffff || current instanceof Uint32Array ? new Uint32Array(length) : new Uint16Array(length);
+}
+
+function sameCellMirror(current, next) {
+  if (current?.length !== next.length) return false;
+  for (let index = 0; index < next.length; index++) {
+    if (Number(current[index]) !== Number(next[index])) return false;
+  }
+  return true;
 }
 
 function settlementCellIdentityError(message, details) {

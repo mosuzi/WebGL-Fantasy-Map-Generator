@@ -103,6 +103,7 @@ import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange
 import {prepareMapFileIoWorkerPayload} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
 import {materializeMapAdoptionHandoff} from "./map-adoption-handoff.js";
+import {isWebfmgV3Bytes} from "./webfmg-v3-container.js";
 import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
 import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {
@@ -4870,6 +4871,7 @@ async function restoreBrowserStoredMapOrGenerate(state, documentRef) {
 
 async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = {}, operation = null) {
   if (options.confirm !== true) throw new Error("恢复浏览器存档会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
+  dismissMapToast(documentRef);
   const stored = await readBrowserMapStorage(documentRef);
   if (!stored) {
     updateGenerationLoading(documentRef, false);
@@ -4890,9 +4892,15 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
       source: "browser-storage"
     });
     const document = importedDocument.document;
+    if (importedDocument.upgrade?.needed) {
+      operation?.report("upgrade", {message: "旧卷待整，正依今制重理山河"});
+      setMythicGenerationLoading(documentRef, true, "旧卷待整，正依今制重理山河");
+      await yieldToBrowser(documentRef);
+    }
     const imported = await importParsedMapDocumentViaApi(state, documentRef, document, {
       source: "browser-storage",
       toast: false,
+      upgrade: importedDocument.upgrade,
       preparedRender: importedDocument.preparedRender,
       renderBinding: importedDocument.preparedRender?.binding,
       isCurrent: importedDocument.isCurrent,
@@ -4901,7 +4909,9 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
     }, operation);
     updateGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, "已恢复浏览器保存的地图。");
-    if (options.toast !== false) showMapToast(documentRef, options.startup ? "已恢复浏览器保存的地图" : "地图已从浏览器恢复");
+    if (!importedDocument.upgrade?.needed && options.toast !== false) {
+      showMapToast(documentRef, options.startup ? "已恢复浏览器保存的地图" : "地图已从浏览器恢复");
+    }
     return {
       ...imported,
       restored: true,
@@ -5860,6 +5870,18 @@ function showMapToast(documentRef, message, durationMs = 2200, options = {}) {
   }, durationMs);
 }
 
+function dismissMapToast(documentRef) {
+  const toast = documentRef.getElementById("map-toast");
+  if (!toast || toast.hidden) return;
+  const view = documentRef.defaultView || window;
+  if (view.__webglGeneratorToastTimer) view.clearTimeout(view.__webglGeneratorToastTimer);
+  view.__webglGeneratorToastTimer = null;
+  toast.hidden = true;
+  toast.textContent = "";
+  delete toast.dataset.tone;
+  documentRef.dispatchEvent(new CustomEvent("webgl-generator-map-toast-change", {detail: {visible: false}}));
+}
+
 function canExecuteKeyboardShortcut(state, item) {
   const busy = Boolean(state.runtimeOperation?.getSnapshot?.().busy);
   const history = state.editHistory?.getStats?.() || {};
@@ -6226,10 +6248,16 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
       sessionMode: "adopt-result-map",
       allowFallback: false,
       readyTimeoutMs: 10000,
-      onProgress: (stage, detail = {}) => operation?.report(stage, {
-        ...detail,
-        message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在辨读地图存档")
-      })
+      onProgress: (stage, detail = {}) => {
+        if (stage === "upgrade") {
+          dismissMapToast(documentRef);
+          setMythicGenerationLoading(documentRef, true, detail.message);
+        }
+        operation?.report(stage, {
+          ...detail,
+          message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在辨读地图存档")
+        });
+      }
     });
     const secondaryPromise = secondaryCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, {
       ...prepared.payload,
@@ -6241,10 +6269,16 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
       signal: operation?.signal || null,
       allowFallback: false,
       readyTimeoutMs: 10000,
-      onProgress: (stage, detail = {}) => operation?.report(stage, {
-        ...detail,
-        message: detail.message || (stage === "render-prepare" ? "正在并行准备地图交互资源" : "正在并行辨读地图存档")
-      })
+      onProgress: (stage, detail = {}) => {
+        if (stage === "upgrade") {
+          dismissMapToast(documentRef);
+          setMythicGenerationLoading(documentRef, true, detail.message);
+        }
+        operation?.report(stage, {
+          ...detail,
+          message: detail.message || (stage === "render-prepare" ? "正在并行准备地图交互资源" : "正在并行辨读地图存档")
+        });
+      }
     });
     const [primaryOutput, secondaryOutput, externalCanonicalDocument] = await Promise.all([
       primaryPromise,
@@ -6282,6 +6316,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     output.handoff?.chunks?.fill?.(null);
     return {
       document,
+      upgrade: output.upgrade || null,
       preparedRender,
       worker: output.worker || null,
       timings: {
@@ -6313,8 +6348,19 @@ function clonePreparedMapImportInput(input) {
 }
 
 function shouldUseMapImportWorkerCanonicalHandoff(input) {
-  if (input?.kind === "bytes" && input.bytes instanceof Uint8Array) return false;
-  if (input instanceof ArrayBuffer || ArrayBuffer.isView(input)) return false;
+  const source = input?.kind === "bytes" ? input.bytes : input;
+  const bytes = source instanceof Uint8Array
+    ? source
+    : source instanceof ArrayBuffer
+      ? new Uint8Array(source)
+      : ArrayBuffer.isView(source)
+        ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+        : null;
+  if (bytes) {
+    if (isWebfmgV3Bytes(bytes)) return false;
+    const gzip = bytes[0] === 0x1f && bytes[1] === 0x8b;
+    return !gzip || /\.json\.gz$/iu.test(String(input?.filename || ""));
+  }
   return true;
 }
 
@@ -7585,6 +7631,7 @@ async function importMapData(state, documentRef, file, importAction = state.runt
 async function importMapDocumentViaApi(state, documentRef, document, options = {}, operation = null) {
   operation?.report("validate", {message: "正在校验地图导入参数"});
   if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
+  dismissMapToast(documentRef);
   const source = ["ui", "recovery", "browser-storage"].includes(options.source) ? options.source : "api";
   const sourceLabel = source === "api" ? "通过 API " : "";
   resetLoadTrace(documentRef);
@@ -7627,6 +7674,11 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
     reportMapImportError(state, documentRef, error, source === "ui" ? document : null, {source, prefix: mapImportFailurePrefix(source)});
     throw error;
   }
+  if (parsed.upgrade?.needed) {
+    operation?.report("upgrade", {message: "旧卷待整，正依今制重理山河"});
+    setMythicGenerationLoading(documentRef, true, "旧卷待整，正依今制重理山河");
+    await yieldToBrowser(documentRef);
+  }
   return importParsedMapDocumentViaApi(state, documentRef, parsed.document, {
     ...options,
     source,
@@ -7635,6 +7687,7 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
     isCurrent: parsed.isCurrent,
     worker: parsed.worker,
     workerTimings: parsed.timings,
+    upgrade: parsed.upgrade,
     traceStarted: true
   }, operation);
 }
@@ -7666,7 +7719,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
     operation?.report("load-map", {message: loadingMessage("map-import-render")});
     await loadMapIntoRuntime(state, documentRef, document.map, {
       loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
-      completionToast: options.toast === false ? "" : "地图数据已导入",
+      completionToast: options.toast === false || options.upgrade?.needed ? "" : "地图数据已导入",
       operation,
       preparedRender: options.preparedRender || null,
       renderBinding: options.renderBinding || null,
@@ -7678,6 +7731,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
     updateGenerationLoading(documentRef, false);
     clearFileOperationDetails(documentRef);
     setFileOperationStatus(documentRef, `已${sourceLabel}导入地图数据。`);
+    if (options.upgrade?.needed) showMapToast(documentRef, "旧卷已依今制修整，山河如故", 4200);
     return {
       map: generationApiMapSummary(state.map),
       options: cloneGenerationOptions(state.options),
