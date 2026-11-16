@@ -115,8 +115,9 @@ const [appSource, panelSource, controlPanelSource] = await Promise.all([
 ]);
 assert.match(appSource, /lastMapImportDiagnostic:\s*null/);
 assert.match(appSource, /reportMapImportError\(state, documentRef, error,/);
-assert.match(appSource, /\["ui", "recovery", "browser-storage"\]\.includes\(options\.source\)/);
-assert.match(appSource, /diagnostic\.source === "browser-storage" \|\| diagnostic\.source === "recovery"/);
+assert.match(appSource, /\["ui", "browser-storage"\]\.includes\(options\.source\)/);
+assert.match(appSource, /: diagnostic\.source === "browser-storage"/);
+assert.doesNotMatch(appSource, /source === "recovery"/);
 assert.match(appSource, /exportImportDiagnostic:/);
 assert.match(appSource, /exportMapImportDiagnosticViaApi/);
 assert.match(appSource, /inspectGeoImportSource\(text\)/);

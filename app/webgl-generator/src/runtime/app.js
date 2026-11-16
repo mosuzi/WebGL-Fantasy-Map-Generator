@@ -337,7 +337,6 @@ import {createRuntimeOperationError, createRuntimeOperationManager} from "./runt
 import {createLatestDisplayIntentQueue, isSupersededDisplayIntent} from "./display-intent-queue.js";
 import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
 import {MapSaveState, installMapSaveStatus} from "./map-save-state.js";
-import {installMapRecovery} from "./map-recovery.js";
 import {installMapContentSearch} from "./map-content-search.js";
 import {installPngPresets} from "./png-export-presets.js";
 import {CityUpdateGuidance, CITY_GUIDANCE_EVENT} from "./city-update-guidance.js";
@@ -2895,13 +2894,6 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     getBinding: () => mapRevision.getSnapshot(),
     canLocate: object => state.renderer.canLocateObject(object),
     locate: object => locateAndSelectObject(null, object)
-  });
-  state.recovery = installMapRecovery(documentRef, {
-    getMap: () => state.map,
-    getStatus: () => saveState.getStatus(),
-    canRun: () => !state.runtimeOperationSnapshot?.busy && !state.workerAtomicCommitGuard,
-    createPayload: () => runtimeActions.data.exportCompressedAll({download: false, includeBase64: false, includeBlob: true}),
-    restore: blob => runtimeActions.data.importMap(blob, {confirm: true, source: "recovery", toast: true})
   });
   const cloudStorageRegistry = createCloudStorageRegistry({view: documentRef.defaultView || window});
   state.panels.cloudStorage = createCloudStoragePanel(documentRef, panelManager, cloudStorageRegistry, CloudStoragePanelComponent, {
@@ -7665,7 +7657,7 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
   operation?.report("validate", {message: "正在校验地图导入参数"});
   if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
   dismissMapToast(documentRef);
-  const source = ["ui", "recovery", "browser-storage"].includes(options.source) ? options.source : "api";
+  const source = ["ui", "browser-storage"].includes(options.source) ? options.source : "api";
   const sourceLabel = source === "api" ? "通过 API " : "";
   resetLoadTrace(documentRef);
   state.lastMapImportDiagnostic = null;
@@ -7726,7 +7718,7 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
 }
 
 async function importParsedMapDocumentViaApi(state, documentRef, document, options = {}, operation = null) {
-  const source = ["ui", "recovery", "browser-storage"].includes(options.source) ? options.source : "api";
+  const source = ["ui", "browser-storage"].includes(options.source) ? options.source : "api";
   const sourceLabel = source === "api" ? "通过 API " : "";
   const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
   try {
@@ -7760,7 +7752,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       isCurrent: options.isCurrent || (() => true)
     });
     const persistedNamebases = createGenerationNamebaseSnapshot(state.map) ? persistNamebasePreferences(state, documentRef) : false;
-    if (options.source !== "recovery") state.saveState?.record(state.saveState.capture(), options.source === "browser-storage" ? "browser" : "imported");
+    state.saveState?.record(state.saveState.capture(), options.source === "browser-storage" ? "browser" : "imported");
     updateGenerationLoading(documentRef, false);
     clearFileOperationDetails(documentRef);
     setFileOperationStatus(documentRef, `已${sourceLabel}导入地图数据。`);
@@ -8141,7 +8133,7 @@ function reportImportDiagnostic(state, documentRef, diagnostic, prefix, targetId
   const debugEnabled = documentRef.defaultView?.__webglGeneratorDebug?.enabled === true;
   setFileOperationStatus(documentRef, debugEnabled
     ? `${prefix}：${message}`
-    : diagnostic.source === "browser-storage" || diagnostic.source === "recovery"
+    : diagnostic.source === "browser-storage"
       ? ""
       : "导入未完成，当前地图已保留。", targetIds);
   setFileOperationDetails(documentRef, formatMapImportDiagnosticLines(diagnostic));
@@ -8152,7 +8144,6 @@ function reportImportDiagnostic(state, documentRef, diagnostic, prefix, targetId
 
 function mapImportFailurePrefix(source) {
   if (source === "browser-storage") return "浏览器地图恢复失败，原存档已保留";
-  if (source === "recovery") return "地图恢复失败，原存档已保留";
   return source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败";
 }
 

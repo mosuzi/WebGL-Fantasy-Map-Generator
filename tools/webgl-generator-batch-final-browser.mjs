@@ -49,26 +49,6 @@ try {
    const check=(name,pass,detail)=>checks.push({name,pass:!!pass,detail});
    const phases=[];
    const search=async data=>{const start=performance.now();const value=await new Promise(respond=>document.dispatchEvent(new CustomEvent('webfmg-map-search',{detail:{...data,respond}})));phases.push({data,start,end:performance.now()});if(mode.startsWith('large-'))await new Promise(r=>setTimeout(r,30));return value;};
-   if(mode==='recovery') {
-    await a.recovery.save();
-    const points=await new Promise(resolve=>{const r=indexedDB.open('webgl-generator-recovery-v1');r.onsuccess=()=>{const db=r.result,t=db.transaction('points'),q=t.objectStore('points').getAll();t.oncomplete=()=>{db.close();resolve(q.result);};};});
-    const city=a.map.settlements.cities.find(Boolean),before=city.name;
-    unwrap(await api.edit.cities.rename(city.id,'恢复前修改'));
-    const result=await new Promise(resolve=>{const receive=e=>{if(!e.detail.busy){document.removeEventListener('webgl-generator-recovery-status',receive);resolve(e.detail);}};document.addEventListener('webgl-generator-recovery-status',receive);document.dispatchEvent(new CustomEvent('webgl-generator-recovery-command',{detail:{action:'restore',id:points[0].id}}));});
-    check('恢复内容及未另存状态',a.map.settlements.cities[city.id].name===before&&a.saveState.getStatus().dirty,result.message);
-    const readPoints=()=>new Promise(resolve=>{const r=indexedDB.open('webgl-generator-recovery-v1');r.onsuccess=()=>{const db=r.result,t=db.transaction('points'),q=t.objectStore('points').getAll();t.oncomplete=()=>{db.close();resolve(q.result);};};});
-    const prior=await readPoints();
-    unwrap(await api.edit.cities.rename(city.id,'恢复点失败注入'));
-    const originalPut=IDBObjectStore.prototype.put;
-    IDBObjectStore.prototype.put=function(...args){if(this.name==='points')throw new DOMException('fixture quota','QuotaExceededError');return originalPut.apply(this,args);};
-    try{await a.recovery.save();}finally{IDBObjectStore.prototype.put=originalPut;}
-    check('额度写入失败保留全部旧点',JSON.stringify((await readPoints()).map(p=>p.id))===JSON.stringify(prior.map(p=>p.id)));
-    const broken={...prior[0],id:'broken-fixture',blob:new Blob(['invalid-map']),bytes:11};
-    await new Promise(resolve=>{const r=indexedDB.open('webgl-generator-recovery-v1');r.onsuccess=()=>{const db=r.result,t=db.transaction('points','readwrite');t.objectStore('points').put(broken);t.oncomplete=()=>{db.close();resolve();};};});
-    const mapBefore=a.map,revision=a.mapRevision.getSnapshot().mapRevision;
-    await new Promise(resolve=>{const receive=e=>{if(!e.detail.busy){document.removeEventListener('webgl-generator-recovery-status',receive);resolve();}};document.addEventListener('webgl-generator-recovery-status',receive);document.dispatchEvent(new CustomEvent('webgl-generator-recovery-command',{detail:{action:'restore',id:broken.id}}));});
-    check('损坏恢复点不替换地图',a.map===mapBefore&&a.mapRevision.getSnapshot().mapRevision===revision);
-   } else {
     const tasks=[],observer=new PerformanceObserver(list=>tasks.push(...list.getEntries().map(e=>({start:e.startTime,duration:e.duration}))));observer.observe({type:'longtask'});
     const started=performance.now(),before=a.mapRevision.getSnapshot().mapRevision,history=JSON.stringify(a.editHistory.getStats());
     const all=await search({query:''});
@@ -81,12 +61,9 @@ try {
     check('修改失效索引',(await search({query:'唯一搜索验收城市'})).items.some(i=>i.ref.id===city.id&&i.type==='city'));
     check('旧结果身份拒绝',(await search({action:'view',binding:all.binding,key:all.items[0].key})).stale);
     unwrap(await api.history.undo());check('撤销更新索引',(await search({query:'唯一搜索验收城市'})).total===0);
-    const saveStart=performance.now();await a.recovery.save();phases.push({data:'recovery',start:saveStart,end:performance.now()});check('大图恢复点完成',true,{ms:performance.now()-saveStart});
     await new Promise(r=>setTimeout(r,100));observer.disconnect();
     check('操作窗口无超过200ms任务',tasks.every(t=>t.duration<=200),tasks);
     return {checks,types,phases,cells:a.map.grid.cells.i.length,longTasks:tasks,maxLongTask:Math.max(0,...tasks.map(t=>t.duration)),glError:a.renderer.getStats().draw.glError};
-   }
-   return {checks};
   },mode);
   if(profiler)await fs.writeFile(path.join(out,'batch-search.cpu.json'),JSON.stringify(await profiler.send('Profiler.stop')));
   assert.ok(report.result.checks.every(c=>c.pass),JSON.stringify(report.result.checks.filter(c=>!c.pass)));

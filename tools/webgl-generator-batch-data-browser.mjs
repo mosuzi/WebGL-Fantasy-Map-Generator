@@ -31,16 +31,6 @@ try{
   check("PNG恢复视口",JSON.stringify(app.renderer.camera)===beforeCamera&&app.renderer.canvas.width===width&&app.renderer.canvas.height===height);
   const rejected=await api.data.exportPNG({download:false,includeDataUrl:false,outputWidth:99999,crop:{mode:"map"}});
   check("PNG超限拒绝及恢复",!rejected.ok&&JSON.stringify(app.renderer.camera)===beforeCamera&&app.renderer.canvas.width===width,rejected.code);
-  await app.recovery.save();
-  const points=await new Promise((resolve,reject)=>{const request=indexedDB.open('webgl-generator-recovery-v1');request.onsuccess=()=>{const db=request.result,r=db.transaction('points').objectStore('points').getAll();r.onsuccess=()=>{db.close();resolve(r.result.map(p=>({id:p.id,bytes:p.bytes,size:p.blob.size})));};r.onerror=()=>reject(r.error);};request.onerror=()=>reject(request.error);});
-  check("独立恢复点写入",points.length===1&&points[0].size===points[0].bytes,points);
-  check("恢复点不冒充手动保存",app.saveState.getStatus().dirty);
-  const snapshotName=city.name;
-  unwrap(await api.edit.cities.rename(city.id,"验证修改"));
-  let restored=false;
-  const recoveryResult=await new Promise(resolve=>{const timer=setTimeout(()=>{document.removeEventListener('webgl-generator-recovery-status',receive);resolve({timeout:true});},30000);function receive(e){if(!e.detail.busy){clearTimeout(timer);document.removeEventListener('webgl-generator-recovery-status',receive);resolve(e.detail);}}document.addEventListener('webgl-generator-recovery-status',receive);document.dispatchEvent(new CustomEvent('webgl-generator-recovery-command',{detail:{action:'restore',id:points[0]?.id}}));});
-  restored=app.map.settlements.cities[city.id]?.name===snapshotName;check("所选恢复点真实回读",restored,recoveryResult.message);
-  check("恢复来源保持未另存",app.saveState.getStatus().dirty,app.saveState.getStatus().latest?.destination);
   const terms={leftStateId:1,rightStateId:2,terms:{reparations:{fromStateId:1,toStateId:2,amount:1}}};
   const rev=app.mapRevision.getSnapshot().mapRevision;const peace=await api.edit.diplomacy.makePeace(terms,{confirm:true});
   check("赔款输入拒绝不写历史",(!peace.ok||peace.data?.executed===false)&&app.mapRevision.getSnapshot().mapRevision===rev);

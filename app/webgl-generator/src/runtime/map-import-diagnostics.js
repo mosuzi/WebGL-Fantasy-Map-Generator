@@ -128,7 +128,6 @@ export function formatMapImportDiagnosticLines(diagnostic) {
     `结果：${diagnostic.import?.status === "success" ? "成功" : "失败"}`
   ];
   if (diagnostic.source === "browser-storage") lines.push("来源：浏览器保存的地图");
-  else if (diagnostic.source === "recovery") lines.push("来源：意外恢复");
   else if (diagnostic.source === "api") lines.push("来源：API");
   if (diagnostic.file.name || diagnostic.file.mimeType) lines.push(
     `文件：${diagnostic.file.name || "未命名文件"}`,
@@ -233,7 +232,7 @@ function sanitizeImportFileSummary(file, source) {
     name,
     size: file ? Math.max(0, Number(file.size) || 0) : null,
     mimeType,
-    inferredFormat: file ? inferMapImportFileKind({name, type: mimeType}) : source === "browser-storage" ? "浏览器地图存档" : source === "recovery" ? "恢复点" : "未指定"
+    inferredFormat: file ? inferMapImportFileKind({name, type: mimeType}) : source === "browser-storage" ? "浏览器地图存档" : "未指定"
   };
 }
 
