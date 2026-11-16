@@ -988,10 +988,9 @@ function reconcileStateCapitals(map, stateIds, snapshot) {
       continue;
     }
     const beforeCityLength = map.settlements.cities.length;
-    ensureReplacementCapitalForState(map, stateId);
+    const createdCapital = ensureReplacementCapitalForState(map, stateId);
     if (map.settlements.cities.length > beforeCityLength) {
-      const burg = map.pack.burgs[map.politics.states[stateId].capital];
-      snapshot.createdCapitalCells.push({packCell: burg.cell, before: 0});
+      snapshot.createdCapitalCells.push(createdCapital);
       created++;
     }
     const replacement = findCityByBurgId(map, map.politics.states[stateId].capital);
@@ -1106,8 +1105,9 @@ function syncMovedCityProvinces(map, settlementSnapshot) {
 function restoreSettlementSnapshot(map, snapshot) {
   if (!snapshot) return;
   for (const stateSnapshot of snapshot.states || []) restoreState(map, stateSnapshot);
-  for (const {packCell, before} of snapshot.createdCapitalCells || []) {
-    if (map?.pack?.cells?.burg) map.pack.cells.burg[packCell] = before;
+  for (const {packCell, previousPackBurg, gridCell, previousGridBurg} of [...(snapshot.createdCapitalCells || [])].reverse()) {
+    if (map?.pack?.cells?.burg) map.pack.cells.burg[packCell] = previousPackBurg;
+    if (map?.grid?.cells?.burg) map.grid.cells.burg[gridCell] = previousGridBurg;
   }
   if (map?.pack?.cells && snapshot.packBurgArray && map.pack.cells.burg !== snapshot.packBurgArray) map.pack.cells.burg = snapshot.packBurgArray;
   if (map?.settlements?.cities) map.settlements.cities.length = snapshot.cityLength;
@@ -1208,6 +1208,7 @@ function ensureReplacementCapitalForState(map, stateId) {
   assignStateCapitalAnchor(map, stateId, {
     capital: capital.burgId, capitalName: capital.name, center: packCell, gridCenter: gridCell
   });
+  return capital;
 }
 
 function repairProvincesAfterStateCreation(map, provinceIds) {
@@ -1968,6 +1969,7 @@ function captureStateCollectionSnapshot(map, {deletedStateId = null} = {}) {
     packProvinces: map?.pack?.provinces === map?.politics?.provinces ? null : clonePlain(map?.pack?.provinces || []),
     gridState: cloneArrayLike(map?.grid?.cells?.state),
     gridProvince: cloneArrayLike(map?.grid?.cells?.province),
+    gridBurg: partialSettlement ? null : cloneArrayLike(map?.grid?.cells?.burg),
     packState: cloneArrayLike(map?.pack?.cells?.state),
     packProvince: cloneArrayLike(map?.pack?.cells?.province),
     packBurg: partialSettlement ? null : cloneArrayLike(map?.pack?.cells?.burg),
@@ -1996,6 +1998,7 @@ function restoreStateCollectionSnapshot(map, snapshot) {
   }
   restoreArrayLike(map?.grid?.cells, "state", snapshot.gridState);
   restoreArrayLike(map?.grid?.cells, "province", snapshot.gridProvince);
+  restoreArrayLike(map?.grid?.cells, "burg", snapshot.gridBurg);
   restoreArrayLike(map?.pack?.cells, "state", snapshot.packState);
   restoreArrayLike(map?.pack?.cells, "province", snapshot.packProvince);
   restoreArrayLike(map?.pack?.cells, "burg", snapshot.packBurg);
@@ -2215,8 +2218,15 @@ function createCapitalCity(map, {stateId, provinceId, packCell, gridCell, cultur
   };
   map.pack.burgs[burgId] = burg;
   map.settlements.cities.push(city);
+  const previousPackBurg = map.pack.cells.burg?.[packCell];
+  const previousGridBurg = map.grid?.cells?.burg?.[gridCell];
   if (map.pack.cells.burg) map.pack.cells.burg[packCell] = burgId;
-  return {cityId, burgId, name};
+  if (map.grid?.cells?.burg) {
+    const representative = map.settlements.cities.reduce((id, item) => item && !item.removed && Number(item.cell) === gridCell
+      ? Math.min(id, Number(item.id)) : id, Number.POSITIVE_INFINITY);
+    map.grid.cells.burg[gridCell] = Number.isFinite(representative) ? representative : cityId;
+  }
+  return {cityId, burgId, name, packCell, gridCell, previousPackBurg, previousGridBurg};
 }
 
 function cityScaleForMap(map, city, burg = null) {

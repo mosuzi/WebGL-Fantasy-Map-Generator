@@ -57,6 +57,8 @@ assert.deepEqual(Object.fromEntries(Object.keys(oldCityFields).map(key => [key, 
 const replacementBurgId = capitalMap.politics.states[capitalSample.stateId].capital;
 assert.ok(replacementBurgId && replacementBurgId !== oldCityFields.burgId, "旧国应自动重选首都");
 assert.equal(capitalMap.pack.burgs[replacementBurgId].state, capitalSample.stateId);
+const replacementCity = capitalMap.settlements.cities.find(city => city?.burgId === replacementBurgId);
+assert.equal(capitalMap.grid.cells.burg[replacementCity.cell], replacementCity.id, "补建首都未同步 grid 城镇索引");
 assert.equal(capitalMap.pack.states[capitalSample.stateId].capital, replacementBurgId, "旧图 pack 镜像应同步替补首都");
 const newState = capitalMap.politics.states[capitalCreated.stateId];
 assert.equal(capitalMap.pack.states[capitalCreated.stateId].color, newState.color, "旧图 pack 镜像应同步新国颜色");
@@ -424,6 +426,7 @@ function snapshotStateCollections(targetMap) {
     packProvinces: targetMap.pack.provinces,
     gridState: targetMap.grid.cells.state,
     gridProvince: targetMap.grid.cells.province,
+    gridBurg: targetMap.grid.cells.burg,
     packState: targetMap.pack.cells.state,
     packProvince: targetMap.pack.cells.province,
     packBurg: targetMap.pack.cells.burg,

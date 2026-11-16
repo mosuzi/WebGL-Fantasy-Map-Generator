@@ -251,6 +251,7 @@ export async function createCompressedMapTextBlob(documentRef, text) {
 }
 
 export function validateMapDocumentForExport(document) {
+  reconcileSettlementCellIdentity(document?.map, {validateOnly: true});
   validateCurrentMapDocument(document);
   return document;
 }
@@ -298,7 +299,7 @@ export function migrateMapDocument(document) {
   migrated.map = normalizeLakeOverflowMap(migrated.map);
   migrated.map = normalizeZoneMap(migrated.map);
   applyRegenerationLockCompatibility(migrated.map, versioned.map?.regenerationLocks);
-  reconcileSettlementCellIdentity(migrated.map);
+  reconcileSettlementCellIdentity(migrated.map, {repairMissingBurgs: true});
   diagnoseSettlementPortTopology(migrated.map);
   validateCurrentMapDocument(migrated);
   return migrated;

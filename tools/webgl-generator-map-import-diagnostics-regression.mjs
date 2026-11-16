@@ -53,6 +53,11 @@ assert.equal(diagnostic.error.code, "invalid-json");
 assert.ok(formatMapImportDiagnosticLines(diagnostic).some(line => line === "诊断代码：invalid-json"));
 assert.ok(formatMapImportDiagnosticLines(diagnostic).at(-1).startsWith("建议："));
 assert.equal(JSON.parse(stringifyMapImportDiagnostic(diagnostic)).file.size, 4096);
+const storedDiagnostic = createMapImportDiagnostic(new Error("旧存档需要补全"), null, {source: "browser-storage"});
+assert.equal(storedDiagnostic.file.size, null, "浏览器存档不能伪装成 0B 文件");
+assert.equal(storedDiagnostic.file.inferredFormat, "浏览器地图存档");
+assert(formatMapImportDiagnosticLines(storedDiagnostic).includes("来源：浏览器保存的地图"));
+assert(!formatMapImportDiagnosticLines(storedDiagnostic).some(line => /^大小：|^推断格式：/.test(line)), "无文件来源不能显示伪造的文件属性");
 
 const geoDocument = {
   type: "FeatureCollection",
@@ -110,7 +115,8 @@ const [appSource, panelSource, controlPanelSource] = await Promise.all([
 ]);
 assert.match(appSource, /lastMapImportDiagnostic:\s*null/);
 assert.match(appSource, /reportMapImportError\(state, documentRef, error,/);
-assert.match(appSource, /const source = options\.source === "ui" \? "ui" : "api"/);
+assert.match(appSource, /\["ui", "recovery", "browser-storage"\]\.includes\(options\.source\)/);
+assert.match(appSource, /diagnostic\.source === "browser-storage" \|\| diagnostic\.source === "recovery"/);
 assert.match(appSource, /exportImportDiagnostic:/);
 assert.match(appSource, /exportMapImportDiagnosticViaApi/);
 assert.match(appSource, /inspectGeoImportSource\(text\)/);
@@ -119,6 +125,7 @@ assert.match(appSource, /createImportFailureDiagnostic\("heightmap"/);
 assert.match(appSource, /downloadText\(documentRef, text, filename/);
 assert.match(panelSource, /export-map-import-diagnostic/);
 assert.match(controlPanelSource, /id="export-map-import-diagnostic"[^>]*hidden/);
+assert.match(controlPanelSource, /v-show="debugEnabled" id="file-operation-error-details"/);
 
 console.log(JSON.stringify({
   ok: true,

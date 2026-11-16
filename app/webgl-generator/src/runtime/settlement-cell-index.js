@@ -59,7 +59,7 @@ export function rebuildSettlementCellIndex(map, {syncLegacy = false} = {}) {
   return index;
 }
 
-export function reconcileSettlementCellIdentity(map) {
+export function reconcileSettlementCellIdentity(map, {repairMissingBurgs = false, validateOnly = false} = {}) {
   const grid = map?.grid;
   const pack = map?.pack;
   const cities = map?.settlements?.cities;
@@ -71,7 +71,9 @@ export function reconcileSettlementCellIdentity(map) {
 
   const gridCount = grid.points.length;
   const packCount = pack.cells.i?.length ?? pack.cells.g.length;
+  const repairBurgIdLimit = pack.burgs.length + cities.length;
   const burgById = new Map();
+  const repairedBurgIds = new Set();
   let maxKnownBurgId = Math.max(0, pack.burgs.length - 1);
   for (let slot = 0; slot < pack.burgs.length; slot++) {
     const burg = pack.burgs[slot];
@@ -128,10 +130,10 @@ export function reconcileSettlementCellIdentity(map) {
     if (!Number.isInteger(burgId) || burgId <= 0 || activeBurgIds.has(burgId)) {
       throw settlementCellIdentityError(`城镇 #${cityId} 的 burgId 无效或重复`, {reason: "invalid-burg-id", cityId, burgId});
     }
-    if (!Number.isInteger(gridCell) || gridCell < 0 || gridCell >= gridCount) {
+    if (!hasExplicitNumber(city.cell) || !Number.isInteger(gridCell) || gridCell < 0 || gridCell >= gridCount) {
       throw settlementCellIdentityError(`城镇 #${cityId} 引用了无效 grid cell`, {reason: "invalid-grid-cell", cityId, gridCell});
     }
-    if (!Number.isInteger(packCell) || packCell < 0 || packCell >= packCount) {
+    if (!hasExplicitNumber(city.packCell) || !Number.isInteger(packCell) || packCell < 0 || packCell >= packCount) {
       throw settlementCellIdentityError(`城镇 #${cityId} 引用了无效 pack cell`, {reason: "invalid-pack-cell", cityId, packCell});
     }
     if (Number(pack.cells.g[packCell]) !== gridCell) {
@@ -143,15 +145,26 @@ export function reconcileSettlementCellIdentity(map) {
         packGridCell: Number(pack.cells.g[packCell])
       });
     }
-    const burg = burgById.get(burgId);
+    if (!hasExplicitNumber(city.x) || !hasExplicitNumber(city.y) || !Number.isFinite(Number(city.x)) || !Number.isFinite(Number(city.y))) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 缺少有效坐标`, {reason: "invalid-city-point", cityId});
+    }
+    let burg = burgById.get(burgId);
+    if (!burg && repairMissingBurgs && !pack.burgs[burgId]) {
+      if (burgId >= repairBurgIdLimit || burgId >= 0xffff_ffff) {
+        throw settlementCellIdentityError(`城镇 #${cityId} 的 burgId 超出旧档可补全范围`, {reason: "invalid-burg-id", cityId, burgId});
+      }
+      if (!isSettlementLandCell(pack.cells, packCell, pack.features) || !isSettlementLandCell(grid.cells, gridCell, map.features?.features)) {
+        throw settlementCellIdentityError(`城镇 #${cityId} 的 cell 不在陆地上`, {reason: "invalid-city-land", cityId, gridCell, packCell});
+      }
+      burg = createBurgFromCity(city, {cityId, burgId, packCell, pack});
+      burgById.set(burgId, burg);
+      repairedBurgIds.add(burgId);
+    }
     if (!burg || burg.removed) {
       throw settlementCellIdentityError(`城镇 #${cityId} 缺少活动 burg #${burgId}`, {reason: "missing-burg", cityId, burgId});
     }
-    if (pack.burgs[burgId] !== burg) {
+    if (pack.burgs[burgId] !== burg && !repairedBurgIds.has(burgId)) {
       throw settlementCellIdentityError(`城镇 #${cityId} 的 burg #${burgId} 未按 ID 建立直接索引`, {reason: "burg-index-mismatch", cityId, burgId});
-    }
-    if (!Number.isFinite(Number(city.x)) || !Number.isFinite(Number(city.y))) {
-      throw settlementCellIdentityError(`城镇 #${cityId} 缺少有效坐标`, {reason: "invalid-city-point", cityId});
     }
 
     addBucketValue(cityIdsByGridCell, gridCell, cityId);
@@ -168,12 +181,22 @@ export function reconcileSettlementCellIdentity(map) {
     }
   }
 
+  const report = {
+    cities: plan.length,
+    gridCells: cityIdsByGridCell.size,
+    packCells: burgIdsByPackCell.size,
+    sharedGridCells: [...cityIdsByGridCell.values()].filter(ids => ids.length > 1).length,
+    sharedPackCells: [...burgIdsByPackCell.values()].filter(ids => ids.length > 1).length
+  };
+  if (validateOnly) return report;
+
   const nextGridBurg = new Array(gridCount).fill(-1);
   for (const [cell, ids] of cityIdsByGridCell) nextGridBurg[cell] = ids[0];
   const nextPackBurg = createPackBurgMirror(pack.cells.burg, packCount, maxBurgId);
   for (const [cell, ids] of burgIdsByPackCell) nextPackBurg[cell] = ids[0];
 
   for (const item of plan) {
+    if (!pack.burgs[item.burgId]) pack.burgs[item.burgId] = item.burg;
     item.city.id = item.cityId;
     item.city.burgId = item.burgId;
     item.city.cell = item.gridCell;
@@ -193,13 +216,41 @@ export function reconcileSettlementCellIdentity(map) {
 
   invalidateSettlementCellIndex(map);
   rebuildSettlementCellIndex(map);
+  return report;
+}
+
+function createBurgFromCity(city, {cityId, burgId, packCell, pack}) {
   return {
-    cities: plan.length,
-    gridCells: cityIdsByGridCell.size,
-    packCells: burgIdsByPackCell.size,
-    sharedGridCells: [...cityIdsByGridCell.values()].filter(ids => ids.length > 1).length,
-    sharedPackCells: [...burgIdsByPackCell.values()].filter(ids => ids.length > 1).length
+    i: burgId,
+    id: burgId,
+    cityId,
+    cell: packCell,
+    x: Number(city.x),
+    y: Number(city.y),
+    name: city.name,
+    state: city.state,
+    province: city.province,
+    culture: city.culture,
+    religion: city.religion,
+    feature: pack.cells.f?.[packCell],
+    capital: city.capital ? 1 : 0,
+    port: city.port || 0,
+    population: city.population,
+    group: city.group,
+    type: city.type,
+    civilizationType: city.civilizationType,
+    civilizationLabel: city.civilizationLabel,
+    visual: city.visual && typeof city.visual === "object" ? structuredClone(city.visual) : city.visual
   };
+}
+
+function hasExplicitNumber(value) {
+  return typeof value === "number" || typeof value === "string" && value.trim() !== "";
+}
+
+function isSettlementLandCell(cells, cell, features) {
+  const feature = features?.[cells.f?.[cell]];
+  return typeof feature?.land === "boolean" ? feature.land : Number(cells.h?.[cell]) >= 20;
 }
 
 export function discardInvalidSettlementCellObjects(map) {

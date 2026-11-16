@@ -4,7 +4,7 @@ import fs from "node:fs";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {finalizeSettlements} from "../app/webgl-generator/src/generator/settlements.js";
-import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {createMapDocument, parseMapDocument, stringifyMapDocument, validateMapDocumentForExport} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 import {buildObjectPickingIndex, refreshRiversInPickingIndex} from "../app/webgl-generator/src/renderer/picking.js";
 import {
@@ -37,6 +37,73 @@ const loadedBurg = loaded.pack.burgs[loadedCity.burgId];
 assert.equal(loadedBurg.cell, loadedCity.packCell, "旧 burg cell 未按 city 新身份修复");
 assert.deepEqual([loadedBurg.x, loadedBurg.y], [loadedCity.x, loadedCity.y], "旧 burg 坐标未保留城市港口偏移");
 assert.equal(loaded.pack.cells.burg[staleCell], staleCell === loadedCity.packCell ? loadedCity.burgId : 0, "幽灵 pack burg 镜像未清除");
+
+const missingBurg = generatePlaceholderMap({seed: "legacy-state-capital-missing-burg", cellsTarget: 1_000});
+const missingCity = missingBurg.settlements.cities.find(item => item && !item.removed);
+const missingBurgId = missingCity.burgId;
+const preservedCity = structuredClone(missingCity);
+missingBurg.pack.burgs[missingBurgId] = null;
+missingBurg.pack.cells.burg[missingCity.packCell] = 0;
+missingBurg.grid.cells.burg[missingCity.cell] = -1;
+const brokenDocument = createMapDocument(missingBurg);
+assert.throws(
+  () => validateMapDocumentForExport(brokenDocument),
+  error => error?.code === "settlement_cell_identity_invalid" && error?.details?.reason === "missing-burg",
+  "导出不能提交下次无法读取的地图"
+);
+const repairedDocument = parseMapDocument(stringifyMapDocument(brokenDocument));
+const repairedCity = repairedDocument.map.settlements.cities[missingCity.id];
+const repairedBurg = repairedDocument.map.pack.burgs[missingBurgId];
+assert.deepEqual(repairedCity, preservedCity, "旧档补全改变了城市自有数据");
+assert.equal(repairedBurg.cityId, missingCity.id, "旧档未补齐城镇身份");
+assert.equal(repairedBurg.name, missingCity.name, "旧档未保留城镇名称");
+assert.equal(repairedBurg.population, missingCity.population, "旧档未保留城镇人口");
+assert.equal(repairedDocument.map.pack.cells.burg[missingCity.packCell], missingBurgId, "旧档未补齐 pack cell 镜像");
+assert.equal(repairedDocument.map.grid.cells.burg[missingCity.cell], missingCity.id, "旧档未补齐 grid cell 镜像");
+validateMapDocumentForExport(repairedDocument);
+parseMapDocument(stringifyMapDocument(repairedDocument));
+assert.equal(missingBurg.pack.burgs[missingBurgId], null, "旧档迁移改写了输入存档");
+
+const divergentFeatures = structuredClone(missingBurg);
+const divergentCity = divergentFeatures.settlements.cities[missingCity.id];
+const divergentPackFeatureId = divergentFeatures.pack.features.length;
+const originalPackFeature = divergentFeatures.pack.features[divergentFeatures.pack.cells.f[divergentCity.packCell]];
+divergentFeatures.pack.features.push({...originalPackFeature, land: true});
+divergentFeatures.pack.cells.f[divergentCity.packCell] = divergentPackFeatureId;
+divergentFeatures.features.features[divergentPackFeatureId] = {land: false};
+reconcileSettlementCellIdentity(divergentFeatures, {repairMissingBurgs: true});
+assert.equal(divergentFeatures.pack.burgs[missingBurgId]?.cityId, missingCity.id, "pack 与 grid 的 feature ID 空间不同仍应按各自陆地资料补全");
+
+function assertMissingBurgRepairRejected(label, mutate, reason) {
+  const target = structuredClone(missingBurg);
+  const targetCity = target.settlements.cities[missingCity.id];
+  mutate(target, targetCity);
+  assert.throws(
+    () => parseMapDocument(stringifyMapDocument(createMapDocument(target))),
+    error => error?.code === "settlement_cell_identity_invalid" && error?.details?.reason === reason,
+    `${label} 不得被旧档迁移虚构为有效城镇`
+  );
+}
+assertMissingBurgRepairRejected("十亿位稀疏 burg ID", (_, targetCity) => { targetCity.burgId = 1_000_000_000; }, "invalid-burg-id");
+assertMissingBurgRepairRejected("数组索引之外的 burg ID", (_, targetCity) => { targetCity.burgId = 0xffff_ffff; }, "invalid-burg-id");
+assertMissingBurgRepairRejected("空 grid cell", (_, targetCity) => { targetCity.cell = null; }, "invalid-grid-cell");
+assertMissingBurgRepairRejected("空 pack cell", (_, targetCity) => { targetCity.packCell = null; }, "invalid-pack-cell");
+assertMissingBurgRepairRejected("空城市横坐标", (_, targetCity) => { targetCity.x = null; }, "invalid-city-point");
+assertMissingBurgRepairRejected("空城市纵坐标", (_, targetCity) => { targetCity.y = ""; }, "invalid-city-point");
+assertMissingBurgRepairRejected("水域城镇", (target, targetCity) => {
+  target.grid.cells.h[targetCity.cell] = 19;
+  target.pack.cells.h[targetCity.packCell] = 19;
+  target.features.features[target.grid.cells.f[targetCity.cell]].land = false;
+  target.pack.features[target.pack.cells.f[targetCity.packCell]].land = false;
+}, "invalid-city-land");
+
+const removedBurg = structuredClone(missingBurg);
+removedBurg.pack.burgs[missingBurgId] = {i: missingBurgId, removed: true};
+assert.throws(
+  () => parseMapDocument(stringifyMapDocument(createMapDocument(removedBurg))),
+  error => error?.code === "settlement_cell_identity_invalid" && error?.details?.reason === "missing-burg",
+  "已删除的 burg 不能当成普通缺失记录复活"
+);
 
 const cityLocks = captureLockedRegenerationObjects(loaded, OBJECT_KIND.CITY);
 finalizeSettlements(loaded.grid, loaded.features, loaded.politics, loaded.settlements, loaded.pack, {

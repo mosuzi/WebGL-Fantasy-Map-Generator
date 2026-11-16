@@ -32,6 +32,7 @@ const finalReport = {
   ok: false,
   url: "http://" + host + ":" + port + "?healthClear=1",
   restored: null,
+  missingBurgRestore: null,
   failedRestore: null,
   screenshotPath,
   consoleErrors,
@@ -47,6 +48,7 @@ const finalReport = {
 const compactReport = {
   ok: false,
   restored: null,
+  missingBurgRestore: null,
   failedRestore: null,
   screenshot: {path: screenshotPath, exists: false, bytes: 0},
   setupLongTasks,
@@ -192,6 +194,63 @@ try {
   assert.equal(restored.diagnostic, null, "成功恢复旧 v2 存档时产生了导入诊断");
   assert.match(restored.status, /已恢复浏览器保存的地图/, "成功恢复旧 v2 存档后缺少状态反馈");
 
+  const missingBurgPreparation = await page.evaluate(async key => {
+    const exported = window.webglGeneratorApi.data.exportMap({download: false, includeText: true});
+    if (!exported?.ok) throw new Error(exported?.error?.message || "旧城镇固定图导出失败");
+    const document = JSON.parse(exported.data.text);
+    const city = document.map.settlements.cities.find(item => item && !item.removed && Number.isInteger(item.burgId));
+    if (!city) throw new Error("旧城镇固定图缺少活动城市");
+    document.map.pack.burgs[city.burgId] = null;
+    document.map.pack.cells.burg.data[city.packCell] = 0;
+    document.map.grid.cells.burg[city.cell] = -1;
+    const text = JSON.stringify(document);
+    const bytes = new Uint8Array(await new Response(new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    const raw = JSON.stringify({type: "webgl-generator-local-map-storage", version: 1, savedAt: "2026-11-16T00:00:00.000Z", originalBytes: text.length,
+      metadata: {seed: document.map.metadata.seed}, encoding: "gzip-base64", data: btoa(binary), bytes: bytes.length});
+    localStorage.setItem(key, raw);
+    return {raw, cityId: city.id, burgId: city.burgId, name: city.name, population: city.population};
+  }, storageKey);
+  await resetTask350LongTaskWindow(page);
+  await page.reload({waitUntil: "domcontentloaded"});
+  await page.waitForFunction(({cityId, burgId}) => window.__webglGeneratorApp?.map?.pack?.burgs?.[burgId]?.cityId === cityId, missingBurgPreparation);
+  await waitForApiReady(page, 45000);
+  const missingBurgRestore = await page.evaluate(({key, preparation}) => {
+    const map = window.__webglGeneratorApp.map;
+    const city = map.settlements.cities[preparation.cityId];
+    const burg = map.pack.burgs[preparation.burgId];
+    return {name: city.name, population: city.population, burgCityId: burg.cityId, gridMirror: map.grid.cells.burg[city.cell], packMirror: map.pack.cells.burg[city.packCell], rawUnchanged: localStorage.getItem(key) === preparation.raw,
+      diagnostic: window.__webglGeneratorApp.lastMapImportDiagnostic, detailDisplay: getComputedStyle(document.getElementById("file-operation-error-details")).display};
+  }, {key: storageKey, preparation: missingBurgPreparation});
+  finalReport.missingBurgRestore = missingBurgRestore;
+  compactReport.missingBurgRestore = missingBurgRestore;
+  const missingBurgLongTasks = await collectTask350LongTaskWindow(page, "missing-burg-restore");
+  reloadLongTasks.push(...missingBurgLongTasks);
+  assert.equal(missingBurgRestore.name, missingBurgPreparation.name, "旧档补全改变城市名称");
+  assert.equal(missingBurgRestore.population, missingBurgPreparation.population, "旧档补全改变城市人口");
+  assert.equal(missingBurgRestore.burgCityId, missingBurgPreparation.cityId, "旧档未补齐 burg");
+  assert.equal(missingBurgRestore.gridMirror, missingBurgPreparation.cityId, "旧档未补齐 grid 镜像");
+  assert.equal(missingBurgRestore.packMirror, missingBurgPreparation.burgId, "旧档未补齐 pack 镜像");
+  assert.equal(missingBurgRestore.rawUnchanged, true, "旧档恢复覆盖了原始浏览器存档");
+  assert.equal(missingBurgRestore.diagnostic, null, "可修复旧档产生了失败诊断");
+  assert.equal(missingBurgRestore.detailDisplay, "none", "普通模式显示了技术诊断");
+
+  const directExportGuard = await page.evaluate(({burgId}) => {
+    const map = window.__webglGeneratorApp.map;
+    const burg = map.pack.burgs[burgId];
+    try {
+      map.pack.burgs[burgId] = null;
+      const result = window.webglGeneratorApi.data.exportMap({download: false, includeText: true});
+      return {ok: result?.ok, code: result?.error?.code, hasText: Boolean(result?.data?.text)};
+    } finally {
+      map.pack.burgs[burgId] = burg;
+    }
+  }, {burgId: missingBurgPreparation.burgId});
+  finalReport.directExportGuard = directExportGuard;
+  compactReport.directExportGuard = directExportGuard;
+  assert.deepEqual(directExportGuard, {ok: false, code: "settlement_cell_identity_invalid", hasText: false}, "直接 JSON 导出不得绕过保存身份校验");
+
   const corruptRaw = JSON.stringify({
     type: "webgl-generator-local-map-storage",
     version: 1,
@@ -210,7 +269,9 @@ try {
     rawStorageUnchanged: localStorage.getItem(key) === raw,
     diagnosticMessage: window.__webglGeneratorApp.lastMapImportDiagnostic?.error?.message || "",
     generatedSeed: window.__webglGeneratorApp.map?.metadata?.seed || "",
-    status: document.getElementById("file-operation-status")?.textContent || ""
+    status: document.getElementById("file-operation-status")?.textContent || "",
+    detailDisplay: getComputedStyle(document.getElementById("file-operation-error-details")).display,
+    diagnosticSource: window.__webglGeneratorApp.lastMapImportDiagnostic?.source
   }), {key: storageKey, raw: corruptRaw});
   const corruptReloadLongTasks = await collectTask350LongTaskWindow(page, "corrupt-restore");
   reloadLongTasks.push(...corruptReloadLongTasks);
@@ -220,12 +281,18 @@ try {
   assert.equal(failedRestore.rawStorageUnchanged, true, "恢复失败后浏览器原始存档被删除或改写");
   assert.match(failedRestore.diagnosticMessage, /JSON|解析|Unexpected|position/i, "恢复失败后缺少可解释的导入诊断");
   assert.ok(failedRestore.generatedSeed, "恢复失败后没有生成可继续使用的临时地图");
-  assert.match(failedRestore.status, /原存档已保留/, "恢复失败后没有提示原存档已保留");
+  assert.equal(failedRestore.status, "", "普通菜单仍显示了恢复错误");
+  assert.equal(failedRestore.detailDisplay, "none", "普通菜单仍显示了技术诊断");
+  assert.equal(failedRestore.diagnosticSource, "browser-storage", "浏览器存档被误标成 API 文档");
+  await page.evaluate(() => { window.__webglGeneratorDebug.enabled = true; });
+  await page.waitForFunction(() => getComputedStyle(document.getElementById("file-operation-error-details")).display !== "none");
+  assert.match(await page.locator("#file-operation-error-details").textContent(), /来源：浏览器保存的地图/);
   assert.deepEqual(consoleErrors, []);
   assert.deepEqual(pageErrors, []);
   assert.ok(existsSync(screenshotPath) && statSync(screenshotPath).size > 0, "旧 v2 浏览器存档恢复截图没有生成");
   for (const partition of [
     partitionTask350StartupLongTasks(startupBaselineLongTasks, legacyReloadLongTasks, 50),
+    partitionTask350StartupLongTasks(startupBaselineLongTasks, missingBurgLongTasks, 50),
     partitionTask350StartupLongTasks(startupBaselineLongTasks, corruptReloadLongTasks, 50)
   ]) {
     sharedStartupLongTasks.push(...partition.sharedStartup);

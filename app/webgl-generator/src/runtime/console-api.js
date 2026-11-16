@@ -1,7 +1,7 @@
 import {readControlPreferences, updateControlPreferences} from "../ui/panel.js";
 import {DEFAULT_MAX_CITY_LABELS} from "./display-defaults.js";
 import {areaUnitForDistanceUnit, formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
-import {createCanvasPngBlob, createCompressedMapDocumentBlob, createHeightmapPngBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadHeightmapPng, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
+import {createCanvasPngBlob, createCompressedMapDocumentBlob, createHeightmapPngBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadHeightmapPng, downloadText, mapFileBaseName, stringifyMapDocument, validateMapDocumentForExport} from "./map-file-io.js";
 import {createMapArchiveFilename} from "./map-filename.js";
 import {apiCall} from "./api-result.js";
 import {NAMEBASE_BINDING_TARGETS, createLegacyNamebaseText, createNamebaseDocument, getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../generator/namebase-store.js";
@@ -1704,6 +1704,7 @@ export function exportAllMapData(state, documentRef, options = {}) {
   }, {
     visualThemeDocument: isUserVisualTheme(visualTheme) ? exportVisualThemeDocument(visualTheme) : null
   });
+  validateMapDocumentForExport(document);
   const text = stringifyMapDocument(document);
   const filename = `${mapFileBaseName(map)}.webgl-map.json`;
   if (options.download === true) {
@@ -1763,6 +1764,7 @@ export async function exportCompressedAllMapData(state, documentRef, options = {
   }, {
     visualThemeDocument: isUserVisualTheme(visualTheme) ? exportVisualThemeDocument(visualTheme) : null
   });
+  validateMapDocumentForExport(document);
   const filename = createMapArchiveFilename(map, {
     template: options.filenameTemplate === undefined ? "{name}.{ext}" : options.filenameTemplate
   });

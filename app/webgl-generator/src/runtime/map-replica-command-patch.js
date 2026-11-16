@@ -31,7 +31,7 @@ const DOMAIN_PATHS = Object.freeze({
   culture: ["society.cultures", "grid.cells.culture", "pack.cells.culture", "settlements.cities"],
   religion: ["society.religions", "grid.cells.religion", "pack.cells.religion", "settlements.cities"],
   politics: ["politics", "grid.cells.state", "grid.cells.province", "grid.cells.region", "pack.cells.state", "pack.cells.province", "pack.cells.region", "settlements.cities"],
-  state: ["politics.states", "grid.cells.state", "pack.cells.state", "settlements.cities"],
+  state: ["politics.states", "politics.provinces", "politics.metadata", "pack.states", "pack.provinces", "grid.cells.state", "grid.cells.province", "grid.cells.burg", "pack.cells.state", "pack.cells.province", "pack.cells.burg", "settlements.cities", "settlements.metadata", "pack.burgs", "metadata.derivedStale", "military.metadata.stale", "zones.metadata.stale", "markers.metadata.stale", "economy.metadata.stale", "diplomacy.metadata.stale"],
   "state-topology": ["politics", "grid.cells.state", "grid.cells.province", "pack.cells.state", "pack.cells.province", "settlements.cities"],
   province: ["politics.provinces", "grid.cells.province", "pack.cells.province", "settlements.cities"],
   "province-topology": ["politics.provinces", "grid.cells.province", "pack.cells.province", "settlements.cities"],

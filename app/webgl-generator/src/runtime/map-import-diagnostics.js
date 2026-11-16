@@ -39,7 +39,7 @@ export function createImportDiagnostic(options = {}) {
     source: options.source || "file",
     import: {kind, label: IMPORT_KIND_LABELS[kind], status},
     expected: {documentType: MAP_DOCUMENT_TYPE, documentVersion: MAP_DOCUMENT_VERSION, mapSchemaVersion: MAP_SCHEMA_VERSION},
-    file: sanitizeImportFileSummary(options.file),
+    file: sanitizeImportFileSummary(options.file, options.source),
     summary: sanitizeDiagnosticSummary(options.summary),
     error: status === "failed" ? {
       name: options.error?.name || typeof options.error,
@@ -125,12 +125,17 @@ export function createHeightmapSourceSummary(file, settings = {}, source = {}) {
 export function formatMapImportDiagnosticLines(diagnostic) {
   const lines = [
     `导入类型：${diagnostic.import?.label || "完整地图"}`,
-    `结果：${diagnostic.import?.status === "success" ? "成功" : "失败"}`,
+    `结果：${diagnostic.import?.status === "success" ? "成功" : "失败"}`
+  ];
+  if (diagnostic.source === "browser-storage") lines.push("来源：浏览器保存的地图");
+  else if (diagnostic.source === "recovery") lines.push("来源：意外恢复");
+  else if (diagnostic.source === "api") lines.push("来源：API");
+  if (diagnostic.file.name || diagnostic.file.mimeType) lines.push(
     `文件：${diagnostic.file.name || "未命名文件"}`,
     `大小：${formatBytes(diagnostic.file.size)}`,
     `MIME：${diagnostic.file.mimeType || "未提供"}`,
     `推断格式：${diagnostic.file.inferredFormat}`
-  ];
+  );
   if (diagnostic.error) lines.push(
     `诊断代码：${diagnostic.error.code}`,
     `失败阶段：${diagnostic.error.stage}`,
@@ -221,14 +226,14 @@ function forEachCoordinate(value, callback) {
   for (const item of value) forEachCoordinate(item, callback);
 }
 
-function sanitizeImportFileSummary(file) {
+function sanitizeImportFileSummary(file, source) {
   const name = String(file?.name || "");
   const mimeType = String(file?.type || file?.mimeType || "");
   return {
     name,
-    size: Math.max(0, Number(file?.size) || 0),
+    size: file ? Math.max(0, Number(file.size) || 0) : null,
     mimeType,
-    inferredFormat: inferMapImportFileKind({name, type: mimeType})
+    inferredFormat: file ? inferMapImportFileKind({name, type: mimeType}) : source === "browser-storage" ? "浏览器地图存档" : source === "recovery" ? "恢复点" : "未指定"
   };
 }
 

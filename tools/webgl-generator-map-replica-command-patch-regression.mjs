@@ -6,10 +6,13 @@ import {createRenameObjectCommand} from "../app/webgl-generator/src/runtime/obje
 
 const source = {
   visualTheme: {preset: "old"},
-  grid: {cells: {pop: [1, 2], state: [0, 1], province: [0, 2], region: [-1, 3]}},
+  grid: {cells: {pop: [1, 2], state: [0, 1], province: [0, 2], region: [-1, 3], burg: [0, -1]}},
   pack: {cells: {pop: new Float32Array([1, 2]), state: new Uint16Array([0, 1]), province: new Uint16Array([0, 2]), region: [-1, 3], burg: new Uint16Array([1, 0])}, burgs: [null, {id: 1, cityId: 0, name: "旧城"}]},
   settlements: {cities: [{id: 0, burgId: 1, name: "旧城"}], metadata: {count: 1}},
-  politics: {states: [], provinces: [], regions: []}
+  politics: {states: [], provinces: [], regions: []},
+  metadata: {derivedStale: {systems: []}},
+  military: {metadata: {stale: false}}, zones: {metadata: {stale: false}}, markers: {metadata: {stale: false}},
+  economy: {metadata: {stale: false}}, diplomacy: {metadata: {stale: false}}
 };
 source.pack.states = source.politics.states;
 source.pack.provinces = source.politics.provinces;
@@ -42,6 +45,13 @@ target.grid.cells.state = [2, 2];
 target.pack.cells.state = new Uint16Array([2, 2]);
 target.politics.states = [{id: 2}];
 target.pack.states = target.politics.states;
+target.settlements.cities.push({id: 1, burgId: 2, name: "新都"});
+target.settlements.metadata.count = 2;
+target.pack.burgs.push({id: 2, i: 2, cityId: 1, name: "新都"});
+target.pack.cells.burg[1] = 2;
+target.grid.cells.burg[1] = 1;
+target.metadata.derivedStale = {systems: ["military", "zones", "state-markers", "economy", "diplomacy"]};
+for (const system of ["military", "zones", "markers", "economy", "diplomacy"]) target[system].metadata.stale = true;
 const statePatch = await createCommandMapReplicaPatch({
   map: target,
   command: {domain: "state"},
@@ -51,7 +61,13 @@ const statePatch = await createCommandMapReplicaPatch({
   targetRevision: 2,
   baseChecksum: checksum
 });
-assert.deepEqual(statePatch.writes.map(write => write.path), ["politics.states", "grid.cells.state", "pack.cells.state", "settlements.cities"]);
+assert.deepEqual(statePatch.writes.map(write => write.path), listCommandMapReplicaPaths("state"));
+applyMapReplicaPatch(source, statePatch);
+assert.equal(source.settlements.cities[1].burgId, 2, "建国城市没有同步到地图副本");
+assert.equal(source.pack.burgs[2].cityId, 1, "建国城镇没有同步到地图副本");
+assert.equal(source.pack.cells.burg[1], 2, "建国 cell 镜像没有同步到地图副本");
+assert.equal(source.grid.cells.burg[1], 1, "建国 grid 镜像没有同步到地图副本");
+for (const system of ["military", "zones", "markers", "economy", "diplomacy"]) assert.equal(source[system].metadata.stale, true, `${system} 派生过期标记没有同步到地图副本`);
 const workerPatch = await createCommandMapReplicaPatch({
   map: target,
   command: {domain: "worker-routes", getReplicaPaths: () => ["pack.cells.state", "politics.states"]},
