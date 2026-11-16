@@ -68,7 +68,7 @@ import {
   resolvePoliticalLabelPlacement,
   restorePoliticalLabelPlacementSnapshot
 } from "./political-label-layout.js";
-import {resolveStateLabelPlacement} from "./state-label-territory.js";
+import {resolveStateLabelPlacement, stateLabelComponentContainsPoint} from "./state-label-territory.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {createPreparedDisplayIntent, gpuResidentShoreSurfaceKey} from "./prepared-display-intent.js";
 import {militaryIconLabelForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
@@ -2855,7 +2855,7 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("overlay", {cityLayerVisibility: true}, startedAt);
     const rect = this.canvas.getBoundingClientRect();
-    const renderedLabels = this.labelItems.filter(item => item.box && (item.visible || item.buffered));
+    const renderedLabels = this.labelItems.filter(item => item.box && item.visible && !item.node.classList.contains("scale-entering") && Number(item.resolvedStyle?.opacity) !== 0);
     const politicalBoxes = renderedLabels.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE).map(item => item.box);
     const ordinaryBoxes = renderedLabels.filter(item => item.targetKind !== LABEL_TARGET_KIND.STATE && item.targetKind !== LABEL_TARGET_KIND.PROVINCE).map(item => item.box);
     const cityLabelBoxes = renderedLabels.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).slice(-MAX_OVERLAY_COLLISION_BOXES).map(item => item.box);
@@ -5087,12 +5087,14 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("overlay", {interactionSuspended: this.overlayInteractionSuspended}, startedAt);
     try {
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = {left: 0, top: 0, width: this.canvasSize.cssWidth, height: this.canvasSize.cssHeight};
     const occupied = [];
     const occupiedCityLabels = [];
     const occupiedStates = [];
     const occupiedProvinces = [];
     const occupiedByPriority = [];
+    const visibleObstacleItems = [];
+    let hasScaleEnteringLabels = false;
     let visible = 0;
     let visibleCities = 0;
     let visibleStates = 0;
@@ -5100,7 +5102,7 @@ export class PlaceholderMapRenderer {
     let fallbackProvinces = 0;
     let stateCityOverlaps = 0;
     const scale = this.camera.scale;
-    const preservePoliticalCandidate = this.viewportInteractionKind === "pan" || this.viewportInteractionKind === "zoom";
+    const preservePoliticalCandidate = this.viewportInteractionKind === "pan";
     const maxVisible = labelLimitForScale(scale, this.labelOptions.maxCityLabels);
     const padding = labelPaddingForScale(scale);
     const labelPrewarm = overlayLabelPrewarmCssPx(rect);
@@ -5119,7 +5121,7 @@ export class PlaceholderMapRenderer {
       const politicalLabel = stateLabel || provinceLabel;
       const layerVisible = this.isLabelItemLayerVisible(item);
       const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
-      if (!layerVisible || (!forceVisible && (!withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible)))) {
+      if (!layerVisible || Number(item.resolvedStyle?.opacity) === 0 || (!forceVisible && (!withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible)))) {
         item.node.classList.toggle("visible", false);
         item.node.classList.toggle("buffered", false);
         item.node.classList.toggle("viewport-entering", false);
@@ -5132,9 +5134,14 @@ export class PlaceholderMapRenderer {
       }
       const baseScreen = this.worldToScreen(item.x, item.y, rect);
       const politicalPrewarm = provinceLabel ? Math.min(labelPrewarm, PROVINCE_LABEL_PREWARM_MAX_CSS_PX) : labelPrewarm;
-      const retainedPoliticalPlacement = politicalLabel && preservePoliticalCandidate && (item.visible || item.buffered)
+      const stateAnchorAllowed = stateLabel && !item.layout?.locked && item.componentCellSet?.size
+        ? anchor => stateLabelAnchorAllowed(this, item, anchor, rect)
+        : null;
+      const unchangedObstacles = politicalLabel && sameLabelPrefix(visibleObstacleItems, item.politicalObstacleSource, item.politicalObstacleLength);
+      const politicalSnapshot = politicalLabel && preservePoliticalCandidate && unchangedObstacles && (item.visible || item.buffered)
         ? restorePoliticalLabelPlacementSnapshot(item, baseScreen)
         : null;
+      const retainedPoliticalPlacement = politicalSnapshot;
       let politicalPlacement = retainedPoliticalPlacement || (politicalLabel ? resolvePoliticalLabelPlacement({
         item,
         screen: baseScreen,
@@ -5143,11 +5150,9 @@ export class PlaceholderMapRenderer {
         viewport: expandedViewport(rect, politicalPrewarm),
         padding,
         locked: item.layout?.locked,
-        preferredCandidateIndex: item.politicalCandidateIndex,
-        retainPreferred: preservePoliticalCandidate && (item.visible || item.buffered),
-        anchorAllowed: stateLabel && !item.layout?.locked && item.componentCellSet?.size
-          ? anchor => stateLabelAnchorAllowed(this, item, anchor, rect)
-          : null
+        preferredCandidateIndex: null,
+        retainPreferred: false,
+        anchorAllowed: stateAnchorAllowed
       }) : null);
       const screen = politicalPlacement?.anchor || baseScreen;
       const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
@@ -5170,6 +5175,7 @@ export class PlaceholderMapRenderer {
       const entering = shouldShow && !wasRendered;
       const scaleEntering = entering && this.viewportInteractionKind === "zoom";
       const viewportEntering = entering && !scaleEntering;
+      if (scaleEntering) hasScaleEnteringLabels = true;
       item.node.classList.toggle("visible", shouldShow);
       item.node.classList.toggle("buffered", shouldBuffer);
       item.node.classList.toggle("viewport-entering", viewportEntering);
@@ -5179,6 +5185,10 @@ export class PlaceholderMapRenderer {
       item.visible = shouldShow;
       item.buffered = shouldBuffer;
       item.box = shouldRender ? box : null;
+      if (politicalLabel) {
+        item.politicalObstacleSource = visibleObstacleItems;
+        item.politicalObstacleLength = visibleObstacleItems.length;
+      }
       if (!shouldRender) {
         if (wasRendered) {
           if (politicalPlacement) applyPoliticalLabelPlacement(item, politicalPlacement, baseScreen);
@@ -5200,13 +5210,20 @@ export class PlaceholderMapRenderer {
       item.node.dataset.labelCandidate = String(politicalPlacement?.candidateIndex ?? 0);
       item.node.style.setProperty("--province-label-collision-opacity", String(PROVINCE_COLLISION_OPACITY));
       if (stateLabel) item.node.style.setProperty("--state-label-opacity", String(stateLabelScale.opacity));
-      if (stateLabel) occupiedStates.push(box);
-      else if (provinceLabel) occupiedProvinces.push(box);
-      else {
-        occupied.push(box);
-        if (item.targetKind === LABEL_TARGET_KIND.CITY) occupiedCityLabels.push(box);
+      if (shouldShow && !scaleEntering) {
+        if (stateLabel) {
+          occupiedStates.push(box);
+        }
+        else if (provinceLabel) {
+          occupiedProvinces.push(box);
+        }
+        else {
+          occupied.push(box);
+          if (item.targetKind === LABEL_TARGET_KIND.CITY) occupiedCityLabels.push(box);
+        }
+        visibleObstacleItems.push(item);
+        if (priorityLayout) occupiedByPriority.push(box);
       }
-      if (priorityLayout) occupiedByPriority.push(box);
       if (shouldShow) visible++;
       if (shouldShow && item.targetKind === LABEL_TARGET_KIND.CITY) visibleCities++;
       if (shouldShow && item.targetKind === LABEL_TARGET_KIND.STATE) visibleStates++;
@@ -5217,10 +5234,19 @@ export class PlaceholderMapRenderer {
       if (shouldShow && stateCityOverlap) stateCityOverlaps++;
     }
 
+    if (hasScaleEnteringLabels) {
+      const map = this.map;
+      const view = this.canvas.ownerDocument?.defaultView || globalThis;
+      view.requestAnimationFrame(() => {
+        if (this.map === map && this.overlay) this.updateLabels();
+      });
+    }
+
     this.visibleLabelCount = visible;
     this.visibleCityLabelCount = visibleCities;
     this.visibleStateLabelCount = visibleStates;
     this.visibleProvinceLabelCount = visibleProvinces;
+    const setupMs = roundMs(labelStartedAt - startedAt);
     const labelsMs = roundMs(performance.now() - labelStartedAt);
     const cityStartedAt = performance.now();
     const cityIconBoxes = this.updateCityIcons(rect, [...occupiedStates, ...occupiedProvinces]);
@@ -5241,6 +5267,7 @@ export class PlaceholderMapRenderer {
     this.lastOverlayUpdate = {
       sequence: event.sequence,
       totalMs: roundMs(performance.now() - startedAt),
+      setupMs,
       labelsMs,
       cityIconsMs,
       markerIconsMs,
@@ -5264,6 +5291,7 @@ export class PlaceholderMapRenderer {
     if (!this.overlayInteractionSuspended) this.overlayCommittedCamera = snapshotViewportCamera(this.camera);
     this.completePerformanceEvent(event, {
       ms: this.lastOverlayUpdate.totalMs,
+      setupMs,
       labelsMs,
       cityIconsMs,
       markerIconsMs,
@@ -6066,6 +6094,14 @@ function clearOverlayEnteringClassNextFrame(node, className) {
   view.requestAnimationFrame(() => node.classList.remove(className));
 }
 
+function sameLabelPrefix(current, previous, length) {
+  if (!Array.isArray(previous) || current.length !== length) return false;
+  for (let index = 0; index < length; index++) {
+    if (current[index] !== previous[index]) return false;
+  }
+  return true;
+}
+
 function overlayLabelPrewarmCssPx(rect) {
   return clamp(Math.max(rect.width, rect.height) * OVERLAY_LABEL_PREWARM_RATIO, OVERLAY_LABEL_PREWARM_MIN_CSS_PX, OVERLAY_LABEL_PREWARM_MAX_CSS_PX);
 }
@@ -6681,9 +6717,11 @@ function provinceLabelPlacement(map, province) {
 }
 
 function stateLabelAnchorAllowed(renderer, item, anchor, rect) {
-  const world = renderer.screenToWorld(rect.left + anchor.x, rect.top + anchor.y);
-  const picked = pickGridCell(renderer.map, world.x, world.y);
-  return Number.isInteger(picked?.packCell) && item.componentCellSet.has(picked.packCell);
+  const ndcX = anchor.x / rect.width * 2 - 1;
+  const ndcY = 1 - anchor.y / rect.height * 2;
+  const x = (((ndcX - renderer.camera.offsetX) / renderer.camera.scale + 1) / 2) * renderer.map.metadata.graphWidth;
+  const y = ((1 - (ndcY - renderer.camera.offsetY) / renderer.camera.scale) / 2) * renderer.map.metadata.graphHeight;
+  return stateLabelComponentContainsPoint(renderer.map, item.componentCellSet, x, y, item.anchorCell);
 }
 
 function isSelectedOrHighlighted(selection, highlights, kind, id) {

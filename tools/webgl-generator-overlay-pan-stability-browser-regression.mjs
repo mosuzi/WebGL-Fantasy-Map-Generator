@@ -143,6 +143,7 @@ try {
           visible: Boolean(item.visible),
           buffered: Boolean(item.buffered),
           candidate: item.politicalCandidateIndex ?? null,
+          obstacleKeys: item.politicalObstacleSource?.slice(0, item.politicalObstacleLength).map(obstacle => `${obstacle.targetKind}:${obstacle.targetId}`) || [],
           opacity: Number(style.opacity),
           visibility: style.visibility,
           x: Number.parseFloat(item.node.style.getPropertyValue("--overlay-x")) || 0,
@@ -183,11 +184,15 @@ try {
   await page.waitForTimeout(280);
   const settled = await page.evaluate(() => {
     const renderer = window.__webglGeneratorApp.renderer;
-    const read = item => ({
-      key: `${item.targetKind}:${item.targetId}`,
-      opacity: Number(getComputedStyle(item.node).opacity),
-      candidate: item.politicalCandidateIndex ?? null
-    });
+    const read = item => {
+      const rect = item.node.getBoundingClientRect();
+      return {
+        key: `${item.targetKind}:${item.targetId}`,
+        opacity: Number(getComputedStyle(item.node).opacity),
+        candidate: item.politicalCandidateIndex ?? null,
+        rect: {left: rect.left, top: rect.top}
+      };
+    };
     return {
       political: renderer.labelItems.filter(item => item.targetKind === "state" || item.targetKind === "province").map(read),
       stats: renderer.getStats(),
@@ -235,6 +240,7 @@ try {
       key: item.key,
       candidate: item.candidate,
       previousCandidate: previous.candidate,
+      obstacleChanged: JSON.stringify(item.obstacleKeys) !== JSON.stringify(previous.obstacleKeys),
       xError: Math.abs(item.rect.left - (previous.rect.left + translation.x)),
       yError: Math.abs(item.rect.top - (previous.rect.top + translation.y)),
       opacityError: Math.abs(item.opacity - final.opacity),
@@ -284,10 +290,17 @@ try {
   for (const item of enteringPolitical) {
     const previous = beforeByKey.get(item.key);
     const final = settledByKey.get(item.key);
-    assert.equal(item.candidate, previous.candidate, `${item.key} 提交时切换了布局候选`);
-    assert(Math.abs(item.rect.left - (previous.rect.left + translation.x)) <= 1, `${item.key} 提交前后发生横向跳位`);
-    assert(Math.abs(item.rect.top - (previous.rect.top + translation.y)) <= 1, `${item.key} 提交前后发生纵向跳位`);
-    assert(Math.abs(item.opacity - final.opacity) <= 0.02, `${item.key} 首帧 opacity 与稳定态不一致`);
+    const obstacleChanged = JSON.stringify(item.obstacleKeys) !== JSON.stringify(previous.obstacleKeys);
+    if (!obstacleChanged) {
+      assert.equal(item.candidate, previous.candidate, `${item.key} 障碍未变却切换布局候选`);
+      assert(Math.abs(item.rect.left - (previous.rect.left + translation.x)) <= 1, `${item.key} 障碍未变却横向跳位`);
+      assert(Math.abs(item.rect.top - (previous.rect.top + translation.y)) <= 1, `${item.key} 障碍未变却纵向跳位`);
+    }
+    assert.equal(item.candidate, final.candidate, `${item.key} 提交后的避让候选仍在变化`);
+    assert(Math.abs(item.rect.left - final.rect.left) <= 1, `${item.key} 提交后的横坐标仍在变化`);
+    assert(Math.abs(item.rect.top - final.rect.top) <= 1, `${item.key} 提交后的纵坐标仍在变化`);
+    if (!obstacleChanged) assert(Math.abs(item.opacity - final.opacity) <= 0.02, `${item.key} 障碍未变却发生 opacity 跳变`);
+    else assert(item.opacity > 0 && final.opacity > 0, `${item.key} 避让后意外变成透明标签`);
   }
   assert(exiting.length > 0, "平移没有产生离开暖区的 overlay 样本");
   for (const item of exiting) {

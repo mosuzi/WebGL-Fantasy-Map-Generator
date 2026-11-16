@@ -67,6 +67,104 @@ export function collectStateLandComponents(cells, stateId) {
   return components;
 }
 
+const componentPolygonIndexes = new WeakMap();
+
+export function stateLabelComponentContainsPoint(map, componentCellSet, x, y, candidateCell) {
+  if (!componentCellSet?.size || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const cells = map?.pack?.cells;
+  const vertices = map?.pack?.vertices?.p;
+  if (!cells?.v || !vertices) return componentCellSet.has(nearestPackCenter(cells?.p, x, y));
+  for (const cell of [candidateCell, ...(cells.c?.[candidateCell] || [])]) {
+    if (componentCellSet.has(cell) && pointInPackCell(cells.v[cell], vertices, x, y)) return true;
+  }
+  const index = componentPolygonIndex(map, componentCellSet);
+  const key = `${Math.floor(x / index.bucketSize)},${Math.floor(y / index.bucketSize)}`;
+  for (const cell of [...(index.buckets.get(key) || []), ...index.oversized]) {
+    if (pointInPackCell(cells.v[cell], vertices, x, y)) return true;
+  }
+  if (!index.polygonCount) return componentCellSet.has(nearestPackCenter(cells.p, x, y));
+  return false;
+}
+
+function componentPolygonIndex(map, componentCellSet) {
+  const cells = map.pack.cells;
+  const vertices = map.pack.vertices.p;
+  const cached = componentPolygonIndexes.get(componentCellSet);
+  if (cached?.cellVertices === cells.v && cached?.vertices === vertices) return cached;
+  const width = Number(map.metadata?.graphWidth) || 1000;
+  const height = Number(map.metadata?.graphHeight) || 1000;
+  const bucketSize = Math.max(1, Math.sqrt(width * height / Math.max(1, cells.p?.length || componentCellSet.size)) * 2);
+  const buckets = new Map();
+  const oversized = [];
+  let polygonCount = 0;
+  for (const cell of componentCellSet) {
+    const polygon = cells.v[cell];
+    if (!polygon || polygon.length < 3) continue;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const vertexId of polygon) {
+      const point = vertices[vertexId];
+      if (!point) continue;
+      minX = Math.min(minX, point[0]);
+      maxX = Math.max(maxX, point[0]);
+      minY = Math.min(minY, point[1]);
+      maxY = Math.max(maxY, point[1]);
+    }
+    if (!Number.isFinite(minX)) continue;
+    polygonCount++;
+    const left = Math.floor(minX / bucketSize);
+    const right = Math.floor(maxX / bucketSize);
+    const top = Math.floor(minY / bucketSize);
+    const bottom = Math.floor(maxY / bucketSize);
+    if ((right - left + 1) * (bottom - top + 1) > 64) {
+      oversized.push(cell);
+      continue;
+    }
+    for (let row = top; row <= bottom; row++) {
+      for (let column = left; column <= right; column++) {
+        const key = `${column},${row}`;
+        const bucket = buckets.get(key);
+        if (bucket) bucket.push(cell);
+        else buckets.set(key, [cell]);
+      }
+    }
+  }
+  const index = {cellVertices: cells.v, vertices, bucketSize, buckets, oversized, polygonCount};
+  componentPolygonIndexes.set(componentCellSet, index);
+  return index;
+}
+
+function nearestPackCenter(points, x, y) {
+  let nearest = -1;
+  let distance = Infinity;
+  for (let cell = 0; cell < (points?.length || 0); cell++) {
+    const point = points[cell];
+    if (!point) continue;
+    const dx = point[0] - x;
+    const dy = point[1] - y;
+    const nextDistance = dx * dx + dy * dy;
+    if (nextDistance < distance) {
+      nearest = cell;
+      distance = nextDistance;
+    }
+  }
+  return nearest;
+}
+
+function pointInPackCell(vertexIds, vertices, x, y) {
+  if (!vertexIds || vertexIds.length < 3) return false;
+  let inside = false;
+  for (let index = 0, previous = vertexIds.length - 1; index < vertexIds.length; previous = index++) {
+    const a = vertices[vertexIds[index]];
+    const b = vertices[vertexIds[previous]];
+    if (!a || !b) return false;
+    if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+
 function resolveStateCapitalPackCell(map, state) {
   const capitalId = integerOrNull(state?.capital);
   if (capitalId === null || capitalId <= 0) return null;

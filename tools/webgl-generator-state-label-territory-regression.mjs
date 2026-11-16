@@ -4,7 +4,7 @@ import {readFile} from "node:fs/promises";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {resolvePoliticalLabelPlacement} from "../app/webgl-generator/src/renderer/political-label-layout.js";
-import {collectStateLandComponents, resolveStateLabelPlacement} from "../app/webgl-generator/src/renderer/state-label-territory.js";
+import {collectStateLandComponents, resolveStateLabelPlacement, stateLabelComponentContainsPoint} from "../app/webgl-generator/src/renderer/state-label-territory.js";
 import {patchLabelLayout, resolveLabelLayout} from "../app/webgl-generator/src/runtime/label-layout-registry.js";
 import {PNG_SEMANTIC_LABEL_SELECTORS} from "../app/webgl-generator/src/runtime/canvas-text-contract.js";
 
@@ -75,6 +75,19 @@ const manualPolitical = resolvePoliticalLabelPlacement({
 });
 assert.deepEqual(manualPolitical.anchor, {x: 420, y: 240}, "手工锁定仍被本土候选过滤");
 
+const polygonMap = {pack: {
+  cells: {v: [[0, 1, 2, 3], [1, 4, 5, 2]], c: [[1], [0]]},
+  vertices: {p: [[0, 0], [10, 0], [10, 10], [0, 10], [20, 0], [20, 10]]}
+}};
+assert.equal(stateLabelComponentContainsPoint(polygonMap, new Set([0]), 5, 5, 0), true, "本国 cell 内点未通过");
+assert.equal(stateLabelComponentContainsPoint(polygonMap, new Set([0]), 15, 5, 0), false, "网格拾取猜中本国 cell 却在多边形外的点不应通过");
+assert.equal(stateLabelComponentContainsPoint(polygonMap, new Set([1]), 15, 5, 0), true, "邻近 pack cell 的本国真实内点应通过");
+polygonMap.pack.cells.c = [[], []];
+assert.equal(stateLabelComponentContainsPoint(polygonMap, new Set([1]), 15, 5, 0), true, "猜测 cell 不相邻时仍应按真实多边形识别本国内点");
+const oldGeometryMap = {pack: {cells: {p: [[5, 5], [15, 5]]}}};
+assert.equal(stateLabelComponentContainsPoint(oldGeometryMap, new Set([1]), 15, 5, 0), true, "旧图缺少 pack 多边形时应使用最近 pack 中心");
+assert.equal(stateLabelComponentContainsPoint(oldGeometryMap, new Set([1]), 5, 5, 1), false, "旧图不能直接相信猜测 cell 的归属");
+
 const realMaps = [];
 for (const seed of ["audit-archipelago-001", "audit-archipelago-002", "audit-archipelago-003"]) {
   const generated = generatePlaceholderMap({seed, cellsTarget: 5000, heightmapTemplate: "archipelago"});
@@ -87,6 +100,12 @@ for (const seed of ["audit-archipelago-001", "audit-archipelago-002", "audit-arc
     const placement = resolveStateLabelPlacement(generated, generatedState, generatedState.fullName || generatedState.name);
     assert.ok(placement, `${seed} 国家 #${generatedState.i} 缺少标签位置`);
     if (placement.componentCellSet.size) assert.ok(placement.componentCellSet.has(placement.cell), `${seed} 国家 #${generatedState.i} 标签锚点不在所选陆块`);
+  }
+  if (seed === "audit-archipelago-001") {
+    const state17 = generated.politics.states[17];
+    const placement17 = resolveStateLabelPlacement(generated, state17, state17.fullName || state17.name);
+    assert.equal(stateLabelComponentContainsPoint(generated, placement17.componentCellSet, 128.2114, 569.0295, 1359), true,
+      "真实 archipelago 中猜测 cell 非邻接的合法国家中点被误拒");
   }
   realMaps.push({seed, states, crossSeaStates});
 }
