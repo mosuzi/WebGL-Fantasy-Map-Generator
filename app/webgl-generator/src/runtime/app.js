@@ -194,6 +194,7 @@ import {
 import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMirrors} from "./military-regeneration-variation.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-commands.js";
+import {noteRenameTargetKind} from "./notes-rename-target.js";
 import {createRescueOrphanNoteCommand} from "./orphan-note-commands.js";
 import {createDeleteNotesBatchCommand, createImportNotesCommand, inspectNotesImport} from "./note-import.js";
 import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, createRebuildEconomyCommand, createSetGoodDisplayCommand, createSetMarketDisplayCommand, getMarketAssignmentBrushChanges, inspectMarketAssignment, MARKET_ASSIGNMENT_PREVIEW_EFFECTS, restoreMarketAssignmentPreview} from "./economy-edit-commands.js";
@@ -2359,11 +2360,31 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         setFileOperationStatus(documentRef, `重命名备注关联对象失败：对象不存在、已删除或已成为孤儿。`);
         return;
       }
-      const command = createRenameObjectCommand(row.object, name);
+      const renameKind = noteRenameTargetKind(row.object);
+      if (renameKind === "military" || renameKind === "measurement" || renameKind === "ocean-current") {
+        const result = renameKind === "military"
+          ? runtimeActions.edit.military.rename(row.object, name)
+          : renameKind === "measurement"
+            ? runtimeActions.edit.measurements.rename(row.object.id, name)
+            : runtimeActions.oceanCurrents.rename(row.object.id, name);
+        if (result?.executed) updateNotesPanel(state);
+        return result;
+      }
+      if (!renameKind) {
+        setFileOperationStatus(documentRef, "此类备注关联对象暂不支持重命名。");
+        return;
+      }
+      const command = renameKind === "custom-label"
+        ? createRenameCustomLabelCommand(row.object.targetId ?? row.object.id, name)
+        : renameKind === "zone"
+          ? createSetZonePropertiesCommand(row.object.targetId ?? row.object.id, {name})
+          : createRenameObjectCommand(row.object, name);
       const execute = () => executeEditCommand(state, documentRef, command, {context: {map: state.map}});
-      if (row.object.kind === OBJECT_KIND.NOTE) executeNotesDomainCommand(state, "notes.set", command, execute, "ui");
-      else execute();
+      const result = row.object.kind === OBJECT_KIND.NOTE
+        ? executeNotesDomainCommand(state, "notes.set", command, execute, "ui")
+        : execute();
       updateEditingInteractionLock(state, documentRef);
+      return result;
     },
     onNoteChange: (row, body) => {
       if (!row?.object || row.orphan) return;

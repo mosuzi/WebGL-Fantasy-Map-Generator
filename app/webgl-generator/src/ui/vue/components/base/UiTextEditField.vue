@@ -1,8 +1,8 @@
 <template>
-  <div :class="className" @keydown.enter="applyOnEnter" @compositionstart="composing = true" @compositionend="composing = false">
+  <div :class="className" data-ui-text-edit-field :data-ui-committed-value="modelValue" @keydown.enter="applyOnEnter" @compositionstart="composing = true" @compositionend="composing = false">
     <label>
       <span>{{ label }}</span>
-      <ElInput v-model="value" type="text" :maxlength="maxLength" aria-keyshortcuts="Enter" title="按回车保存" />
+      <ElInput v-model="value" type="text" :maxlength="maxLength" :placeholder="label" :aria-label="label" aria-keyshortcuts="Enter" title="按回车保存" />
     </label>
   </div>
 </template>
@@ -44,7 +44,10 @@ watch(() => props.modelValue, next => {
 function applyOnEnter(event) {
   if (event.target?.tagName !== "INPUT") return;
   event.preventDefault();
-  if (composing.value || event.isComposing || event.keyCode === 229) return;
+  if (composing.value || event.isComposing || event.keyCode === 229) {
+    event.stopPropagation();
+    return;
+  }
   emit("apply", event.target.value);
 }
 </script>

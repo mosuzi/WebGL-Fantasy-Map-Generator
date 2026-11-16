@@ -106,6 +106,23 @@ syncTerrainScheduler.run({
 });
 assertAffected(syncTerrainCalls, ["issue", "invalidate", "terrain", "line", "surface"], "同步 terrain 唯一绑定刷新阶段");
 
+const stateNameLabelCalls = [];
+const stateNameLabelState = {
+  map: {},
+  renderer: {
+    invalidateDynamicBuffers() {},
+    draw() {},
+    refreshLabels(_binding, options) { stateNameLabelCalls.push(options); }
+  },
+  selectionStore: {refresh() {}}
+};
+const stateNameLabelScheduler = createEditRefreshScheduler({state: stateNameLabelState, documentRef: null, updateRuntimePanel() {}, updatePickPanel() {}});
+const stateNameLabelCommand = {effects: {render: "draw", selection: "none", runtimeStats: false, pickPanel: false,
+  derived: ["object-name", "labels", "state-name"], affected: [{kind: "state", id: 7}]}};
+stateNameLabelScheduler.run(stateNameLabelCommand);
+await stateNameLabelScheduler.runAsync(stateNameLabelCommand, {yieldToMain: async () => {}});
+assert(stateNameLabelCalls.length === 2 && stateNameLabelCalls.every(options => options.politicalOnly === true && JSON.stringify(options.stateIds) === "[7]"), "国家改名的同步 / 异步刷新必须局限目标政治标签");
+
 const asyncCalls = [];
 const asyncState = {
   map: {visualTheme: {preset: "default"}},

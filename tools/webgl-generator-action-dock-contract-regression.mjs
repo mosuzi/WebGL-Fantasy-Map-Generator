@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {readdir, readFile} from "node:fs/promises";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import {noteRenameTargetKind} from "../app/webgl-generator/src/runtime/notes-rename-target.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const componentRoot = path.join(root, "app/webgl-generator/src/ui/vue/components");
@@ -16,6 +17,7 @@ const identities = actions.map(action => action.identity);
 const resultCounts = Object.fromEntries(["toggle-canvas-mode", "open-secondary", "direct", "open-other-panel"]
   .map(resultClass => [resultClass, actions.filter(action => action.resultClass === resultClass).length]));
 const editTableHosts = [...sources].filter(([, source]) => /doubleClickAction|double-click-action/.test(source)).map(([file]) => file);
+const renameHosts = hosts.filter(host => host.actions.some(action => action.key === "rename" && action.resultClass === "open-secondary"));
 
 assert.equal(new Set(hosts.map(host => host.hostId)).size, hosts.length, "UiActionDock hostId 必须唯一");
 assert.equal(new Set(identities).size, identities.length, "动作身份必须按 host + key 唯一");
@@ -24,6 +26,16 @@ assert.deepEqual(resultCounts, {"toggle-canvas-mode": 12, "open-secondary": 57, 
 assert.deepEqual(actions.filter(action => action.resultClass === "open-other-panel").map(action => action.identity), ["CulturePanel:namebase"]);
 assert.ok(actions.filter(action => action.resultClass === "open-secondary").every(action => action.hasSlot), "二级面板动作必须有同名 slot");
 assert.ok(actions.filter(action => action.resultClass !== "open-secondary").every(action => !action.hasSlot), "非二级动作不得有同名 slot");
+assert.equal(renameHosts.length, 12, "单行重命名浮层清单有变化，须复核紧凑输入规则");
+assert.equal(noteRenameTargetKind({kind: "label", targetKind: "state", targetId: 1}), "object");
+assert.equal(noteRenameTargetKind({kind: "label", targetKind: "custom", targetId: 1}), "custom-label");
+assert.equal(noteRenameTargetKind({kind: "label", targetKind: "zone", targetId: 1}), "zone");
+assert.equal(noteRenameTargetKind({kind: "route", id: 1}), null, "无名称命令的备注关联对象不应提供失效的重命名弹框");
+for (const host of renameHosts) {
+  const slot = sources.get(host.file).match(/<template #rename>([\s\S]*?)<\/template>/)?.[1] || "";
+  assert.match(slot, /<UiTextEditField\b/, `${host.file} 重命名不再是单行输入`);
+}
+assert.match(dockSource, /props\.active === "rename" && Boolean\(activeAction\.value\)/, "紧凑输入仅应用于已清点的重命名浮层");
 assert.match(dockSource, /:class="\{active: isActionActive\(action\), 'is-editing': isActionActive\(action\)\}"/);
 assert.match(dockSource, /:aria-pressed="isActionActive\(action\) \? 'true' : 'false'"/);
 assert.match(dockSource, /function actionIdentity\(action\)[\s\S]*?props\.hostId.*action\.key/);
@@ -49,6 +61,7 @@ console.log(JSON.stringify({
   uniqueRawKeys: new Set(actions.map(action => action.key)).size,
   uniqueIdentities: new Set(identities).size,
   resultCounts,
+  quickRenameHosts: renameHosts.length,
   doubleClickEditHosts: editTableHosts.length
 }, null, 2));
 

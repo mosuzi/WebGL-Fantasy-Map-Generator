@@ -60,6 +60,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       const changedGridCells = normalizeChangedGridCells(sourceEffects?.changedGridCells);
       const terrainCaches = effects.derived.includes("terrain-caches");
       const politicalPatch = sourceEffects?.cellAttributePatch === true && !terrainCaches && effects.derived.includes("political-boundaries") && changedGridCells.length > 0;
+      const stateNameOnly = effects.derived.includes("state-name");
       const stateBrushTrace = state.stateEdit?.activeCommitTrace;
       const measureStateBrush = (name, task) => measureHeightBrushCommitStage(stateBrushTrace, name, task);
       const queuedPoliticalPatch = politicalPatch && measureStateBrush("queuePoliticalPatch", () => state.renderer.queuePoliticalBrushRefresh?.(changedGridCells)) === true;
@@ -135,7 +136,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
         const labelToken = ++deferredLabelToken;
         const map = state.map;
-        const politicalLabelsOnly = politicalPatch && !effects.derived.includes("point-layers");
+        const politicalLabelsOnly = stateNameOnly || politicalPatch && !effects.derived.includes("point-layers");
         const queuedAt = globalThis.performance?.now?.() ?? Date.now();
         const refreshLabels = () => {
           const startedAt = globalThis.performance?.now?.() ?? Date.now();
@@ -145,7 +146,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
           measureStateBrush("refreshLabels", () => state.renderer.refreshLabels(labelBinding, {
             ...labelRefreshOptions(effects),
             politicalOnly: politicalLabelsOnly,
-            stateIds: politicalPatch ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
+            stateIds: politicalLabelsOnly ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
           }));
           if (sourceEffects?.deferLabels) state.healthMonitor?.recordCanvasSample?.("state-label-refresh", {
             durationMs: Math.round(((globalThis.performance?.now?.() ?? Date.now()) - startedAt) * 10) / 10,
@@ -202,6 +203,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       const changedGridCells = normalizeChangedGridCells(sourceEffects?.changedGridCells);
       const terrainCaches = effects.derived.includes("terrain-caches");
       const politicalPatch = sourceEffects?.cellAttributePatch === true && !terrainCaches && effects.derived.includes("political-boundaries") && changedGridCells.length > 0;
+      const stateNameOnly = effects.derived.includes("state-name");
       const queuedPoliticalPatch = politicalPatch && state.renderer.queuePoliticalBrushRefresh?.(changedGridCells) === true;
       const atomicSurfacePublish = Boolean(
         retainedBinding
@@ -273,11 +275,11 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         await runStep(() => state.renderer.draw());
       }
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
-        const politicalLabelsOnly = politicalPatch && !effects.derived.includes("point-layers");
+        const politicalLabelsOnly = stateNameOnly || politicalPatch && !effects.derived.includes("point-layers");
         await runStep(() => state.renderer.refreshLabels(retainedBinding, {
           ...labelRefreshOptions(effects),
           politicalOnly: politicalLabelsOnly,
-          stateIds: politicalPatch ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
+          stateIds: politicalLabelsOnly ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
         }));
       }
       if (effects.selection === "refresh") {

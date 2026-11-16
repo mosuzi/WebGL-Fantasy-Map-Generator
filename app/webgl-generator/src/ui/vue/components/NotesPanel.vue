@@ -82,7 +82,7 @@
 
   <UiActionDock v-if="selected && !selected.orphan" host-id="NotesPanel" v-model:active="activeAction" :actions="noteActions">
     <template #rename>
-      <UiTextEditField :model-value="selected.name" :max-length="64" @apply="name => callbacks.onRename?.(selected, name)" />
+      <UiTextEditField :model-value="selected.name" :max-length="64" :data-ui-name-spacing="selected.object.kind === 'military' ? 'preserve' : null" @apply="name => callbacks.onRename?.(selected, name)" />
     </template>
     <template #edit>
       <UiNoteField :model-value="selected.body" @apply="body => callbacks.onNoteChange?.(selected, body)" @clear="callbacks.onNoteChange?.(selected, '')" />
@@ -94,6 +94,7 @@
 import {computed, ref, watch} from "vue";
 import OrphanNoteRescue from "./OrphanNoteRescue.vue";
 import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
+import {noteRenameTargetKind} from "../../../runtime/notes-rename-target.js";
 import {isPersistentHighlightObjectKind} from "../../../runtime/persistent-highlights.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
@@ -129,10 +130,6 @@ const props = defineProps({
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
-const noteActions = Object.freeze([
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
-  {key: "edit", resultClass: "open-secondary", label: "编辑正文", icon: "☰"}
-]);
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},
   {key: "kindLabel", label: "类型"},
@@ -170,6 +167,10 @@ const notesExportActions = computed(() => [
   {key: "selected-notes", label: `导出选中 ${formatNumber(selectedNoteRows.value.length)}`, disabled: !selectedNoteRows.value.length}
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedNoteId) || null);
+const noteActions = computed(() => [
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: !noteRenameTargetKind(selected.value?.object)},
+  {key: "edit", resultClass: "open-secondary", label: "编辑正文", icon: "☰"}
+]);
 const visibleOrphanRows = computed(() => visibleRows.value.filter(row => row.orphan));
 const deleteTargetRows = computed(() => selectedNoteRows.value.length ? selectedNoteRows.value : selected.value ? [selected.value] : []);
 const notesListActions = computed(() => [
@@ -234,7 +235,8 @@ function noteRows(map, notes) {
         kindLabel: OBJECT_KIND_LABEL[note.kind] || note.kind || "备注",
         objectId: note.objectId ?? object?.id ?? "",
         object,
-        name: note.name || resolved?.name || resolved?.fullName || note.id,
+        // 关联对象仍存在时显示现名；备注快照名只用于失联后的辨认。
+        name: resolved?.name || resolved?.fullName || resolved?.text || resolved?.targetName || note.name || note.id,
         body,
         bodyLength: body.length,
         excerpt: excerpt(body),

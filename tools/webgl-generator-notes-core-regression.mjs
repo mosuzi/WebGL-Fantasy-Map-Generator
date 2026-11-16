@@ -220,7 +220,7 @@ try {
   assert.match(appSource, /listNotes: \(\) => state\.notesDomain/u);
   assert.equal((appSource.match(/createSetObjectNoteCommand\(/gu) || []).length, 1, "领域面板不得绕过正式 notes.set API");
   assert.match(appSource, /object\?\.kind === OBJECT_KIND\.NOTE\) executeNotesDomainCommand\(state, "notes\.set"/u);
-  assert.match(appSource, /row\.object\.kind === OBJECT_KIND\.NOTE\) executeNotesDomainCommand\(state, "notes\.set"/u);
+  assert.match(appSource, /row\.object\.kind === OBJECT_KIND\.NOTE\s*\?\s*executeNotesDomainCommand\(state, "notes\.set", command, execute, "ui"\)/u);
   assert.match(consoleApiSource, /state\.notesDomain\?\.list/u);
   assert.match(panelSource, /callbacks\.listNotes/u);
 

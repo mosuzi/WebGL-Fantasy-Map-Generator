@@ -84,6 +84,8 @@ export function createRenameObjectCommand(object, nextName) {
       ...OBJECT_NAME_EFFECTS,
       derived: target.kind === OBJECT_KIND.CITY
         ? [...OBJECT_NAME_EFFECTS.derived, "city-role-labels"]
+        : target.kind === OBJECT_KIND.STATE
+          ? [...OBJECT_NAME_EFFECTS.derived, "state-name"]
         : OBJECT_NAME_EFFECTS.derived,
       affected: objectAffected(target.kind, target.id)
     },

@@ -3030,6 +3030,54 @@ select:disabled {
   padding: 10px;
 }
 
+.ui-secondary-action-panel.is-quick-input .ui-secondary-action-header {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+}
+
+.ui-secondary-action-panel.is-quick-input .ui-secondary-action-close {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+}
+
+.ui-secondary-action-panel.is-quick-input .ui-secondary-action-body {
+  padding: 8px 48px 8px 8px;
+}
+
+.ui-secondary-action-panel.is-quick-input .ui-secondary-action-body > * {
+  margin: 0;
+}
+
+.ui-secondary-action-panel.is-quick-input .ui-secondary-action-body label {
+  display: block;
+}
+
+.ui-secondary-action-panel.is-quick-input .ui-secondary-action-body label > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.ui-secondary-action-panel.is-quick-input .el-input__wrapper {
+  padding: 0 8px;
+}
+
+.ui-secondary-action-panel.is-quick-input .el-input__inner {
+  padding: 0;
+}
+
 .ui-color-action-panel {
   min-width: 0;
 }

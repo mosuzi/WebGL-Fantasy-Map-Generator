@@ -308,6 +308,7 @@
     <template #rename>
       <UiTextEditField
         class-name="military-name-editor"
+        data-ui-name-spacing="preserve"
         label="军团"
         :model-value="selected?.name || ''"
         :max-length="40"
@@ -1071,7 +1072,6 @@ function syncBattleEventChainDraft() {
 function applyRename(name) {
   if (!selected.value) return;
   props.callbacks.onRename?.(militaryTarget(selected.value), name);
-  activeAction.value = null;
 }
 
 function openRenameEditor(row) {
