@@ -11,8 +11,8 @@ import {applySocialAssignmentPreview} from "../app/webgl-generator/src/runtime/s
 import {selectDeterministicOwnedCenter} from "../app/webgl-generator/src/runtime/social-expansion-edit-commands.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
 
-assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.CULTURE, -1), 4, "文化画笔半径下界异常");
-assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.RELIGION, 999), 120, "宗教画笔半径上界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.CULTURE, -1), 1, "文化画笔半径下界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.RELIGION, 999), 32, "宗教画笔半径上界异常");
 
 const map = generatePlaceholderMap({seed: "social-ownership-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
 const history = new EditHistory();

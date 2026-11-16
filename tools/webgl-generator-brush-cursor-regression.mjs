@@ -8,17 +8,18 @@ import {
   readBrushRadiusContract
 } from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
 import {createHeightCursorRadiusSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {queryBrushCellsInRadius} from "../app/webgl-generator/src/runtime/height-cell-spatial-index.js";
 import {createBrushCursorPreview, resolveBrushCursor} from "../app/webgl-generator/src/ui/brush-cursor-preview.js";
 
 const EXPECTED_CONTRACTS = Object.freeze({
   height: [28, 6, 96, 2],
   "height-selection": [48, 8, 160, 4],
-  state: [28, 4, 120, 2],
-  province: [28, 4, 120, 2],
-  culture: [28, 4, 120, 2],
-  religion: [28, 4, 120, 2],
-  biome: [28, 4, 120, 2],
-  suitability: [28, 4, 120, 2],
+  state: [28, 1, 32, 1],
+  province: [28, 1, 32, 1],
+  culture: [28, 1, 32, 1],
+  religion: [28, 1, 32, 1],
+  biome: [28, 1, 32, 1],
+  suitability: [28, 1, 32, 1],
   "economy-market": [18, 2, 120, 2]
 });
 
@@ -284,6 +285,9 @@ class FakeDocument extends FakeTarget {
 }
 
 testContractsAndNormalization();
+const singleCellMap = {grid: {points: [[0, 0]], cells: {p: [0], h: [20]}}};
+assert.deepEqual(queryBrushCellsInRadius(singleCellMap, {x: 0.9, y: 0.9}, 1, 0).map(item => item.gridCell), [0], "最细画笔未命中点击的 cell");
+assert.deepEqual(queryBrushCellsInRadius(singleCellMap, {x: 0.9, y: 0.9}, 1, null), [], "画笔错误扩散到半径外 cell");
 testProjection();
 testResolverAllowlist();
 testExactHeightPaintCenter();

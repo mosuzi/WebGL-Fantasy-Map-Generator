@@ -13,14 +13,34 @@ export const BRUSH_RADIUS_ID = Object.freeze({
 const BRUSH_RADIUS_CONTRACTS = Object.freeze({
   [BRUSH_RADIUS_ID.HEIGHT]: freezeContract(28, 6, 96, 2),
   [BRUSH_RADIUS_ID.HEIGHT_SELECTION]: freezeContract(48, 8, 160, 4),
-  [BRUSH_RADIUS_ID.STATE]: freezeContract(28, 4, 120, 2),
-  [BRUSH_RADIUS_ID.PROVINCE]: freezeContract(28, 4, 120, 2),
-  [BRUSH_RADIUS_ID.CULTURE]: freezeContract(28, 4, 120, 2),
-  [BRUSH_RADIUS_ID.RELIGION]: freezeContract(28, 4, 120, 2),
-  [BRUSH_RADIUS_ID.BIOME]: freezeContract(28, 4, 120, 2),
-  [BRUSH_RADIUS_ID.SUITABILITY]: freezeContract(28, 4, 120, 2),
+  [BRUSH_RADIUS_ID.STATE]: freezeContract(28, 1, 32, 1),
+  [BRUSH_RADIUS_ID.PROVINCE]: freezeContract(28, 1, 32, 1),
+  [BRUSH_RADIUS_ID.CULTURE]: freezeContract(28, 1, 32, 1),
+  [BRUSH_RADIUS_ID.RELIGION]: freezeContract(28, 1, 32, 1),
+  [BRUSH_RADIUS_ID.BIOME]: freezeContract(28, 1, 32, 1),
+  [BRUSH_RADIUS_ID.SUITABILITY]: freezeContract(28, 1, 32, 1),
   [BRUSH_RADIUS_ID.ECONOMY_MARKET]: freezeContract(18, 2, 120, 2)
 });
+
+export const SAVED_BRUSH_RADIUS_IDS = Object.freeze([
+  BRUSH_RADIUS_ID.STATE,
+  BRUSH_RADIUS_ID.PROVINCE,
+  BRUSH_RADIUS_ID.CULTURE,
+  BRUSH_RADIUS_ID.RELIGION,
+  BRUSH_RADIUS_ID.BIOME,
+  BRUSH_RADIUS_ID.SUITABILITY
+]);
+
+export function normalizeSavedBrushRadii(source) {
+  const values = source && typeof source === "object" ? source : {};
+  return Object.fromEntries(SAVED_BRUSH_RADIUS_IDS.map(id => [id, Math.round(normalizeBrushRadius(id, values[id]))]));
+}
+
+export function hasCompleteSavedBrushRadii(source) {
+  return Boolean(source && typeof source === "object" && SAVED_BRUSH_RADIUS_IDS.every(id =>
+    Number.isInteger(source[id]) && source[id] >= BRUSH_RADIUS_CONTRACTS[id].min && source[id] <= BRUSH_RADIUS_CONTRACTS[id].max
+  ));
+}
 
 export function readBrushRadiusContract(id) {
   const contract = BRUSH_RADIUS_CONTRACTS[id];

@@ -7,6 +7,7 @@ import {
   SUITABILITY_VALUE_RANGE
 } from "../generator/suitability.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
+import {queryBrushCellsInRadius} from "./height-cell-spatial-index.js";
 import {captureClimatePopulation, restoreClimatePopulation} from "./climate-population-preservation.js";
 import {systemAffected} from "./edit-command-effects.js";
 
@@ -70,21 +71,14 @@ export function buildSuitabilityChanges(map, gridCellIds, options = {}) {
   return inspection.changedGridCells.map(gridCell => createGridChange(map, gridCell, inspection, meanArea)).filter(change => change.packChanges.length);
 }
 
-export function getSuitabilityBrushChanges(map, point, brush, originals) {
+export function getSuitabilityBrushChanges(map, point, brush, originals, anchorGridCell = null) {
   const request = normalizeRequest(brush);
   if (!request.valid) return [];
   const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, brush?.radius);
-  const radiusSq = radius * radius;
   const meanArea = average(map?.pack?.cells?.area) || 1;
   const changes = [];
-  for (let gridCell = 0; gridCell < (map?.grid?.cells?.p?.length || 0); gridCell++) {
+  for (const {gridCell} of queryBrushCellsInRadius(map, point, radius, anchorGridCell)) {
     if (!matchesScope(Number(map.grid.cells.h?.[gridCell]), request.scope)) continue;
-    const pointIndex = map.grid.cells.p[gridCell];
-    const cellPoint = map.grid.points?.[pointIndex];
-    if (!cellPoint) continue;
-    const dx = cellPoint[0] - point.x;
-    const dy = cellPoint[1] - point.y;
-    if (dx * dx + dy * dy > radiusSq) continue;
     const packCells = packCellsForGrid(map, [gridCell]);
     if (!packCells.length || packCells.some(cell => !matchesScope(Number(map.pack.cells.h?.[cell]), request.scope))) continue;
     if (!originals.has(gridCell)) originals.set(gridCell, captureGridOriginal(map, gridCell, packCells));

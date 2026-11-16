@@ -28,8 +28,8 @@ assert.match(panelSource, /resolveBiomeDescriptor[\s\S]*生态说明/, "生物�
 assert.match(mapPanelSource, /colorMode === "biomes"[\s\S]*biomeLegendList/, "生物群系视图没有中文图例");
 assert.match(pickingSource, /biomeDescription[\s\S]*packBiome/, "拾取结果没有中文群系名称与说明");
 assert.match(apiSource, /listBiomeDescriptors\(climate\.biomes\)[\s\S]*canonicalName:[\s\S]*description:[\s\S]*entries,/, "气候 API 没有附加人类可读群系清单");
-assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, -1), 4, "生物群系画笔半径下界异常");
-assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, 999), 120, "生物群系画笔半径上界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, -1), 1, "生物群系画笔半径下界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, 999), 32, "生物群系画笔半径上界异常");
 assert.equal(BIOMES.length, 13, "生物群系 registry 分母不是 13");
 assert.deepEqual(listBiomeDescriptors().map(biome => biome.name), ["海洋", "热带荒漠", "寒冷荒漠", "稀树草原", "草原", "热带季雨林", "温带落叶阔叶林", "热带雨林", "温带雨林", "北方针叶林", "苔原", "冰川", "湿地"]);
 for (const biome of listBiomeDescriptors()) {

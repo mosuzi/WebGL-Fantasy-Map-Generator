@@ -13,6 +13,7 @@ import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {backfillProvinceNames} from "../generator/province-naming.js";
 import {normalizeDiplomacyMap} from "./diplomacy-map-compatibility.js";
 import {DEFAULT_UNIT_PREFERENCES, normalizeUnitPreferences} from "../ui/display-units.js";
+import {hasCompleteSavedBrushRadii, normalizeSavedBrushRadii} from "./brush-radius-contract.js";
 import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../generator/ocean-currents.js";
 import {normalizeRiverNetwork} from "../generator/river-network.js";
 import {normalizeRiverControlPoints} from "./river-control-points.js";
@@ -49,8 +50,8 @@ import {
 } from "./webfmg-v3-container.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
-export const MAP_DOCUMENT_VERSION = 2;
-export const MAP_SCHEMA_VERSION = 2;
+export const MAP_DOCUMENT_VERSION = 3;
+export const MAP_SCHEMA_VERSION = 3;
 export const PNG_OVERLAY_KEYS = Object.freeze(["labels", "cityIcons", "markers", "military", "measurements", "legend", "scaleBar"]);
 export const GEOJSON_RANGE_MODES = Object.freeze(["full", "viewport", "bbox"]);
 
@@ -87,7 +88,7 @@ export function createMapDocument(map, options = {}, presentation = {}) {
   const display = documentOptions.display;
   delete documentOptions.display;
   const normalizedMap = projectDocumentPresentation(
-    normalizeMapSchemaV2(map, {...documentOptions, display}),
+    normalizeMapSchema(map, {...documentOptions, display}),
     documentOptions,
     presentation
   );
@@ -306,7 +307,7 @@ export function migrateMapDocument(document, options = {}) {
         }
       }
     : versioned.map;
-  const normalizedMap = normalizeCurrentMapSchemaV2(sourceMap, versioned.options);
+  const normalizedMap = normalizeCurrentMapSchema(sourceMap, versioned.options);
   let observedCompatibilityBackfill = sourceMap.metadata?.name !== normalizedMap.metadata.name
     || !sameCompatibilityValue(sourceMap.options, normalizedMap.options)
     || !sameCompatibilityValue(sourceMap.display, normalizedMap.display)
@@ -371,6 +372,7 @@ function needsMapDocumentCompatibilityBackfill(document) {
     || hasIncompleteLabelStore(labels)
     || hasIncompleteVisualThemeStore(map?.visualTheme)
     || hasIncompleteUnitPreferences(map?.display ?? document?.display)
+    || !hasCompleteSavedBrushRadii(map?.display?.brushRadii)
     || (document?.display !== undefined && map?.display === undefined)
     || hasIncompleteEconomyDisplay(map)
     || hasIncompleteDiplomacy(map)
@@ -1110,19 +1112,34 @@ function migrateMapDocumentStep(document, version, registry) {
 }
 
 const MAP_DOCUMENT_MIGRATORS = createMapDocumentMigrationRegistry({
-  1: migrateMapDocumentV1ToV2
+  1: migrateMapDocumentV1ToV2,
+  2: migrateMapDocumentV2ToV3
 });
 
 function migrateMapDocumentV1ToV2(document) {
+  const map = normalizeMapSchema(document.map, document.options, 2);
   return {
     ...document,
     version: 2,
     metadata: {
       ...(document.metadata || {}),
-      mapSchemaVersion: MAP_SCHEMA_VERSION
+      mapSchemaVersion: 2
     },
     options: {...(document.options || {})},
-    map: normalizeMapSchemaV2(document.map, document.options)
+    map
+  };
+}
+
+function migrateMapDocumentV2ToV3(document) {
+  return {
+    ...document,
+    version: 3,
+    metadata: {...(document.metadata || {}), mapSchemaVersion: 3},
+    map: {
+      ...document.map,
+      metadata: {...(document.map.metadata || {}), schemaVersion: 3},
+      display: normalizeMapDisplayConfig(document.map.display ?? document.display)
+    }
   };
 }
 
@@ -1154,6 +1171,7 @@ function validateCurrentMapDocument(document) {
     throw new Error("地图数据缺少 diplomacy 存储");
   }
   if (document.map.display?.units && !Array.isArray(document.map.display.units.customUnits)) throw new Error("地图数据的自定义单位列表无效");
+  if (!hasCompleteSavedBrushRadii(document.map.display?.brushRadii)) throw new Error("地图数据的画笔大小存储不完整");
   if (Number(document.map.oceanCurrents?.version) !== OCEAN_CURRENT_MODEL_VERSION || !Array.isArray(document.map.oceanCurrents?.currents)) {
     throw new Error("地图数据缺少 oceanCurrents 存储");
   }
@@ -1180,9 +1198,9 @@ export function assertMapDocumentCellLimit(map) {
   throw error;
 }
 
-function normalizeMapSchemaV2(map, documentOptions = {}) {
+function normalizeMapSchema(map, documentOptions = {}, schemaVersion = MAP_SCHEMA_VERSION) {
   const source = map && typeof map === "object" ? map : {};
-  const normalizedCurrent = normalizeCurrentMapSchemaV2(source, documentOptions);
+  const normalizedCurrent = normalizeCurrentMapSchema(source, documentOptions, schemaVersion);
   const societyCultures = cloneSocialStore(source.society?.cultures);
   const societyReligions = cloneSocialStore(source.society?.religions);
   const packCultures = normalizedCurrent.pack?.cultures === source.society?.cultures ? societyCultures : cloneSocialStore(normalizedCurrent.pack?.cultures);
@@ -1226,7 +1244,7 @@ function copyIdentityArrayWithExplicitHoles(values) {
   return Array.from({length: values.length}, (_, index) => Object.hasOwn(values, index) ? values[index] : null);
 }
 
-function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
+function normalizeCurrentMapSchema(map, documentOptions = {}, schemaVersion = MAP_SCHEMA_VERSION) {
   const source = map && typeof map === "object" ? map : {};
   const persistedIdentity = resolvePersistedDocumentIdentity(source);
   const actualCells = Number(source.grid?.points?.length);
@@ -1234,7 +1252,9 @@ function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
   const cellsTarget = normalizeMapCellTarget(source.options?.cellsTarget ?? documentOptions?.cellsTarget ?? source.metadata?.cellsTarget, {fallback: fallbackCells});
   const options = {...(documentOptions || {}), ...(source.options || {}), cellsTarget};
   delete options.display;
-  const displaySource = documentOptions.display ?? source.display;
+  const displaySource = schemaVersion >= 3
+    ? {...(source.display || {}), ...(documentOptions.display || {})}
+    : (documentOptions.display ?? source.display);
   const normalizedRiverStore = normalizeRiverStore(source.rivers, source.pack);
   return synchronizeMapName({
     ...source,
@@ -1243,10 +1263,11 @@ function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
       documentId: persistedIdentity.documentId,
       documentIdentityVersion: persistedIdentity.version,
       cellsTarget,
-      schemaVersion: MAP_SCHEMA_VERSION
+      schemaVersion
     },
     options,
-    ...(displaySource && typeof displaySource === "object" ? {display: normalizeMapDisplayConfig(displaySource)} : {}),
+    ...(schemaVersion >= 3 || (displaySource && typeof displaySource === "object")
+      ? {display: normalizeMapDisplayConfig(displaySource, {withBrushRadii: schemaVersion >= 3})} : {}),
     notes: backfillNotesStoreV2(source.notes),
     measurements: backfillMeasurementStoreV2(source.measurements),
     labels: backfillLabelStoreV2(source.labels),
@@ -1320,11 +1341,12 @@ function normalizeMapDocumentDisplay(document) {
   };
 }
 
-function normalizeMapDisplayConfig(input = {}) {
+function normalizeMapDisplayConfig(input = {}, {withBrushRadii = true} = {}) {
   const source = input && typeof input === "object" ? input : {};
   return {
     ...source,
-    units: normalizeUnitPreferences(source.units)
+    units: normalizeUnitPreferences(source.units),
+    ...(withBrushRadii ? {brushRadii: normalizeSavedBrushRadii(source.brushRadii)} : {})
   };
 }
 

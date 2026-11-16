@@ -1700,7 +1700,7 @@ export function exportAllMapData(state, documentRef, options = {}) {
   const document = createMapDocument(map, {
     ...(state.options || {}),
     visualTheme,
-    display: {units}
+    display: {units, brushRadii: state.brushRadii}
   }, {
     visualThemeDocument: isUserVisualTheme(visualTheme) ? exportVisualThemeDocument(visualTheme) : null
   });
@@ -1760,7 +1760,7 @@ export async function exportCompressedAllMapData(state, documentRef, options = {
   const document = createMapDocument(map, {
     ...(state.options || {}),
     visualTheme,
-    display: {units}
+    display: {units, brushRadii: state.brushRadii}
   }, {
     visualThemeDocument: isUserVisualTheme(visualTheme) ? exportVisualThemeDocument(visualTheme) : null
   });

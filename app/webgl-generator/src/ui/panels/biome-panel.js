@@ -92,7 +92,7 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
     },
     onAssignmentRadius: radius => {
       panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, radius);
-      callbacks.onBrushRadiusChange?.();
+      callbacks.onBrushRadiusChange?.(BRUSH_RADIUS_ID.BIOME, panelState.assignmentRadius);
     },
     onSuitabilityActive: active => {
       panelState.suitabilityActive = Boolean(active);
@@ -115,7 +115,7 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
     },
     onSuitabilityRadius: radius => {
       panelState.suitabilityRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, radius);
-      callbacks.onBrushRadiusChange?.();
+      callbacks.onBrushRadiusChange?.(BRUSH_RADIUS_ID.SUITABILITY, panelState.suitabilityRadius);
     },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
@@ -208,6 +208,10 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
         scope: panelState.assignmentScope,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, panelState.assignmentRadius)
       };
+    },
+    setBrushRadii({biome, suitability} = {}) {
+      panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, biome);
+      panelState.suitabilityRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, suitability);
     },
     getSuitabilityBrush() {
       return {

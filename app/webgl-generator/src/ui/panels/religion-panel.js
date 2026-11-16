@@ -101,7 +101,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     },
     onAssignmentRadius: radius => {
       panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.RELIGION, radius);
-      callbacks.onBrushRadiusChange?.();
+      callbacks.onBrushRadiusChange?.(panelState.assignmentRadius);
     },
     onCenterPickActive: active => {
       panelState.centerPickActive = Boolean(active);
@@ -213,6 +213,9 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
         targetId: panelState.targetReligionId ?? 0,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.RELIGION, panelState.assignmentRadius)
       };
+    },
+    setBrushRadius(radius) {
+      panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.RELIGION, radius);
     },
     isOpen() {
       return panelState.open;

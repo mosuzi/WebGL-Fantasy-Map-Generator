@@ -119,7 +119,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     onRenameVisibleFromNamebase: stateIds => callbacks.onRenameVisibleFromNamebase?.(stateIds),
     onRadius: radius => {
       panelState.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.STATE, radius);
-      callbacks.onBrushRadiusChange?.();
+      callbacks.onBrushRadiusChange?.(panelState.radius);
     },
     onColorChange: (stateId, color) => callbacks.onColorChange?.(stateId, color),
     onGovernmentChange: (stateId, governmentKey, formName) => callbacks.onGovernmentChange?.(stateId, governmentKey, formName),
@@ -206,6 +206,9 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
         targetStateId: panelState.targetStateId,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.STATE, panelState.radius)
       };
+    },
+    setBrushRadius(radius) {
+      panelState.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.STATE, radius);
     },
     setTargetStateId(stateId) {
       const normalized = normalizeStateId(stateId);

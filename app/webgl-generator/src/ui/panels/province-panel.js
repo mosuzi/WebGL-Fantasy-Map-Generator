@@ -124,7 +124,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     },
     onRadius: radius => {
       panelState.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.PROVINCE, radius);
-      callbacks.onBrushRadiusChange?.();
+      callbacks.onBrushRadiusChange?.(panelState.radius);
     },
     onSampleSelection: () => callbacks.onSampleSelection?.(),
     onSampleHover: () => callbacks.onSampleHover?.(),
@@ -251,6 +251,9 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
         targetProvinceId: panelState.selectedProvinceId,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.PROVINCE, panelState.radius)
       };
+    },
+    setBrushRadius(radius) {
+      panelState.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.PROVINCE, radius);
     },
     setActive(active) {
       const nextActive = Boolean(active);

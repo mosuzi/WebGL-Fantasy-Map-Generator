@@ -156,7 +156,7 @@ try {
     "--request-id", "cli-legacy-rename"
   ]);
   assert.equal(legacyApply.ok, true);
-  assert.equal(JSON.parse(readFileSync(legacyOutput, "utf8")).version, 2, "v1 输出没有迁移为 v2");
+  assert.equal(JSON.parse(readFileSync(legacyOutput, "utf8")).version, 3, "v1 输出没有迁移为当前版本");
 
   const overwriteDenied = spawnSync(process.execPath, ["--no-warnings", "tools/webgl-generator-headless-write.mjs", "apply", input, input, "edit.objects.applyRename", JSON.stringify(renameArgs)], {cwd: resolve("."), encoding: "utf8"});
   assert.notEqual(overwriteDenied.status, 0);

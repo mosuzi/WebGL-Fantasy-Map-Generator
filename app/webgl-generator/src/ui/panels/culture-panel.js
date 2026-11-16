@@ -102,7 +102,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     },
     onAssignmentRadius: radius => {
       panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.CULTURE, radius);
-      callbacks.onBrushRadiusChange?.();
+      callbacks.onBrushRadiusChange?.(panelState.assignmentRadius);
     },
     onCenterPickActive: active => {
       panelState.centerPickActive = Boolean(active);
@@ -214,6 +214,9 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
         targetId: panelState.targetCultureId ?? 0,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.CULTURE, panelState.assignmentRadius)
       };
+    },
+    setBrushRadius(radius) {
+      panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.CULTURE, radius);
     },
     isOpen() {
       return panelState.open;

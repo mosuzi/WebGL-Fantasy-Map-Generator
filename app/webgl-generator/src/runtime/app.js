@@ -141,7 +141,7 @@ import {applyHeightBrushPreview, createApplyHeightBrushCommand, prewarmHeightEdi
 import {createHeightBrushCommitTrace, finishHeightBrushCommitTrace, measureHeightBrushCommitStage, recordHeightBrushCommitStage} from "./height-brush-performance.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {acceptHeightBrushSample} from "./height-brush-cadence.js";
-import {prewarmHeightCellSpatialIndex, queryHeightCellsInRadius} from "./height-cell-spatial-index.js";
+import {prewarmHeightCellSpatialIndex, queryBrushCellsInRadius} from "./height-cell-spatial-index.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
 import {captureClimatePopulation, restoreClimatePopulation} from "./climate-population-preservation.js";
@@ -343,7 +343,7 @@ import {installPngPresets} from "./png-export-presets.js";
 import {CityUpdateGuidance, CITY_GUIDANCE_EVENT} from "./city-update-guidance.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "./direct-manipulation-session.js";
-import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, normalizeSavedBrushRadii} from "./brush-radius-contract.js";
 import {restoreCanvasToolStrokePreview} from "./canvas-tool-preview-rollback.js";
 import {
   exportAllMapData,
@@ -568,7 +568,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     getIdentity: () => state?.map ? mapRevision.getSnapshot().mapIdentity : null,
     getPresentation: () => {
       const theme = currentVisualThemeId(documentRef);
-      return {options: state?.options || {}, units: normalizeUnitPreferences(readControlPreferences(documentRef).units), theme,
+      return {options: state?.options || {}, units: normalizeUnitPreferences(readControlPreferences(documentRef).units), brushRadii: state?.brushRadii || {}, theme,
         themeDocument: isUserVisualTheme(theme) ? exportVisualThemeDocument(theme) : null};
     }
   });
@@ -589,6 +589,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   state = {
     options: {...DEFAULT_OPTIONS},
+    brushRadii: normalizeSavedBrushRadii(),
     map: null,
     mapReplicaPatchQueue: Promise.resolve(),
     workerSessionMutationGuard: false,
@@ -730,6 +731,14 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   let selectionStore = null;
   let runtimeActions = null;
   const refreshBrushCursor = () => state.brushCursorPreview?.refresh();
+  const saveBrushRadius = (id, radius) => {
+    const next = normalizeSavedBrushRadii({...state.brushRadii, [id]: radius});
+    if (state.brushRadii[id] !== next[id]) {
+      state.brushRadii = next;
+      state.saveStatusUi?.refresh();
+    }
+    refreshBrushCursor();
+  };
   const generationPanel = createGenerationPanel(documentRef, panelManager);
   state.panels.generation = generationPanel;
   await generationPanel.ready;
@@ -739,7 +748,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onApplyDownstreamRebuild: options => runtimeActions.climate.applyDownstreamRebuild(options)
   });
   state.panels.biome = createBiomePanel(documentRef, panelManager, {
-    onBrushRadiusChange: refreshBrushCursor,
+    onBrushRadiusChange: saveBrushRadius,
     onAssignmentActive: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.BIOME_ASSIGN);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.BIOME_ASSIGN, "panel-toggle");
@@ -1349,7 +1358,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   state.panels.height = heightPanel;
   statePanel = createStatePanel(documentRef, panelManager, {
-    onBrushRadiusChange: refreshBrushCursor,
+    onBrushRadiusChange: radius => saveBrushRadius(BRUSH_RADIUS_ID.STATE, radius),
     onActiveChange: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_BRUSH);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_BRUSH, "panel-toggle");
@@ -1526,7 +1535,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   state.panels.government = governmentPanel;
   provincePanel = createProvincePanel(documentRef, panelManager, {
-    onBrushRadiusChange: refreshBrushCursor,
+    onBrushRadiusChange: radius => saveBrushRadius(BRUSH_RADIUS_ID.PROVINCE, radius),
     onActiveChange: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_BRUSH);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_BRUSH, "panel-toggle");
@@ -1751,7 +1760,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   state.panels.city = cityPanel;
   culturePanel = createCulturePanel(documentRef, panelManager, {
-    onBrushRadiusChange: refreshBrushCursor,
+    onBrushRadiusChange: radius => saveBrushRadius(BRUSH_RADIUS_ID.CULTURE, radius),
     onSelect: object => {
       selectFromPanel("culture-panel", object);
       culturePanel.setSelectedCultureId(object.id);
@@ -1841,7 +1850,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   state.panels.culture = culturePanel;
   religionPanel = createReligionPanel(documentRef, panelManager, {
-    onBrushRadiusChange: refreshBrushCursor,
+    onBrushRadiusChange: radius => saveBrushRadius(BRUSH_RADIUS_ID.RELIGION, radius),
     onSelect: object => {
       selectFromPanel("religion-panel", object);
       religionPanel.setSelectedReligionId(object.id);
@@ -5280,6 +5289,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   state.brushCursorPreview?.reset();
   if (!workerAdoption?.session?.id) invalidateMapReplicaCoordinators(state, true, "map-replaced");
   state.map = map;
+  restoreSavedBrushRadii(state, map.display?.brushRadii);
   state.regenerationLockUiSession?.clear({keepContext: false});
   state.pick = null;
   state.editHistory.clear();
@@ -5529,6 +5539,7 @@ function runtimeAfterMapLoadGroups(state, documentRef, restorePanels) {
 function captureMapReplaceSnapshot(state, documentRef) {
   return {
     map: state.map,
+    brushRadii: {...state.brushRadii},
     options: cloneGenerationOptions(state.options),
     pendingGenerateId: state.pendingGenerateId,
     mapRevision: state.mapRevision.createSnapshot(),
@@ -5647,6 +5658,7 @@ async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, o
     await yieldToBrowser(documentRef);
     const mapChanged = state.map !== snapshot.map;
     state.map = snapshot.map;
+    restoreSavedBrushRadii(state, snapshot.brushRadii);
     state.options = cloneGenerationOptions(snapshot.options);
     state.pendingGenerateId = snapshot.pendingGenerateId;
     state.lastEditRefresh = snapshot.lastEditRefresh;
@@ -6159,7 +6171,7 @@ async function exportMapArchiveViaWorker(state, documentRef, {operation = null, 
     options: {
       ...(state.options || {}),
       visualTheme: currentVisualThemeId(documentRef),
-      display: {units}
+      display: {units, brushRadii: state.brushRadii}
     },
     presentation: {
       visualThemeDocument: isUserVisualTheme(currentVisualThemeId(documentRef))
@@ -16575,6 +16587,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
 
   register(CANVAS_TOOL_MODE.PROVINCE_BRUSH, "province-panel", {
     onEnter: () => {
+      prewarmHeightCellSpatialIndex(state.map);
       state.provinceEdit.addMode = false;
       state.provinceEdit.deleteMode = false;
       state.panels.province?.setActive(true);
@@ -16648,6 +16661,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   registerSocialCenterMode(state, documentRef, register, "religion");
   register(CANVAS_TOOL_MODE.BIOME_ASSIGN, "biome-panel", {
     onEnter: () => {
+      prewarmHeightCellSpatialIndex(state.map);
       state.biomeEdit.activeStroke = null;
       state.biomeEdit.preview = null;
       state.panels.biome?.setAssignmentActive(true);
@@ -16662,6 +16676,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   });
   register(CANVAS_TOOL_MODE.SUITABILITY_PAINT, "biome-panel", {
     onEnter: () => {
+      prewarmHeightCellSpatialIndex(state.map);
       state.suitabilityEdit.activeStroke = null;
       state.suitabilityEdit.preview = null;
       state.panels.biome?.setSuitabilityActive(true);
@@ -16937,6 +16952,7 @@ function registerSocialAssignmentMode(state, documentRef, register, kind) {
   const modeId = kind === "culture" ? CANVAS_TOOL_MODE.CULTURE_ASSIGN : CANVAS_TOOL_MODE.RELIGION_ASSIGN;
   register(modeId, `${kind}-panel`, {
     onEnter: () => {
+      prewarmHeightCellSpatialIndex(state.map);
       state[`${kind}Edit`].activeStroke = null;
       state.panels[kind]?.setAssignmentActive(true);
       activateCanvasToolTheme(state, documentRef, `${kind}s`);
@@ -19482,7 +19498,8 @@ function applyStateBrushAtEvent(state, event) {
   const startedAt = performance.now();
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
   state.stateEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
-  const changes = getStateBrushChanges(state.map, point, brush, stroke.originals);
+  const anchorGridCell = state.renderer.pickCellClientPoint(event.clientX, event.clientY)?.gridCell;
+  const changes = getStateBrushChanges(state.map, point, brush, stroke.originals, anchorGridCell);
   if (!changes.length) {
     const durationMs = Math.round((performance.now() - startedAt) * 10) / 10;
     if (durationMs >= 8) state.healthMonitor?.recordCanvasSample?.("state-brush-noop", {durationMs});
@@ -19513,7 +19530,8 @@ function applyProvinceBrushAtEvent(state, event) {
 
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
   state.provinceEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
-  const changes = getProvinceBrushChanges(state.map, point, brush, stroke.originals);
+  const anchorGridCell = state.renderer.pickCellClientPoint(event.clientX, event.clientY)?.gridCell;
+  const changes = getProvinceBrushChanges(state.map, point, brush, stroke.originals, anchorGridCell);
   if (!changes.length) return;
 
   applyProvinceBrushPreview(state.map, changes);
@@ -19528,7 +19546,8 @@ function applySocialAssignmentAtEvent(state, event, kind) {
   const editState = state[`${kind}Edit`];
   if (!brush?.active || !editState.activeStroke || brush.targetId < 0) return;
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
-  const changes = getSocialAssignmentChanges(state.map, point, brush, editState.activeStroke.originals, kind);
+  const anchorGridCell = state.renderer.pickCellClientPoint(event.clientX, event.clientY)?.gridCell;
+  const changes = getSocialAssignmentChanges(state.map, point, brush, editState.activeStroke.originals, kind, anchorGridCell);
   if (!changes.length) return;
   applySocialAssignmentPreview(state.map, kind, changes);
   editState.lastAffected = changes.length;
@@ -19541,7 +19560,8 @@ function applyBiomeAssignmentAtEvent(state, event) {
   const stroke = state.biomeEdit.activeStroke;
   if (!brush?.active || !stroke || brush.targetId < 0) return;
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
-  const changes = getBiomeBrushChanges(state.map, point, brush, stroke.originals);
+  const anchorGridCell = state.renderer.pickCellClientPoint(event.clientX, event.clientY)?.gridCell;
+  const changes = getBiomeBrushChanges(state.map, point, brush, stroke.originals, anchorGridCell);
   if (!changes.length) return;
   applyBiomeAssignmentPreview(state.map, changes);
   const gridCells = [...stroke.originals.keys()];
@@ -19562,7 +19582,8 @@ function applySuitabilityAtEvent(state, event) {
   const stroke = state.suitabilityEdit.activeStroke;
   if (!brush?.active || !stroke) return;
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
-  const changes = getSuitabilityBrushChanges(state.map, point, brush, stroke.originals);
+  const anchorGridCell = state.renderer.pickCellClientPoint(event.clientX, event.clientY)?.gridCell;
+  const changes = getSuitabilityBrushChanges(state.map, point, brush, stroke.originals, anchorGridCell);
   if (!changes.length) return;
   applySuitabilityPreview(state.map, changes);
   const strokeChanges = buildSuitabilityStrokeChanges(state.map, stroke.originals);
@@ -19861,12 +19882,12 @@ function finishProvinceStroke(state, documentRef) {
   });
 }
 
-function getStateBrushChanges(map, point, brush, originals) {
+function getStateBrushChanges(map, point, brush, originals, anchorGridCell = null) {
   const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.STATE, brush?.radius);
   const affected = [];
   const cells = map.grid.cells;
 
-  for (const {gridCell} of queryHeightCellsInRadius(map, point, radius)) {
+  for (const {gridCell} of queryBrushCellsInRadius(map, point, radius, anchorGridCell)) {
     if (!isGridLandCell(map, gridCell)) continue;
     if (cells.state[gridCell] === brush.targetStateId) continue;
     affected.push(stateChange(cells, originals, gridCell, brush.targetStateId));
@@ -19875,23 +19896,17 @@ function getStateBrushChanges(map, point, brush, originals) {
   return affected;
 }
 
-function getProvinceBrushChanges(map, point, brush, originals) {
+function getProvinceBrushChanges(map, point, brush, originals, anchorGridCell = null) {
   const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.PROVINCE, brush?.radius);
-  const radiusSq = radius * radius;
   const affected = [];
   const cells = map.grid.cells;
   const targetStateId = getProvinceStateId(map, brush.targetProvinceId);
   const eraseProvince = brush.targetProvinceId === 0;
   if (!eraseProvince && !targetStateId) return affected;
 
-  for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
+  for (const {gridCell} of queryBrushCellsInRadius(map, point, radius, anchorGridCell)) {
     if (!isGridLandCell(map, gridCell)) continue;
     if (!eraseProvince && cells.state[gridCell] !== targetStateId) continue;
-    const cellPoint = map.grid.points[cells.p[gridCell]];
-    if (!cellPoint) continue;
-    const dx = cellPoint[0] - point.x;
-    const dy = cellPoint[1] - point.y;
-    if (dx * dx + dy * dy > radiusSq) continue;
     if (cells.province[gridCell] === brush.targetProvinceId) continue;
     affected.push(provinceChange(cells, originals, gridCell, brush.targetProvinceId));
   }
@@ -19899,20 +19914,15 @@ function getProvinceBrushChanges(map, point, brush, originals) {
   return affected;
 }
 
-function getSocialAssignmentChanges(map, point, brush, originals, kind) {
+function getSocialAssignmentChanges(map, point, brush, originals, kind, anchorGridCell = null) {
   const radiusId = kind === "religion" ? BRUSH_RADIUS_ID.RELIGION : BRUSH_RADIUS_ID.CULTURE;
   const radius = normalizeBrushRadius(radiusId, brush?.radius);
-  const radiusSq = radius * radius;
   const cells = map.grid.cells;
   const values = cells[kind];
   const affected = [];
-  for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
+  for (const {gridCell} of queryBrushCellsInRadius(map, point, radius, anchorGridCell)) {
     if (!isGridLandCell(map, gridCell)) continue;
-    const cellPoint = map.grid.points[cells.p[gridCell]];
-    if (!cellPoint) continue;
-    const dx = cellPoint[0] - point.x;
-    const dy = cellPoint[1] - point.y;
-    if (dx * dx + dy * dy > radiusSq || Number(values[gridCell] || 0) === brush.targetId) continue;
+    if (Number(values[gridCell] || 0) === brush.targetId) continue;
     if (!originals.has(gridCell)) {
       const packBefore = [];
       for (let packCell = 0; packCell < (map.pack?.cells?.g?.length || 0); packCell++) {
@@ -19982,6 +19992,17 @@ function updateHeightPanel(state, {includeMapSummary = true} = {}) {
   } else {
     state.panels.height?.update(update);
   }
+}
+
+function restoreSavedBrushRadii(state, source) {
+  const radii = normalizeSavedBrushRadii(source);
+  state.brushRadii = radii;
+  state.panels.state?.setBrushRadius?.(radii.state);
+  state.panels.province?.setBrushRadius?.(radii.province);
+  state.panels.culture?.setBrushRadius?.(radii.culture);
+  state.panels.religion?.setBrushRadius?.(radii.religion);
+  state.panels.biome?.setBrushRadii?.({biome: radii.biome, suitability: radii.suitability});
+  state.brushCursorPreview?.refresh();
 }
 
 function heightDerivedStaleSystems(map) {

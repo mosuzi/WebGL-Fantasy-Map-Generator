@@ -26,11 +26,21 @@ import {createHeadlessMapApi, loadHeadlessMapDocument} from "../app/webgl-genera
 import {encodeWebfmgV3Document} from "../app/webgl-generator/src/runtime/webfmg-v3-container.js";
 import {ensureLabelStore} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
 import {normalizeUnitPreferences} from "../app/webgl-generator/src/ui/display-units.js";
+import {normalizeSavedBrushRadii} from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
 
 const fixtureText = await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8");
 const v1UpgradeEvents = [];
 const migrated = parseMapDocument(fixtureText, {onUpgrade: info => v1UpgradeEvents.push(info)});
-assert.deepEqual(getMapDocumentUpgradeInfo(migrated), {needed: true, sourceVersion: 1, targetVersion: 2}, "v1 迁移缺少打开提示来源");
+const frozenV1Document = JSON.parse(fixtureText, (_key, value) => {
+  const Constructor = value?.__webglGeneratorTypedArray && globalThis[value.__webglGeneratorTypedArray];
+  return typeof Constructor === "function" ? new Constructor(value.data || []) : value;
+});
+const intermediateV2 = migrateMapDocumentWithRegistry(frozenV1Document, {targetVersion: 2});
+assert.deepEqual([intermediateV2.version, intermediateV2.metadata.mapSchemaVersion, intermediateV2.map.metadata.schemaVersion], [2, 2, 2], "v1→v2 中间版本标记不一致");
+assert.equal(intermediateV2.map.display?.brushRadii, undefined, "v1→v2 中间版本提前写入 v3 画笔字段");
+assert.deepEqual(migrateMapDocumentWithRegistry(intermediateV2, {targetVersion: 3}).map.display.brushRadii,
+  normalizeSavedBrushRadii(), "v2→v3 没有补齐六支画笔大小");
+assert.deepEqual(getMapDocumentUpgradeInfo(migrated), {needed: true, sourceVersion: 1, targetVersion: 3}, "v1 迁移缺少打开提示来源");
 assert.deepEqual(v1UpgradeEvents, [getMapDocumentUpgradeInfo(migrated)], "v1 迁移未及时发出升级进度");
 const legacyV2Text = await readFile(new URL("./fixtures/webgl-map-v2-legacy-city.json", import.meta.url), "utf8");
 const legacyV2Source = JSON.parse(legacyV2Text);
@@ -50,11 +60,12 @@ function assertLegacyV2Result(document, route) {
   assert.equal(document.map.pack.burgs[1]?.cityId, 0, `${route} 未补齐旧城镇记录`);
   assert.equal(document.map.pack.cells.burg[1], 1, `${route} 未补齐 pack cell 镜像`);
   assert.equal(document.map.grid.cells.burg[1], 0, `${route} 未补齐 grid cell 镜像`);
+  assert.deepEqual(document.map.display.brushRadii, normalizeSavedBrushRadii(), `${route} 未回填旧档画笔大小`);
   validateMapDocumentForExport(document);
 }
 const v2UpgradeEvents = [];
 const legacyV2 = parseMapDocument(legacyV2Text, {onUpgrade: info => v2UpgradeEvents.push(info)});
-assert.deepEqual(getMapDocumentUpgradeInfo(legacyV2), {needed: true, sourceVersion: 2, targetVersion: 2}, "同版历史回填缺少打开提示来源");
+assert.deepEqual(getMapDocumentUpgradeInfo(legacyV2), {needed: true, sourceVersion: 2, targetVersion: 3}, "旧版历史回填缺少打开提示来源");
 assert.deepEqual(v2UpgradeEvents, [getMapDocumentUpgradeInfo(legacyV2)], "同版历史回填未及时发出升级进度");
 assertLegacyV2Result(legacyV2, "完整 JSON");
 const view = {defaultView: globalThis};
@@ -125,14 +136,14 @@ const headlessV1 = loadHeadlessMapDocument(legacyHeaderOnly);
 assert.ok(headlessV1.map.grid.cells.h instanceof Uint8Array, "无头对象载入把旧 v1 typed array 降成普通对象");
 assert.equal(createHeadlessMapApi(headlessV1).terrain.get().data.height.count, 3, "无头对象载入后高度统计丢失");
 
-assert.equal(MAP_DOCUMENT_VERSION, 2);
-assert.equal(MAP_SCHEMA_VERSION, 2);
-assert.equal(migrated.version, 2);
-assert.equal(migrated.metadata.mapSchemaVersion, 2);
+assert.equal(MAP_DOCUMENT_VERSION, 3);
+assert.equal(MAP_SCHEMA_VERSION, 3);
+assert.equal(migrated.version, 3);
+assert.equal(migrated.metadata.mapSchemaVersion, 3);
 assert.match(migrated.metadata.documentId, /^fmg-doc-v1-[0-9a-f]{16}$/u);
 assert.equal(migrated.metadata.documentId, migrated.map.metadata.documentId);
 assert.equal(migrated.metadata.documentIdentityVersion, 1);
-assert.equal(migrated.map.metadata.schemaVersion, 2);
+assert.equal(migrated.map.metadata.schemaVersion, 3);
 assert.ok(migrated.map.grid.cells.h instanceof Uint8Array, "v1 typed array 应在迁移后保持类型");
 assert.deepEqual([...migrated.map.grid.cells.h], [12, 20, 48]);
 assert.equal(migrated.map.notes.notes[0].body, "保留正文");
@@ -150,19 +161,27 @@ assert.deepEqual(migrateMapDocument(migrated), migrated, "当前版本重复迁�
 const sourceMap = {metadata: {seed: "new-map"}, options: {visualTheme: "night"}, grid: {cells: {h: new Uint8Array([20, 21])}}};
 const current = createMapDocument(sourceMap, sourceMap.options);
 const currentAgain = createMapDocument(sourceMap, sourceMap.options);
-assert.equal(current.version, 2);
+assert.equal(current.version, 3);
 assert.equal(current.metadata.documentId, current.map.metadata.documentId);
 assert.equal(current.metadata.documentIdentityVersion, 1);
 assert.equal(current.metadata.documentId, currentAgain.metadata.documentId, "同一无 identity map 重复导出必须稳定派生");
-assert.equal(current.map.metadata.schemaVersion, 2);
+assert.equal(current.map.metadata.schemaVersion, 3);
+assert.deepEqual(current.map.display.brushRadii, normalizeSavedBrushRadii(), "新地图未写入画笔默认值");
 assert.equal(current.map.visualTheme.preset, "night");
 assert.equal(sourceMap.metadata.schemaVersion, undefined, "导出不得原地改写运行时 map metadata");
 assert.equal(sourceMap.metadata.documentId, undefined, "导出不得原地写入运行时 document identity");
 assert.equal(sourceMap.measurements, undefined, "导出不得向运行时 map 注入缺失存储");
 const currentRoundtrip = parseMapDocument(stringifyMapDocument(current));
 assert.equal(getMapDocumentUpgradeInfo(currentRoundtrip), null, "当前版本存档错误提示升级");
+const customRadii = {state: 1, province: 32, culture: 7, religion: 13, biome: 2, suitability: 31};
+const customDocument = createMapDocument(current.map, {...current.options, display: {brushRadii: customRadii}});
+assert.deepEqual(parseMapDocument(stringifyMapDocument(customDocument)).map.display.brushRadii, customRadii, "JSON 未保存六支独立画笔大小");
+assert.deepEqual((await parseBinaryMapDocumentPayload(view, encodeWebfmgV3Document(customDocument))).map.display.brushRadii,
+  customRadii, "WEBFMG3 未保存六支独立画笔大小");
+const clampedDocument = createMapDocument(current.map, {...current.options, display: {brushRadii: {...customRadii, state: 0, province: 120}}});
+assert.deepEqual([clampedDocument.map.display.brushRadii.state, clampedDocument.map.display.brushRadii.province], [1, 32], "历史画笔大小未归入新区间");
 const currentWithUnits = structuredClone(currentRoundtrip);
-currentWithUnits.map.display = {units: normalizeUnitPreferences({distanceUnit: "km"})};
+currentWithUnits.map.display = {...currentWithUnits.map.display, units: normalizeUnitPreferences({distanceUnit: "km"})};
 assert.equal(getMapDocumentUpgradeInfo(migrateMapDocument(structuredClone(currentWithUnits))), null, "完整单位设置错误提示升级");
 const currentWithEconomy = createMapDocument({
   ...currentRoundtrip.map,
@@ -234,7 +253,7 @@ for (const [label, remove, read] of [
 assert.equal(currentRoundtrip.metadata.documentId, current.metadata.documentId, "v2 往返没有保留 document identity");
 assert.deepEqual([...currentRoundtrip.map.grid.cells.h], [20, 21], "v2 stringify / parse 应保持 typed array");
 
-assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 3, map: {}}), /暂不支持的地图格式版本：3/);
+assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 4, map: {}}), /暂不支持的地图格式版本：4/);
 assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 1}), /缺少 map 数据/);
 for (const [scope, metadata] of [
   ["document", {document: true, map: false}],

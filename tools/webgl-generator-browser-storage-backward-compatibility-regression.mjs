@@ -195,6 +195,7 @@ try {
       diplomacyAvailable: Boolean(map.diplomacy?.metadata && Array.isArray(map.pack?.states?.find(state => state && Number(state.i ?? state.id) > 0)?.diplomacy)),
       oceanCurrentVersion: map.oceanCurrents?.version,
       customUnitsAvailable: Array.isArray(map.display?.units?.customUnits),
+      brushRadii: map.display?.brushRadii,
       rawStorageUnchanged: localStorage.getItem(key) === raw,
       diagnostic: window.__webglGeneratorApp.lastMapImportDiagnostic,
       status: document.getElementById("file-operation-status")?.textContent || "",
@@ -215,7 +216,8 @@ try {
   assert.equal(restored.stateName, legacyPreparation.expected.stateName, "旧 v2 浏览器存档没有保留国家数据");
   assert.equal(restored.firstHeight, legacyPreparation.expected.firstHeight, "旧 v2 浏览器存档没有保留高度数据");
   assert.equal(restored.heightType, legacyPreparation.expected.heightType, "旧 v2 浏览器存档改变了高度数组类型");
-  assert.equal(restored.documentSchemaVersion, 2, "旧 v2 浏览器存档没有补回地图 schema 版本");
+  assert.equal(restored.documentSchemaVersion, 3, "旧 v2 浏览器存档没有升级到当前地图 schema 版本");
+  assert.deepEqual(restored.brushRadii, {state: 28, province: 28, culture: 28, religion: 28, biome: 28, suitability: 28}, "旧 v2 浏览器存档没有补齐画笔大小");
   assert.equal(restored.notesFormatVersion, 1, "旧 v2 浏览器存档没有补回备注存储");
   assert.equal(restored.measurementVersion, 1, "旧 v2 浏览器存档没有补回测量存储");
   assert.deepEqual(restored.labelHiddenTables, [true, true, true], "旧 v2 浏览器存档没有补回标签隐藏表");

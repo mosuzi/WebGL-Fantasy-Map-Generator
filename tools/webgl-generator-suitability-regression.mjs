@@ -23,8 +23,8 @@ const base = generatePlaceholderMap({seed, cellsTarget: 5000, heightmapTemplate:
 normalizeSuitabilityMap(base);
 assert(base.pack.cells.suitabilityBase instanceof Int16Array, "缺少适居度基础值存储");
 assert(base.pack.cells.suitabilityOverride instanceof Int16Array, "缺少适居度 override 存储");
-assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, -1), 4, "适居度画笔半径下界异常");
-assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, 999), 120, "适居度画笔半径上界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, -1), 1, "适居度画笔半径下界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, 999), 32, "适居度画笔半径上界异常");
 
 const landGrid = findGridCell(base, true);
 const waterGrid = findGridCell(base, false);

@@ -1,5 +1,6 @@
 import {recalculateBiomeSuitability} from "../generator/biomes.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
+import {queryBrushCellsInRadius} from "./height-cell-spatial-index.js";
 import {systemAffected} from "./edit-command-effects.js";
 
 const WATER_LEVEL = 20;
@@ -64,21 +65,15 @@ export function buildBiomeAssignmentChanges(map, biomeId, gridCellIds, options =
   })).filter(change => change.before !== change.after || change.packBefore.some(entry => entry.before !== change.after));
 }
 
-export function getBiomeBrushChanges(map, point, brush, originals) {
+export function getBiomeBrushChanges(map, point, brush, originals, anchorGridCell = null) {
   const target = Number(brush?.targetId);
   const scope = String(brush?.scope || (target === 0 ? "water" : "land"));
   const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, brush?.radius);
-  const radiusSq = radius * radius;
   const changes = [];
-  for (let gridCell = 0; gridCell < (map?.grid?.cells?.p?.length || 0); gridCell++) {
+  for (const {gridCell} of queryBrushCellsInRadius(map, point, radius, anchorGridCell)) {
     const water = Number(map.grid.cells.h?.[gridCell]) < WATER_LEVEL;
     if (water !== (scope === "water")) continue;
-    const pointIndex = map.grid.cells.p[gridCell];
-    const cellPoint = map.grid.points?.[pointIndex];
-    if (!cellPoint) continue;
-    const dx = cellPoint[0] - point.x;
-    const dy = cellPoint[1] - point.y;
-    if (dx * dx + dy * dy > radiusSq || Number(map.grid.cells.biome?.[gridCell]) === target) continue;
+    if (Number(map.grid.cells.biome?.[gridCell]) === target) continue;
     if (!originals.has(gridCell)) {
       originals.set(gridCell, {
         gridBefore: Number(map.grid.cells.biome?.[gridCell]) || 0,

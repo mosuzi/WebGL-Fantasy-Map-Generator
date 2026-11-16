@@ -36,6 +36,14 @@ export function queryHeightCellsInRadius(map, centerPoint, radiusValue) {
   return matches;
 }
 
+export function queryBrushCellsInRadius(map, centerPoint, radius, anchorGridCell) {
+  const matches = queryHeightCellsInRadius(map, centerPoint, radius);
+  if (!Number.isInteger(anchorGridCell) || anchorGridCell < 0 || anchorGridCell >= (map?.grid?.cells?.h?.length || 0)) return matches;
+  if (matches.some(match => match.gridCell === anchorGridCell)) return matches;
+  matches.push({gridCell: anchorGridCell, distanceSq: 0});
+  return matches.sort((a, b) => a.gridCell - b.gridCell);
+}
+
 export function prewarmHeightCellSpatialIndex(map) {
   const startedAt = performance.now();
   const index = getHeightCellSpatialIndex(map);
