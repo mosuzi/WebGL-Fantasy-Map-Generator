@@ -97,8 +97,9 @@ assert.equal(insetExpansion(cssRule(".ui-secondary-action-close::before")), 2, "
 assert.equal(px(cssRule(".object-table-empty-action"), "min-height"), 26, "空态动作视觉高度保持 26px");
 assert.equal(insetExpansion(cssRule(".object-table-empty-action::before")), 2, "空态动作透明命中应扩展到至少 28px");
 assert.match(tableSource, /@keydown\.space\.self\.prevent/, "移除多选框后保留行的键盘选择入口");
-assert.equal(px(cssRule(".object-table-action-cell"), "width"), 64);
-assert.equal(px(cssRule(".has-locate-action .object-table-lock-cell"), "right"), 64, "锁列固定在定位列左边");
+assert.equal(px(cssRule(".object-table-action-cell"), "width"), 40);
+assert.equal(px(cssRule(".object-table-lock-cell"), "width"), 40);
+assert.equal(px(cssRule(".has-locate-action .object-table-lock-cell"), "right"), 40, "锁列固定在定位列左边");
 assert.equal((tableSource.match(/emit\("column-resize"/g) || []).length, 1, "列宽 pointerup 至多派发一次持久化事件");
 assert.match(tableSource, /session\.finish\(event\?\.type === "pointerup" \? "pointerup" : event\?\.type \|\| "unmount", event\)/, "列宽必须只把 pointerup 路由为提交");
 runSelectionEventContract();

@@ -541,7 +541,7 @@ function buildVisualEvidence() {
   const styles = readText(FILES.styles);
   requireTokens(FILES.objectTableGeometry, geometrySource, ["export const OBJECT_TABLE_ROW_HEIGHT = 42"]);
   requireTokens(FILES.objectTable, tableSource, ["OBJECT_TABLE_ROW_HEIGHT", "--object-table-row-height", "const VIRTUAL_THRESHOLD = 120", "const VIRTUAL_OVERSCAN_ROWS = 8"]);
-  requireTokens(FILES.styles, styles, [".object-table-native tbody .object-table-row", "height: var(--object-table-row-height);", "padding-top: 0;", "padding-bottom: 0;", "--el-font-size-small: 12px;", ".table-icon-action", "height: 28px;"]);
+  requireTokens(FILES.styles, styles, [".object-table-native tbody .object-table-row", "height: var(--object-table-row-height);", "padding-top: 0;", "padding-bottom: 0;", "--el-font-size-small: 12px;", ".table-icon-action", "height: 32px;"]);
   return {
     tokenBasis: ["--el-font-size-small: 12px", "--ui-segmented-height: 28px", "--ui-segmented-font-size: 12px"],
     sharedComponentBasis: [FILES.objectTable, FILES.actionDock],

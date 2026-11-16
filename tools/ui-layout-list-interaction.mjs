@@ -37,6 +37,10 @@ export async function inspectListInteraction(page) {
   assert.deepEqual(await selectedKeys(), beforeActions, "右侧动作不得改动多选集合");
   const geometry = await table.evaluate(async table => {
     const wrap = table.parentElement, max = wrap.scrollWidth - wrap.clientWidth, samples = [];
+    const iconButtons = [...table.querySelectorAll('.object-table-row .table-icon-action')].slice(0, 2).map(button => {
+      const rect = button.getBoundingClientRect(), style = getComputedStyle(button);
+      return {width: rect.width, height: rect.height, border: style.borderTopWidth, background: style.backgroundColor};
+    });
     for (const left of [0, max / 2, max]) {
       wrap.scrollLeft = left;await new Promise(resolve => requestAnimationFrame(resolve));
       const edge = wrap.getBoundingClientRect().left + wrap.clientLeft + wrap.clientWidth;
@@ -45,14 +49,23 @@ export async function inspectListInteraction(page) {
       const head = table.querySelector('.object-table-lock-column')?.getBoundingClientRect();
       samples.push({edge, locate: locate && {left: locate.left, right: locate.right}, lock: lock && {left: lock.left, right: lock.right}, headRight: head?.right});
     }
-    wrap.scrollLeft = 0;return {max, samples};
+    wrap.scrollLeft = 0;return {max, samples, iconButtons};
   });
   for (const sample of geometry.samples) {
-    if (sample.locate) assert.ok(Math.abs(sample.locate.right - sample.edge) < 2, "定位列始终固定右侧");
+    if (sample.locate) {
+      assert.ok(Math.abs(sample.locate.right - sample.edge) < 2, "定位列始终固定右侧");
+      assert.ok(sample.locate.right - sample.locate.left <= 40.5, "定位图标列不得占用正文空间");
+    }
     if (sample.lock) {
       assert.ok(Math.abs(sample.lock.right - (sample.locate?.left ?? sample.edge)) < 2, "锁列贴合定位且不重叠");
+      assert.ok(sample.lock.right - sample.lock.left <= 40.5, "锁图标列不得占用正文空间");
       assert.ok(Math.abs(sample.headRight - sample.lock.right) < 2, "锁列表头与表体对齐");
     }
+  }
+  for (const button of geometry.iconButtons) {
+    assert.ok(Math.abs(button.width - 32) < 1 && Math.abs(button.height - 32) < 1, "表格图标命中区应为正方形");
+    assert.equal(button.border, "0px", "表格图标不应带常态圆框");
+    assert.equal(button.background, "rgba(0, 0, 0, 0)", "表格图标不应带常态底框");
   }
   return {ctrlSelection: true, lock: Boolean(await lock.count()), locate: Boolean(await locate.count()), horizontalScroll: geometry.max, samples: geometry.samples};
 }

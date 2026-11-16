@@ -35,8 +35,8 @@ try {
 
   assert.equal(await page.locator("[data-regenerate-kind]").count(), 1, "控制面板应只有一个重生成按钮");
   const regenerationButton = page.locator("[data-regenerate-kind]");
-  assert.equal(await regenerationButton.getAttribute("data-regenerate-kind"), "states");
-  assert.match(await page.locator("#regeneration-constraint").innerText(), /替换国家与省份归属/);
+  assert.equal(await regenerationButton.getAttribute("data-regenerate-kind"), "features");
+  assert.match(await page.locator("#regeneration-constraint").innerText(), /重新整理水陆、岸线/);
   await page.locator("#regeneration-kind").selectOption("military");
   await page.waitForFunction(() => document.querySelector("[data-regenerate-kind]")?.dataset.regenerateKind === "military");
   assert.match(await regenerationButton.innerText(), /重新生成军事/);

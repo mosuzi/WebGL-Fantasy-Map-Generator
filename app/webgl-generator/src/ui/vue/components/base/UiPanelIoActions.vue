@@ -69,7 +69,7 @@
     <ElButton
       v-for="action in dangerActions"
       :key="action.key"
-      class="ui-icon-action ui-panel-io-button ui-panel-danger-action"
+      class="ui-panel-io-button ui-panel-danger-action"
       :class="{active: action.active}"
       :disabled="action.disabled"
       :title="action.label"

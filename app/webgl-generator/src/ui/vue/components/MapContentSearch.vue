@@ -1,7 +1,7 @@
 <template>
   <UiButton id="open-map-search" class="map-search-open" variant="secondary" aria-label="搜索地图内容" @click="openSearch">搜索</UiButton>
   <dialog ref="dialog" class="map-search-dialog" aria-modal="true" aria-label="搜索地图内容" @close="stop" @keydown.esc="stop">
-    <header><strong>搜索地图内容</strong><button aria-label="关闭搜索" title="关闭搜索" @click="dialog.close()">×</button></header>
+    <header><strong>搜索地图内容</strong><button class="map-search-close" aria-label="关闭搜索" title="关闭搜索" @click="dialog.close()">×</button></header>
     <div class="map-search-filters">
       <input ref="input" v-model="query" aria-label="地图搜索关键词" placeholder="名称、编号、标签或备注正文" @compositionstart="composing = true" @compositionend="composing = false; schedule()" @keydown="navigate" />
       <select v-model="type" aria-label="搜索内容类型"><option value="">全部类型</option><option v-for="item in SEARCH_TYPES" :key="item.type" :value="item.type">{{ item.label }}</option></select>
@@ -78,6 +78,8 @@ onBeforeUnmount(stop);
 .map-search-dialog::backdrop{background:#172b4d55}
 .map-search-dialog header,.map-search-filters,.map-search-pages{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.map-search-dialog header{justify-content:space-between;margin-bottom:12px}
 .map-search-dialog input{flex:1;min-width:160px}.map-search-dialog :is(input,select,button){font:inherit;min-height:32px;border: 1px solid var(--panel-border);border-radius:6px;padding:5px 9px;background: var(--panel-surface);color:inherit}
+.map-search-dialog header .map-search-close{width:32px;height:32px;padding:0;border:0;border-radius:0;background:transparent;font-size:20px;line-height:1}
+.map-search-dialog header .map-search-close:hover{color:var(--panel-accent)}
 .map-search-dialog button{cursor:pointer}.map-search-dialog button:disabled{opacity:.5;cursor:default}.map-search-dialog :is(button,input,select):focus-visible{outline: 2px solid var(--panel-accent);outline-offset:2px}
 .map-search-results{list-style:none;padding:0;margin:8px 0;max-height:35vh;overflow:auto}.map-search-results button{display:flex;flex-direction:column;text-align:left;width:100%;gap:4px;margin-bottom:5px;overflow-wrap:anywhere}.map-search-results .selected{background: var(--panel-accent-soft);border-color:var(--panel-accent)}small{color:var(--panel-muted)}.map-search-detail{border-top: 1px solid var(--panel-border);margin-top:12px;padding-top:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:25vh;overflow:auto}
 </style>

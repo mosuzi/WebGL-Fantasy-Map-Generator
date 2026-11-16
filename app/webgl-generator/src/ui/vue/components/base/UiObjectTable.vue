@@ -34,8 +34,8 @@
               @pointerdown.stop.prevent="startColumnResize($event, column)"
             ></button>
           </th>
-          <th v-if="showRegenerationLock" class="object-table-lock-column">重生成锁</th>
-          <th v-if="showLocateAction" class="object-table-action-column">定位</th>
+          <th v-if="showRegenerationLock" class="object-table-lock-column" aria-label="重生成锁" title="重生成锁"><ElIcon aria-hidden="true"><Lock /></ElIcon></th>
+          <th v-if="showLocateAction" class="object-table-action-column" aria-label="定位" title="定位"><ElIcon aria-hidden="true"><Location /></ElIcon></th>
         </tr>
       </thead>
       <tbody>
