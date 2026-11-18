@@ -28,8 +28,10 @@ try {
   page.setDefaultTimeout(timeoutMs);
   const consoleErrors = [];
   const pageErrors = [];
+  const dialogs = [];
   page.on("console", message => message.type() === "error" && consoleErrors.push(message.text()));
   page.on("pageerror", error => pageErrors.push(error.message));
+  page.on("dialog", dialog => { dialogs.push(dialog.message()); void dialog.dismiss(); });
   await page.goto(`http://${host}:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
 
@@ -75,9 +77,9 @@ try {
     const optionsAfter = app.map.options;
     const historyAfter = app.editHistory.getStats();
     if (historyAfter.undo !== historyBefore.undo + 1 || historyAfter.redo !== 0) throw new Error("洋流世界重算没有恰好形成一条历史");
-    unwrap(api.history.undo(), "撤销洋流世界重算");
+    unwrap(await api.history.undo(), "撤销洋流世界重算");
     if (app.map !== mapReference || app.map.options !== optionsBefore || JSON.stringify(app.map) !== before) throw new Error("洋流世界撤销未精确恢复原图");
-    unwrap(api.history.redo(), "重做洋流世界重算");
+    unwrap(await api.history.redo(), "重做洋流世界重算");
     if (app.map !== mapReference || app.map.options !== optionsAfter || JSON.stringify(app.map) !== after) throw new Error("洋流世界重做未精确恢复结果");
     const loadingText = text?.textContent?.trim() || "";
     const loadingVisible = Boolean(bubble && !bubble.hidden && bubble.classList.contains("operation-loading-active"));
@@ -103,6 +105,15 @@ try {
       return response.data;
     }
   }, technicalCopy.source);
+
+  const uiHistoryBefore = await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo);
+  await page.evaluate(() => document.getElementById("open-ocean-current-panel")?.click());
+  await page.getByRole("button", {name: "重算气候与世界", exact: true}).click();
+  await page.waitForFunction(before => {
+    const app = window.__webglGeneratorApp;
+    return !app.runtimeOperation?.getSnapshot?.().busy && app.editHistory.getStats().undo === before + 1;
+  }, uiHistoryBefore);
+  assert.deepEqual(dialogs, [], "可撤销的洋流整链重算不应再次弹出确认");
 
   const targetConsoleErrors = consoleErrors.slice(consoleStart);
   const performanceSignals = targetConsoleErrors.filter(message => /^\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)\b/.test(message));

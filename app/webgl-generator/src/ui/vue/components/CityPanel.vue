@@ -66,10 +66,10 @@
 
   <section v-if="selected" class="city-population-controls" aria-label="城市人口编辑">
     <form @submit.prevent="applyPopulation(false)">
-      <label>人口（人）<input ref="populationInput" v-model="populationDraft" aria-label="城市人口（人）" aria-keyshortcuts="Enter" title="按回车保存人口" type="number" min="0" max="1000000000" step="1" :disabled="populationDisabled" @keydown.enter="applyPopulationOnEnter" @compositionstart="populationComposing = true" @compositionend="populationComposing = false" /></label>
-      <UiButton variant="secondary" :disabled="populationDisabled" @click="applyPopulation(true)">按条件重算人口</UiButton>
+      <label>人口（人）<input ref="populationInput" v-model="populationDraft" aria-label="城市人口（人）" aria-keyshortcuts="Enter" title="按回车或离开输入框保存人口" type="number" min="0" max="1000000000" step="1" :disabled="populationDisabled" @input="populationEnterValue = null" @blur="applyPopulationOnBlur" @keydown.enter="applyPopulationOnEnter" @compositionstart="populationComposing = true" @compositionend="populationComposing = false" /></label>
+      <UiButton variant="secondary" :disabled="populationDisabled" @pointerdown.prevent @click="applyPopulation(true)">按条件重算人口</UiButton>
     </form>
-    <span>潜在人口：{{ formatPopulationValue(populationPotential) }}，不限制手工人口。输入后按回车保存并同步所属地区人口；经济、道路和军队需另行重算。</span>
+    <span>潜在人口：{{ formatPopulationValue(populationPotential) }}，不限制手工人口。输入后按回车或离开输入框保存并同步所属地区人口；经济、道路和军队需另行重算。</span>
     <span v-if="populationFeedback" role="status">{{ populationFeedback }}</span>
   </section>
 
@@ -101,8 +101,7 @@
 
     <template #visual>
       <div class="city-visual-editor">
-        <UiSelectField class-name="city-visual-select" label="剪影" :model-value="visualDraft.silhouette" :options="silhouetteOptions" @update:model-value="visualDraft.silhouette = $event" />
-        <UiButton variant="secondary" @click="applyVisual">应用剪影</UiButton>
+        <UiSelectField class-name="city-visual-select" label="剪影" :model-value="visualDraft.silhouette" :options="silhouetteOptions" @update:model-value="applyVisual" />
         <UiButton variant="secondary" :disabled="!selected.manualVisual" @click="callbacks.onVisualReset(selected.id)">恢复自动</UiButton>
       </div>
     </template>
@@ -220,12 +219,14 @@ const attributeFeedback = ref("");
 const populationInput = ref(null);
 const populationComposing = ref(false);
 const populationDraft = ref("");
+const populationEnterValue = ref(null);
 const populationFeedback = ref("");
 const populationPending = ref(false);
 const runtimeOperationBusy = ref(false);
 const populationDisabled = computed(() => modalActionActive.value || populationPending.value || runtimeOperationBusy.value);
 watch(() => [selected.value?.id, selected.value?.population, unitPreferences.value.populationScale], () => {
   populationDraft.value = selected.value ? String(Math.round(populationUnitsToPeople(selected.value.population, unitPreferences.value))) : "";
+  populationEnterValue.value = populationDraft.value;
   populationFeedback.value = "";
 }, {immediate: true});
 onMounted(() => {
@@ -237,6 +238,11 @@ function handlePopulationBusy(event) {runtimeOperationBusy.value = Boolean(event
 function applyPopulationOnEnter(event) {
   event.preventDefault();
   if (populationComposing.value || event.isComposing || event.keyCode === 229) return;
+  populationEnterValue.value = event.target.value;
+  applyPopulation(false);
+}
+function applyPopulationOnBlur(event) {
+  if (populationComposing.value || event.target.value === populationEnterValue.value) return;
   applyPopulation(false);
 }
 async function applyPopulation(recalculate) {
@@ -508,10 +514,12 @@ function handleActionSelect(key) {
   if (!key) activeAction.value = null;
 }
 
-function applyVisual() {
+function applyVisual(silhouette) {
   if (!selected.value) return;
+  visualDraft.silhouette = silhouette;
+  if (silhouette === selected.value.silhouette) return;
   props.callbacks.onVisualChange?.(selected.value.id, {
-    silhouette: visualDraft.silhouette
+    silhouette
   });
 }
 

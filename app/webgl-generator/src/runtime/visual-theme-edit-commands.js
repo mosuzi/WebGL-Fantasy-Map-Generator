@@ -19,7 +19,7 @@ export function createSetUserVisualThemesCommand(before, after, {label = "更新
     label,
     domain: "visual-theme",
     effects: {
-      render: "draw",
+      render: "none",
       selection: "none",
       runtimeStats: true,
       pickPanel: false,

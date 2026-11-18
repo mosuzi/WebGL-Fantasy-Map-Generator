@@ -1571,7 +1571,6 @@ function resetCurrentLabelStyle() {
 }
 
 function resetAllLabelStyles() {
-  if (typeof window.confirm === "function" && !window.confirm("确定重置全部标签样式？确认后可通过一次撤销恢复。")) return;
   document.dispatchEvent(new CustomEvent("webgl-generator-label-styles-reset-all"));
 }
 

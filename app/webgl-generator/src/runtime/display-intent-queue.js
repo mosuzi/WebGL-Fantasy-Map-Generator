@@ -1,18 +1,22 @@
 export function createLatestDisplayIntentQueue() {
   let latestSequence = 0;
+  const latestByKey = new Map();
   let tail = Promise.resolve();
 
   return Object.freeze({run, getSnapshot});
 
-  function run(task) {
+  function run(task, {key = "display"} = {}) {
+    const intentKey = String(key);
     const sequence = ++latestSequence;
+    latestByKey.set(intentKey, sequence);
     const execute = async () => {
-      if (sequence !== latestSequence) throw supersededError(sequence, latestSequence);
-      const context = Object.freeze({sequence, isCurrent: () => sequence === latestSequence});
+      const currentSequence = () => latestByKey.get(intentKey);
+      if (sequence !== currentSequence()) throw supersededError(sequence, currentSequence(), intentKey);
+      const context = Object.freeze({sequence, key: intentKey, isCurrent: () => sequence === currentSequence(), isLatestGlobal: () => sequence === latestSequence});
       try {
         return await task(context);
       } catch (error) {
-        if (!context.isCurrent()) throw supersededError(sequence, latestSequence, error);
+        if (!context.isCurrent()) throw supersededError(sequence, currentSequence(), intentKey, error);
         throw error;
       }
     };
@@ -30,12 +34,12 @@ export function isSupersededDisplayIntent(error) {
   return error?.code === "operation_obsolete" && error?.details?.displayIntentSuperseded === true;
 }
 
-function supersededError(sequence, latestSequence, cause) {
+function supersededError(sequence, latestSequence, key, cause) {
   const error = new Error("显示意图已被更新的设置取代", cause ? {cause} : undefined);
   error.code = "operation_obsolete";
   error.stage = "display-intent";
   error.suggestion = "以最后一次显示设置为准。";
   error.expected = true;
-  error.details = {displayIntentSuperseded: true, sequence, latestSequence};
+  error.details = {displayIntentSuperseded: true, sequence, latestSequence, key};
   return error;
 }

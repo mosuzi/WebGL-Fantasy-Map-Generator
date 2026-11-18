@@ -2,7 +2,7 @@
   <div :class="className" data-ui-text-edit-field :data-ui-committed-value="modelValue" @keydown.enter="applyOnEnter" @compositionstart="composing = true" @compositionend="composing = false">
     <label>
       <span>{{ label }}</span>
-      <ElInput v-model="value" type="text" :maxlength="maxLength" :placeholder="label" :aria-label="label" aria-keyshortcuts="Enter" title="按回车保存" />
+      <ElInput v-model="value" type="text" :maxlength="maxLength" :placeholder="label" :aria-label="label" aria-keyshortcuts="Enter" title="按回车或离开输入框保存" @input="lastEnterValue = null" @blur="applyOnBlur" />
     </label>
   </div>
 </template>
@@ -37,6 +37,7 @@ const emit = defineEmits(["apply"]);
 
 const value = ref(props.modelValue);
 const composing = ref(false);
+const lastEnterValue = ref(null);
 watch(() => props.modelValue, next => {
   value.value = next || "";
 });
@@ -48,6 +49,18 @@ function applyOnEnter(event) {
     event.stopPropagation();
     return;
   }
+  lastEnterValue.value = event.target.value;
   emit("apply", event.target.value);
+}
+
+function applyOnBlur(event) {
+  if (composing.value || event?.target?.tagName !== "INPUT"
+    || event.target.closest("[data-ui-text-edit-field]")?.hasAttribute("data-ui-skip-blur-commit")) return;
+  const submitted = event.target.value;
+  if (submitted === lastEnterValue.value) {
+    lastEnterValue.value = null;
+    return;
+  }
+  emit("apply", submitted);
 }
 </script>

@@ -44,6 +44,7 @@ import {
   mergeUserVisualThemes,
   normalizeVisualThemeDocument,
   normalizeVisualThemeId,
+  resolveVisualTheme,
   replaceUserVisualThemes,
   updateUserVisualThemeDocument,
   visualThemeOptions
@@ -1289,8 +1290,6 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         return false;
       }
       try {
-        const confirmed = documentRef.defaultView?.confirm?.("重设海底将连同洋流、气候和全部世界派生一起重算，是否继续？") ?? false;
-        if (!confirmed) return false;
         const result = await runtimeActions.edit.height.applySeafloorReset({
           confirm: true,
           seed: reserved.seed,
@@ -1300,7 +1299,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         state.heightEdit.lastHeight = `${reserved.minHeight}..${reserved.maxHeight}`;
         state.heightEdit.lastDelta = "none";
         state.heightEdit.lastNotice = result.executed
-          ? `已重设 ${plan.stats.oceanCells} 处开放海洋，并完成洋流、气候及世界派生重算。`
+          ? `已重设 ${reserved.changedCells} 处开放海洋，并完成洋流、气候及世界派生重算。`
           : "当前海底无需调整。";
         if (result.executed) {
           state.heightEdit.seafloorResetSeed++;
@@ -2589,11 +2588,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     },
     onRename: (currentId, name) => runtimeActions.oceanCurrents.rename(currentId, name),
     onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.oceanCurrents.regenerate()),
-    onWorldRebuild: async () => {
-      const confirmed = documentRef.defaultView?.confirm?.("完整重算会更新气候、河流、人口、城镇、政区、外交和军事，并保留现有文化、国家、省份与宗教的名称和 ID。是否继续？") ?? false;
-      if (!confirmed) return false;
-      return runtimeActions.oceanCurrents.rebuildWorld({confirm: true});
-    },
+    onWorldRebuild: () => runtimeActions.oceanCurrents.rebuildWorld({confirm: true}),
     onCancelWorldRebuild: () => runtimeActions.oceanCurrents.cancelWorldRebuild(),
     onHighlight: ids => state.renderer.setOceanCurrentHighlights(ids),
     onUndo: () => executeHistoryCommand(state, documentRef, "undo", {afterRefresh: () => updateOceanCurrentPanel(state)}),
@@ -2835,7 +2830,23 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     documentRef,
     updateRuntimePanel,
     updatePickPanel,
-    applyVisualTheme: themeId => applyRuntimeVisualThemeState(state, documentRef, themeId, {force: true})
+    applyVisualTheme: (themeId, command) => {
+      const map = state.map;
+      const history = state.editHistory;
+      const action = history.lastLabel === `撤销 ${command?.label}` ? "undo"
+        : history.lastLabel === `重做 ${command?.label}` ? "redo" : "execute";
+      const pending = {
+        map, command, action, themeId,
+        undoPosition: history.undoStack.length,
+        redoPosition: history.redoStack.length,
+        sequence: (state.visualThemeDisplayEditSequence || 0) + 1
+      };
+      state.visualThemeDisplayEditSequence = pending.sequence;
+      state.pendingVisualThemeDisplayEdits = [...(state.pendingVisualThemeDisplayEdits || []).filter(entry => entry.map === map), pending];
+      invokeRuntimeDisplayActionFromUi(state, documentRef,
+        () => state.runtimeActions.layers.setTheme(themeId, {force: true}),
+        {onFailure: () => rollbackFailedVisualThemeEdits(state, documentRef, pending)});
+    }
   });
   registerCanvasToolModes(state, documentRef, {stopObjectEditing});
   state.brushCursorPreview = createBrushCursorPreview(canvas, state, documentRef);
@@ -3299,12 +3310,49 @@ async function runGpuViewPrewarmTask(state, documentRef, task, signal) {
   });
 }
 
-function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
+function invokeRuntimeDisplayActionFromUi(state, documentRef, task, {onFailure = null} = {}) {
   void Promise.resolve().then(task).catch(error => {
     if (isSupersededDisplayIntent(error)) return;
+    try { onFailure?.(error); }
+    catch (rollbackError) {
+      state.healthMonitor?.record?.("visual-theme-rollback-failed", {message: rollbackError?.message || String(rollbackError)}, "error");
+    }
     showMapToast(documentRef, runtimeDisplayActionErrorMessage(error), 2800, {tone: "error"});
     restoreRuntimeDisplayControls(state, documentRef);
   });
+}
+
+function rollbackFailedVisualThemeEdits(state, documentRef, failed) {
+  if (state.map !== failed.map || failed.command?.domain !== "visual-theme") return;
+  const pending = (state.pendingVisualThemeDisplayEdits || [])
+    .filter(entry => entry.map === failed.map && entry.sequence <= failed.sequence);
+  if (!pending.includes(failed)) return;
+  let rolledBack = false;
+  for (const entry of pending.reverse()) {
+    const {command, action, undoPosition, redoPosition} = entry;
+    const restored = action === "undo"
+      ? state.editHistory.restoreFailedUndo(command, {map: failed.map}, undoPosition)
+      : action === "redo"
+        ? state.editHistory.restoreFailedRedo(command, {map: failed.map}, redoPosition)
+        : state.editHistory.rollbackExecutedCommand(command, {map: failed.map});
+    if (!restored) throw new Error(`主题显示失败后无法恢复历史动作：${action} ${command.label}`);
+    rolledBack = true;
+    state.pendingVisualThemeDisplayEdits = state.pendingVisualThemeDisplayEdits.filter(item => item !== entry);
+  }
+  if (!rolledBack) return;
+  persistUserVisualThemes(documentRef.defaultView?.localStorage);
+  documentRef.dispatchEvent(new CustomEvent("webgl-generator-visual-themes-changed", {
+    detail: {current: state.renderer?.visualTheme?.id || "default", options: visualThemeOptions(),
+      userTheme: isUserVisualTheme(state.renderer?.visualTheme?.id)
+        ? exportVisualThemeDocument(state.renderer.visualTheme.id) : null}
+  }));
+  syncLabelStylesUi(state, documentRef);
+  updateRuntimePanel(documentRef, state);
+}
+
+function commitPresentedVisualThemeEdits(state, throughSequence) {
+  state.pendingVisualThemeDisplayEdits = (state.pendingVisualThemeDisplayEdits || [])
+    .filter(entry => entry.sequence > throughSequence && entry.map === state.map);
 }
 
 function invokeRuntimeRegenerationFromUi(state, documentRef, task) {
@@ -3365,21 +3413,40 @@ function createRuntimeActions(state, documentRef, options = {}) {
     getHistoryFingerprint: () => JSON.stringify(state.editHistory.getStats({affectedLimit: 50}))
   });
   const displayIntents = createLatestDisplayIntentQueue();
-  const runDisplayMutation = (name, apply, rollback, {gpuResident = false} = {}) => displayIntents.run(async intent => {
+  const runDisplayMutation = (name, apply, rollback, {gpuResident = false, intentKey = name, capturePrevious = () => undefined} = {}) => displayIntents.run(async intent => {
+    const previous = capturePrevious();
+    const useGpuResident = typeof gpuResident === "function" ? gpuResident() : gpuResident;
+    const restore = () => rollback?.(previous, useGpuResident);
+    const applyCurrent = () => apply(useGpuResident);
     const activeName = state.runtimeOperationSnapshot?.current?.name || "";
     const onCommitted = () => {
-      if (intent.isCurrent() && !(state.renderer?.workerRenderInstallSuspended > 0)) restoreRuntimeDisplayControls(state, documentRef);
+      if (state.renderer?.workerRenderInstallSuspended > 0) return;
+      if (intentKey === "view-mode") {
+        const colorMode = state.renderer?.colorMode;
+        if (colorMode) {
+          setActiveModeButton(documentRef, colorMode);
+          updateControlPreferences(documentRef, {colorMode});
+          updateRuntimePanel(documentRef, state);
+          updatePickPanel(documentRef, state);
+        }
+      }
+      if (intent.isLatestGlobal()) restoreRuntimeDisplayControls(state, documentRef);
     };
     if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers.")) {
-      const result = apply();
-      onCommitted();
-      return result;
+      try {
+        const result = await applyCurrent();
+        onCommitted();
+        return result;
+      } catch (error) {
+        await restore();
+        throw error;
+      }
     }
-    if (gpuResident) {
+    if (useGpuResident) {
       return operation.run(name, async context => {
         const startedAt = performance.now();
         try {
-          const result = await apply();
+          const result = await applyCurrent();
           onCommitted();
           const totalMs = roundWorkerTelemetryMs(performance.now() - startedAt);
           state.lastDisplayRenderWorker = {
@@ -3394,7 +3461,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
           };
           return result;
         } catch (error) {
-          await rollback?.();
+          await restore();
           throw error;
         }
       }, {message: "正在整理地图画面"});
@@ -3403,10 +3470,11 @@ function createRuntimeActions(state, documentRef, options = {}) {
       let selfHealAttempts = 0;
       while (true) {
         try {
-          const result = await applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply, rollback, onCommitted});
+          const result = await applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply: applyCurrent, rollback: restore, onCommitted, isIntentCurrent: intent.isCurrent});
           if (selfHealAttempts > 0 && state.lastDisplayRenderWorker) state.lastDisplayRenderWorker.selfHeal = {attempts: selfHealAttempts, reason: "stale-session"};
           return result;
         } catch (error) {
+          if (!intent.isCurrent()) throw error;
           if (selfHealAttempts > 0 || !isRetryableDisplaySessionError(error)) throw error;
           selfHealAttempts += 1;
           state.mapWorkerCoordinator?.invalidateSession?.("display-session-self-heal");
@@ -3414,7 +3482,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         }
       }
     }, {message: "正在整理地图画面"});
-  });
+  }, {key: intentKey});
   const runMapReplace = (name, task, message, overrides = {}) => {
     let loadingOwner = "";
     let mapReplaceOperationId = null;
@@ -3528,44 +3596,50 @@ function createRuntimeActions(state, documentRef, options = {}) {
     layers: {
       listThemes: () => listRuntimeVisualThemes(documentRef),
       setViewMode: mode => {
-        const previous = readControlPreferences(documentRef).colorMode || state.renderer?.colorMode || "height";
         return runDisplayMutation(
           "layers.setViewMode",
           () => setRuntimeViewMode(state, documentRef, mode),
-          () => setRuntimeViewMode(state, documentRef, previous),
-          {gpuResident: state.renderer?.canPresentGpuResidentColorMode?.(mode) === true}
+          previous => setRuntimeViewMode(state, documentRef, previous),
+          {intentKey: "view-mode", capturePrevious: () => state.renderer?.colorMode || "height",
+            gpuResident: () => state.renderer?.canPresentGpuResidentColorMode?.(mode) === true
+              && !state.renderer?.needsGpuResidentShoreSurfacePrewarm?.(mode)}
         );
       },
       setVisible: (layer, visible) => {
-        const previous = Boolean(state.renderer?.layerVisibility?.[layer]);
         return runDisplayMutation(
           "layers.setVisible",
           () => setRuntimeLayerVisible(state, documentRef, layer, visible),
-          () => setRuntimeLayerVisible(state, documentRef, layer, previous),
-          {gpuResident: state.renderer?.canApplyGpuResidentLayerVisibility?.([[layer, visible]]) === true}
+          previous => setRuntimeLayerVisible(state, documentRef, layer, previous),
+          {intentKey: `layer:${layer}`, capturePrevious: () => Boolean(state.renderer?.layerVisibility?.[layer]),
+            gpuResident: () => state.renderer?.canApplyGpuResidentLayerVisibility?.([[layer, visible]]) === true}
         );
       },
       setManyVisible: entries => {
-        const previous = (entries || []).map(entry => {
-          const layer = Array.isArray(entry) ? entry[0] : entry?.layer;
-          return [layer, Boolean(state.renderer?.layerVisibility?.[layer])];
-        });
+        const layers = (entries || []).map(entry => Array.isArray(entry) ? entry[0] : entry?.layer);
         return runDisplayMutation(
           "layers.setManyVisible",
           () => setRuntimeLayersVisible(state, documentRef, entries),
-          () => setRuntimeLayersVisible(state, documentRef, previous),
-          {gpuResident: state.renderer?.canApplyGpuResidentLayerVisibility?.(entries) === true}
+          previous => setRuntimeLayersVisible(state, documentRef, previous),
+          {intentKey: `layer-group:${[...layers].sort().join(",")}`,
+            capturePrevious: () => layers.map(layer => [layer, Boolean(state.renderer?.layerVisibility?.[layer])]),
+            gpuResident: () => state.renderer?.canApplyGpuResidentLayerVisibility?.(entries) === true}
         );
       },
-      setTheme: themeId => {
-        const previous = currentVisualThemeId(documentRef);
-        const gpuResident = state.renderer?.canApplyGpuResidentVisualTheme?.() === true;
+      setTheme: (themeId, {force = false} = {}) => {
+        const throughSequence = state.visualThemeDisplayEditSequence || 0;
         return runDisplayMutation(
           "layers.setTheme",
-          () => setRuntimeVisualTheme(state, documentRef, themeId, {gpuResident}),
-          () => setRuntimeVisualTheme(state, documentRef, previous, {gpuResident}),
-          {gpuResident}
-        );
+          gpuResident => setRuntimeVisualTheme(state, documentRef, themeId, {gpuResident, force}),
+          (previous, gpuResident) => setRuntimeVisualTheme(state, documentRef, previous, {gpuResident}),
+          {intentKey: "visual-theme", capturePrevious: () => state.renderer?.visualTheme?.id || currentVisualThemeId(documentRef),
+            gpuResident: () => state.renderer?.canApplyGpuResidentVisualTheme?.() === true
+              && (!state.renderer?.needsGpuResidentShoreSurfacePrewarm?.(state.renderer?.colorMode,
+                {...state.renderer.viewOptions, visualTheme: resolveVisualTheme(themeId)})
+                || state.renderer?.canRecolorGpuResidentShoreSurface?.() === true)}
+        ).then(result => {
+          commitPresentedVisualThemeEdits(state, throughSequence);
+          return result;
+        });
       },
       exportTheme: (themeId, options = {}) => exportRuntimeVisualTheme(documentRef, themeId, options),
       importTheme: (document, options = {}) => importRuntimeVisualTheme(state, documentRef, document, options),
@@ -3574,39 +3648,46 @@ function createRuntimeActions(state, documentRef, options = {}) {
       deleteTheme: themeId => deleteRuntimeVisualTheme(state, documentRef, themeId),
       fitView: () => fitRuntimeView(state, documentRef),
       setShowOceanHeight: visible => {
-        const previous = Boolean(readControlPreferences(documentRef).showOceanHeight);
         return runDisplayMutation(
           "layers.setShowOceanHeight",
           () => setRuntimeOceanHeightVisible(state, documentRef, visible),
-          () => setRuntimeOceanHeightVisible(state, documentRef, previous),
-          {gpuResident: state.renderer?.canApplyGpuResidentOceanHeight?.() === true}
+          previous => setRuntimeOceanHeightVisible(state, documentRef, previous),
+          {intentKey: "ocean-height", capturePrevious: () => Boolean(state.renderer?.viewOptions?.showOceanHeight),
+            gpuResident: () => state.renderer?.canApplyGpuResidentOceanHeight?.() === true}
         );
       },
       setSmoothCellBorders: enabled => {
-        const previous = Boolean(readControlPreferences(documentRef).smoothCellBorders);
         return runDisplayMutation(
           "layers.setSmoothCellBorders",
           () => setRuntimeSmoothCellBorders(state, documentRef, enabled),
-          () => setRuntimeSmoothCellBorders(state, documentRef, previous),
-          {gpuResident: state.renderer?.canApplyGpuResidentSmoothCellBorders?.() === true}
+          previous => setRuntimeSmoothCellBorders(state, documentRef, previous),
+          {intentKey: "smooth-cell-borders", capturePrevious: () => state.renderer?.viewOptions?.smoothCellBorders !== false,
+            gpuResident: () => state.renderer?.canApplyGpuResidentSmoothCellBorders?.() === true}
         );
       },
       setMapEdgeFade: enabled => {
-        const previous = readControlPreferences(documentRef).mapEdgeFade === true;
         return runDisplayMutation(
           "layers.setMapEdgeFade",
           () => setRuntimeMapEdgeFade(state, documentRef, enabled),
-          () => setRuntimeMapEdgeFade(state, documentRef, previous)
+          previous => setRuntimeMapEdgeFade(state, documentRef, previous),
+          {intentKey: "map-edge-fade", capturePrevious: () => state.renderer?.viewOptions?.mapEdgeFade === true}
         );
       },
-      setStateBorderBlend: patch => setRuntimeStateBorderBlend(state, documentRef, patch),
+      setStateBorderBlend: patch => runDisplayMutation(
+        "layers.setStateBorderBlend",
+        () => setRuntimeStateBorderBlend(state, documentRef, patch),
+        previous => setRuntimeStateBorderBlend(state, documentRef, previous),
+        {intentKey: `state-border-blend:${Object.keys(patch || {}).sort().join(",")}`,
+          capturePrevious: () => normalizeStateBorderBlendStyle(state.renderer?.viewOptions?.stateBorderBlend),
+          gpuResident: true}
+      ),
       setShowHoverInfo: visible => setRuntimeHoverInfoVisible(state, documentRef, visible),
       setMaxCityLabels: limit => {
-        const previous = Number(readControlPreferences(documentRef).maxCityLabels) || DEFAULT_MAX_CITY_LABELS;
         return runDisplayMutation(
           "layers.setMaxCityLabels",
           () => setRuntimeMaxCityLabels(state, documentRef, limit),
-          () => setRuntimeMaxCityLabels(state, documentRef, previous)
+          previous => setRuntimeMaxCityLabels(state, documentRef, previous),
+          {intentKey: "max-city-labels", capturePrevious: () => Number(state.renderer?.labelOptions?.maxCityLabels) || DEFAULT_MAX_CITY_LABELS}
         );
       }
     },
@@ -4019,7 +4100,7 @@ function measureHealthOperation(state, name, detail, task) {
   return monitor.measureSyncOperation(name, detail, task);
 }
 
-async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operation, {apply, rollback, onCommitted}) {
+async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operation, {apply, rollback, onCommitted, isIntentCurrent = () => true}) {
   const renderer = state.renderer;
   const map = state.map;
   if (!renderer || !map) {
@@ -4221,7 +4302,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
   } catch (error) {
     const rollbackFailures = [];
     const ownerCurrent = state.map === map;
-    const canUseCompatibilityPath = error?.code === "worker_fallback_disabled" && ownerCurrent && !isRetryableDisplaySessionError(error);
+    const canUseCompatibilityPath = error?.code === "worker_fallback_disabled" && ownerCurrent && isIntentCurrent() && !isRetryableDisplaySessionError(error);
     state.mapWorkerCoordinator?.invalidateSession?.("display-render-failed");
     if (install) {
       try {
@@ -4263,6 +4344,11 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
         stage: "rollback",
         cause: new AggregateError([error, ...rollbackFailures], "地图显示更新与恢复失败")
       });
+    }
+    if (!isIntentCurrent()) {
+      const obsolete = runtimeDisplayObsoleteError("superseded-intent");
+      obsolete.expected = true;
+      throw obsolete;
     }
     throw error;
   } finally {
@@ -4355,14 +4441,14 @@ function setRuntimeLayersVisible(state, documentRef, entries) {
   });
 }
 
-function setRuntimeVisualTheme(state, documentRef, themeId, {gpuResident = false} = {}) {
+function setRuntimeVisualTheme(state, documentRef, themeId, {gpuResident = false, force = false} = {}) {
   const rawThemeId = String(themeId || "").trim();
   if (!rawThemeId) throw new Error("缺少视觉主题");
   const nextThemeId = normalizeVisualThemeId(rawThemeId);
   if (nextThemeId !== rawThemeId) throw new Error(`未知视觉主题：${themeId}`);
   const useGpuResident = gpuResident && !(state.renderer?.workerRenderInstallSuspended > 0);
   return measureHealthOperation(state, "set-visual-theme", {visualTheme: nextThemeId}, () => {
-    const applied = applyRuntimeVisualThemeState(state, documentRef, nextThemeId, {gpuResident: useGpuResident});
+    const applied = applyRuntimeVisualThemeState(state, documentRef, nextThemeId, {gpuResident: useGpuResident, force});
     if (applied && typeof applied.then === "function") {
       return applied.then(() => runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]));
     }

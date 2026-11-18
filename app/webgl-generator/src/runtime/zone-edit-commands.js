@@ -9,7 +9,7 @@ const ZONE_STYLE_EFFECTS = Object.freeze({
   selection: "refresh",
   runtimeStats: true,
   pickPanel: true,
-  derived: Object.freeze(["line-layers", "object-panels"])
+  derived: Object.freeze(["zone-texture", "object-panels"])
 });
 
 const ZONE_PATTERNS = new Set(["diagonal", "cross", "dots"]);

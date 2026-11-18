@@ -31,6 +31,7 @@ import {
   buildShoreVisualPaths,
   emptyShoreVisualPaths,
   pushShoreLineLayers,
+  recolorShoreSurfaceVertexLayers,
   summarizeShoreVisualPaths
 } from "./shore-layer.js";
 import {drawLandMaskedTriangles, withSurfaceSideAlpha} from "./surface-side-depth.js";
@@ -1863,11 +1864,20 @@ export class PlaceholderMapRenderer {
     return surfaceBundle;
   }
 
-  needsGpuResidentShoreSurfacePrewarm(mode) {
-    if (!shouldDrawShoreVisualBands(mode) || this.viewOptions?.smoothCellBorders === false || !this.map || !this.surfaceResourceOwner) return false;
-    const key = gpuResidentShoreSurfaceKey(mode, this.viewOptions);
+  needsGpuResidentShoreSurfacePrewarm(mode, viewOptions = this.viewOptions) {
+    if (!shouldDrawShoreVisualBands(mode) || viewOptions?.smoothCellBorders === false || !this.map || !this.surfaceResourceOwner) return false;
+    const key = gpuResidentShoreSurfaceKey(mode, viewOptions);
     const ownerKey = gpuResidentShoreSurfaceOwnerKey(this.surfaceResourceOwner);
     return this.gpuResidentShoreSurfaceCacheOwnerKey !== ownerKey || !this.gpuResidentShoreSurfaceCache.has(key);
+  }
+
+  canRecolorGpuResidentShoreSurface() {
+    if (!this.map || !this.surfaceResourceOwner) return false;
+    if (this.gpuResidentSmoothShoreSurfaceKey !== gpuResidentShoreSurfaceKey(this.colorMode, this.viewOptions)) return false;
+    return [
+      ["landCorrections", this.landCorrectionVertices], ["waterCorrections", this.waterCorrectionVertices],
+      ["landCovers", this.landCoverVertices], ["waterCovers", this.waterCoverVertices]
+    ].every(([key, vertices]) => this.shoreSurfaceCellRanges?.[key] instanceof Map && vertices instanceof Float32Array);
   }
 
   installGpuResidentShoreSurfacePrewarm(prepared, binding) {
@@ -1882,7 +1892,7 @@ export class PlaceholderMapRenderer {
     for (const entry of prepared?.entries || []) {
       if (!entry?.key || !shouldDrawShoreVisualBands(entry.mode)) continue;
       if (![entry.landCorrections, entry.waterCorrections, entry.landCovers, entry.waterCovers].every(value => value instanceof Float32Array)) continue;
-      this.gpuResidentShoreSurfaceCache.set(entry.key, entry);
+      cacheGpuResidentShoreSurface(this, entry.key, entry);
       installed++;
     }
     return installed > 0;
@@ -1911,8 +1921,26 @@ export class PlaceholderMapRenderer {
     if (!force && this.visualTheme.id === theme.id) return;
     const map = this.map;
     const previousTheme = this.visualTheme;
+    const targetViewOptions = {...this.viewOptions, visualTheme: theme};
+    if (this.needsGpuResidentShoreSurfacePrewarm(this.colorMode, targetViewOptions)) {
+      if (!this.canRecolorGpuResidentShoreSurface()) throw new Error("当前海岸显示不能复用既有形状");
+      const recolored = await recolorShoreSurfaceVertexLayers({
+        landCorrections: this.landCorrectionVertices,
+        waterCorrections: this.waterCorrectionVertices,
+        landCovers: this.landCoverVertices,
+        waterCovers: this.waterCoverVertices,
+        cellRanges: this.shoreSurfaceCellRanges
+      }, map, this.colorMode, targetViewOptions, {yieldToMain});
+      if (!recolored || this.map !== map || this.visualTheme !== previousTheme) throw new Error("海岸显示已变化，请重新选择主题");
+      const ownerKey = gpuResidentShoreSurfaceOwnerKey(this.surfaceResourceOwner);
+      if (this.gpuResidentShoreSurfaceCacheOwnerKey !== ownerKey) {
+        this.gpuResidentShoreSurfaceCache.clear();
+        this.gpuResidentShoreSurfaceCacheOwnerKey = ownerKey;
+      }
+      cacheGpuResidentShoreSurface(this, gpuResidentShoreSurfaceKey(this.colorMode, targetViewOptions), recolored);
+    }
     this.visualTheme = theme;
-    this.viewOptions = {...this.viewOptions, visualTheme: theme};
+    this.viewOptions = targetViewOptions;
     applyMapStageBackground(this.stage, map, theme);
     if (this.viewOptions.smoothCellBorders !== false) this.refreshGpuResidentShoreSurface();
     this.refreshVisualThemeLineColors(previousTheme, theme);
@@ -2474,6 +2502,40 @@ export class PlaceholderMapRenderer {
       adoptRenderCacheResourceBinding(this, "line", currentRendererRenderCacheBinding(this, binding));
       if (draw) this.draw();
       this.completePerformanceEvent(event, {uploadMs: upload.ms, lineVertexCount: this.lineVertexCount, oceanCurrentVertexCount: this.oceanCurrentVertexCount}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {}, performance.now());
+      throw error;
+    }
+  }
+
+  refreshZoneTextureLayer({draw = true, binding = null} = {}) {
+    if (!this.map) return false;
+    const range = this.politicalLineRange;
+    const previous = this.lineVertices;
+    const start = this.mapEdgeFadeVertexCount * 6;
+    if (!(previous instanceof Float32Array) || !range || !Number.isInteger(start)
+      || start < 0 || start > range.start || range.start > previous.length) return false;
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("zoneTextureRefresh", {drawRequested: draw}, startedAt);
+    try {
+      const zoneVertices = [];
+      pushZoneTextureLayer(zoneVertices, createRenderContext(this.map), this.map, this.layerVisibility);
+      const next = new Float32Array(previous.length - (range.start - start) + zoneVertices.length);
+      next.set(previous.subarray(0, start));
+      next.set(zoneVertices, start);
+      next.set(previous.subarray(range.start), start + zoneVertices.length);
+      const offset = zoneVertices.length - (range.start - start);
+      this.lineVertices = next;
+      this.lineVertexCount = next.length / 6;
+      this.politicalLineRange = {start: range.start + offset, end: range.end + offset};
+      const upload = this.recordBufferUpload("zone-texture-refresh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, next, this.gl.STATIC_DRAW);
+      }, {bufferGroup: "line"});
+      adoptRenderCacheResourceBinding(this, "line", currentRendererRenderCacheBinding(this, binding));
+      if (draw) this.draw();
+      this.completePerformanceEvent(event, {uploadMs: upload.ms, zoneVertexCount: zoneVertices.length / 6}, performance.now());
+      return true;
     } catch (error) {
       this.failPerformanceEvent(event, error, {}, performance.now());
       throw error;
@@ -7025,6 +7087,13 @@ function uploadShoreSurfaceBuffers(gl, renderer, bundle) {
   }
 }
 
+function cacheGpuResidentShoreSurface(renderer, key, bundle) {
+  const cache = renderer.gpuResidentShoreSurfaceCache;
+  cache.delete(key);
+  cache.set(key, bundle);
+  while (cache.size > 12) cache.delete(cache.keys().next().value);
+}
+
 function installSurfaceBaseBufferSet(renderer, replacement) {
   const previous = renderer.surfaceBaseBufferSet;
   const previousBuffers = new Set(flattenSurfaceBaseBufferSet(previous));
@@ -8741,6 +8810,7 @@ function createRendererPerformanceEvents() {
     "selectionMesh",
     "surfaceRefresh",
     "lineRefresh",
+    "zoneTextureRefresh",
     "labelThemeRefresh",
     "shoreLineRefresh",
     "pointRefresh",

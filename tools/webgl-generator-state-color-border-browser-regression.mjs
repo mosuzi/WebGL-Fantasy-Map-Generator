@@ -77,8 +77,12 @@ try {
   const afterPanel = await canvasPixelHash();
   assert.equal(afterPanel, beforePanel, "关闭颜色面板未恢复地图像素");
   const afterColor = initial.before.toLowerCase() === "#ff33aa" ? "#22cc44" : "#ff33aa";
-  const changed = await page.evaluate(([id, color]) => window.webglGeneratorApi.edit.states.setColor(id, color), [initial.stateId, afterColor]);
-  assert.equal(changed.ok, true, changed.error?.message);
+  await page.getByRole("button", {name: "调整颜色"}).evaluate(button => button.click());
+  const colorDialog = page.getByRole("dialog", {name: "调整颜色"});
+  assert.equal(await colorDialog.getByRole("button", {name: "应用颜色"}).count(), 0, "纯颜色修改不应再要求点击应用");
+  await colorDialog.locator(".ui-hsl-hex-field input").fill(afterColor);
+  await colorDialog.locator(".ui-hsl-hex-field input").press("Tab");
+  await page.waitForFunction(([id, color]) => window.__webglGeneratorApp.map.politics.states[id].color.toLowerCase() === color, [initial.stateId, afterColor]);
   const after = await page.evaluate(({stateId, shoreCell}) => {
     const {map, renderer} = window.__webglGeneratorApp;
     const range = renderer.shoreSurfaceCellRanges.landCorrections.get(shoreCell)?.[0];

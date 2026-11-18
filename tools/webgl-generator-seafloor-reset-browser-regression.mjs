@@ -25,9 +25,10 @@ try {
   page.setDefaultTimeout(90000);
   const consoleErrors = [];
   const pageErrors = [];
+  const dialogs = [];
   page.on("console", message => message.type() === "error" && consoleErrors.push(message.text()));
   page.on("pageerror", error => pageErrors.push(error.message));
-  page.on("dialog", dialog => dialog.accept());
+  page.on("dialog", dialog => { dialogs.push(dialog.message()); void dialog.dismiss(); });
 
   await page.goto("http://" + host + ":" + port + "?healthClear=1", {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 45000);
@@ -43,6 +44,7 @@ try {
   assert.equal(hiddenOceanHeight?.ok, true, hiddenOceanHeight?.error?.message || "无法关闭海底显示以准备回归");
 
   await page.evaluate(() => document.getElementById("open-height-panel")?.click());
+  await page.locator("details.height-seafloor-reset > summary").click();
   await page.getByRole("button", {name: "预览新海底", exact: true}).click();
   await page.waitForFunction(() => Boolean(window.__webglGeneratorApp?.panels?.height?.getSeafloorResetPreview?.()?.valid));
 
@@ -58,7 +60,7 @@ try {
   });
   assert.ok(before.preview.changedCells > 0, "预览没有产生海底高度变化");
 
-  await page.getByRole("button", {name: "应用重设", exact: true}).click();
+  await page.getByRole("button", {name: "应用重设海底", exact: true}).click();
   await page.waitForFunction(previousUndo => {
     const state = window.__webglGeneratorApp;
     return !state.runtimeOperation?.getSnapshot?.().busy
@@ -104,6 +106,7 @@ try {
   assert.equal(after.showOceanHeight, true, "应用后没有显示正式海底深浅");
   assert.ok(after.oceanHeightControl?.checked === true || after.oceanHeightControl?.pressed === "true" || after.oceanHeightControl?.active, "应用后显示海底控件没有同步");
   assert.equal(after.operation?.status, "success", "海底整链事务没有成功完成");
+  assert.deepEqual(dialogs, [], "已预览且可撤销的海底重设不应再次弹出确认");
   const healthPerformanceSignals = consoleErrors.filter(message => /^\[FMG health\] (main-thread-long-task|input-handler-stall)\b/.test(message));
   const applicationConsoleErrors = consoleErrors.filter(message => !healthPerformanceSignals.includes(message));
   assert.deepEqual(applicationConsoleErrors, []);

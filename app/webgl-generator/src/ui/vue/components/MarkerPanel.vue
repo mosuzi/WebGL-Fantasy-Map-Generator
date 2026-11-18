@@ -62,9 +62,8 @@
 
     <template #visual>
       <div class="marker-visual-editor">
-        <UiSelectField class-name="marker-visual-select" label="图形" :model-value="visualDraft.symbol" :options="visualSymbolOptions" @update:model-value="visualDraft.symbol = $event" />
-        <UiSelectField class-name="marker-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" @update:model-value="visualDraft.palette = $event" />
-        <UiButton variant="secondary" :disabled="isAutomaticVisualDraft" @click="applyVisual">应用图标</UiButton>
+        <UiSelectField class-name="marker-visual-select" label="图形" :model-value="visualDraft.symbol" :options="visualSymbolOptions" @update:model-value="symbol => applyVisual({symbol})" />
+        <UiSelectField class-name="marker-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" :disabled="isAutomaticVisualDraft" @update:model-value="palette => applyVisual({palette})" />
       </div>
     </template>
 
@@ -314,8 +313,11 @@ function sortRows(rows, key, direction) {
   return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
 }
 
-function applyVisual() {
-  if (!selected.value || isAutomaticVisualDraft.value) return;
+function applyVisual(patch) {
+  if (!selected.value || isAutomaticVisualDraft.value && !patch.symbol) return;
+  Object.assign(visualDraft, patch);
+  if (isAutomaticVisualDraft.value) return;
+  if (visualDraft.symbol === selected.value.symbol && visualDraft.palette === selected.value.palette) return;
   props.callbacks.onVisualChange?.(selected.value.id, {
     symbol: visualDraft.symbol,
     palette: visualDraft.palette

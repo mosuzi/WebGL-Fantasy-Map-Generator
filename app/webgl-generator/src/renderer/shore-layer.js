@@ -183,6 +183,53 @@ export function buildShoreSurfaceVertexLayers(context, colorMode, viewOptions, p
   };
 }
 
+export async function recolorShoreSurfaceVertexLayers(bundle, map, colorMode, viewOptions, {yieldToMain, budgetMs = 6} = {}) {
+  const entries = [
+    ["landCorrections", "land"], ["waterCorrections", "water"],
+    ["landCovers", "land"], ["waterCovers", "water"]
+  ];
+  for (const [key] of entries) {
+    const vertices = bundle?.[key];
+    const ranges = bundle?.cellRanges?.[key];
+    if (!(vertices instanceof Float32Array) || !(ranges instanceof Map) || vertices.length % 6 !== 0) return null;
+    let covered = 0;
+    for (const cellRanges of ranges.values()) {
+      for (const range of cellRanges) {
+        if (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < 0
+          || range.end > vertices.length || range.end <= range.start || (range.end - range.start) % 6 !== 0) return null;
+        covered += range.end - range.start;
+      }
+    }
+    if (covered !== vertices.length) return null;
+  }
+  const recolored = {cellRanges: bundle.cellRanges};
+  let sliceStartedAt = performance.now();
+  let processedVertices = 0;
+  for (const [key, side] of entries) {
+    const source = bundle[key];
+    const target = new Float32Array(source.length);
+    recolored[key] = target;
+    for (const [cell, cellRanges] of bundle.cellRanges[key]) {
+      const color = withSurfaceSideAlpha(colorForCell(cell, map, colorMode, viewOptions), side);
+      for (const {start, end} of cellRanges) {
+        for (let index = start; index < end; index += 6) {
+          target[index] = source[index];
+          target[index + 1] = source[index + 1];
+          target[index + 2] = color[0];
+          target[index + 3] = color[1];
+          target[index + 4] = color[2];
+          target[index + 5] = color[3];
+          if (++processedVertices % 1024 === 0 && performance.now() - sliceStartedAt >= budgetMs) {
+            await yieldToMain?.();
+            sliceStartedAt = performance.now();
+          }
+        }
+      }
+    }
+  }
+  return recolored;
+}
+
 function pushShoreSurfaceCorrections(layers, cellRanges, path, context, colorMode, viewOptions) {
   const {map} = context;
   for (const command of buildShoreSurfaceDrawPacket(path, map).commands) {

@@ -1,5 +1,5 @@
 <template>
-  <form :class="[className, 'ui-hsl-color-field']" @submit.prevent="applyColor">
+  <div :class="[className, 'ui-hsl-color-field']">
     <div class="ui-hsl-color-header">
       <span>{{ label }}</span>
       <i class="ui-hsl-color-swatch" :style="{backgroundColor: value}"></i>
@@ -8,25 +8,25 @@
 
     <label class="ui-hsl-channel ui-hsl-channel-hue">
       <span>H</span>
-      <input type="range" min="0" max="360" step="1" :value="hsl.hue" @input="event => setChannel('hue', event.target.value)" />
-      <input type="number" min="0" max="360" step="1" :value="hsl.hue" @input="event => setChannel('hue', event.target.value)" />
+      <input type="range" min="0" max="360" step="1" :value="hsl.hue" @input="event => setChannel('hue', event.target.value)" @change="commitColor" />
+      <input type="number" min="0" max="360" step="1" :value="hsl.hue" @input="event => setChannel('hue', event.target.value)" @change="commitColor" @keydown.enter.prevent="commitColor" />
     </label>
 
     <label class="ui-hsl-channel">
       <span>S</span>
-      <input type="range" min="0" max="100" step="1" :value="hsl.saturation" :style="{background: saturationGradient}" @input="event => setChannel('saturation', event.target.value)" />
-      <input type="number" min="0" max="100" step="1" :value="hsl.saturation" @input="event => setChannel('saturation', event.target.value)" />
+      <input type="range" min="0" max="100" step="1" :value="hsl.saturation" :style="{background: saturationGradient}" @input="event => setChannel('saturation', event.target.value)" @change="commitColor" />
+      <input type="number" min="0" max="100" step="1" :value="hsl.saturation" @input="event => setChannel('saturation', event.target.value)" @change="commitColor" @keydown.enter.prevent="commitColor" />
     </label>
 
     <label class="ui-hsl-channel">
       <span>L</span>
-      <input type="range" min="0" max="100" step="1" :value="hsl.lightness" :style="{background: lightnessGradient}" @input="event => setChannel('lightness', event.target.value)" />
-      <input type="number" min="0" max="100" step="1" :value="hsl.lightness" @input="event => setChannel('lightness', event.target.value)" />
+      <input type="range" min="0" max="100" step="1" :value="hsl.lightness" :style="{background: lightnessGradient}" @input="event => setChannel('lightness', event.target.value)" @change="commitColor" />
+      <input type="number" min="0" max="100" step="1" :value="hsl.lightness" @input="event => setChannel('lightness', event.target.value)" @change="commitColor" @keydown.enter.prevent="commitColor" />
     </label>
 
     <label class="ui-hsl-hex-field">
       <span>HEX</span>
-      <input v-model="hexDraft" type="text" spellcheck="false" :class="{invalid: !hexDraftValid}" @blur="commitHexDraft" @keydown.enter.prevent="commitHexDraft" />
+      <input v-model="hexDraft" type="text" spellcheck="false" :class="{invalid: !hexDraftValid}" @input="lastEmittedColor = null" @blur="commitHexDraft" @keydown.enter.prevent="commitHexDraft" />
     </label>
 
     <div class="ui-hsl-predefined" aria-label="预设颜色">
@@ -37,17 +37,16 @@
         :class="{active: color.toLowerCase() === value.toLowerCase()}"
         :style="{backgroundColor: color}"
         :aria-label="`选择 ${color}`"
-        @click="setColor(color)"
+        @pointerdown.prevent
+        @click="chooseColor(color)"
       ></button>
     </div>
 
-    <UiButton variant="secondary" button-type="submit">{{ actionLabel }}</UiButton>
-  </form>
+  </div>
 </template>
 
 <script setup>
 import {computed, reactive, ref, watch} from "vue";
-import UiButton from "./UiButton.vue";
 
 defineOptions({
   name: "UiColorField"
@@ -62,10 +61,6 @@ const props = defineProps({
     type: String,
     default: "颜色"
   },
-  actionLabel: {
-    type: String,
-    default: "应用颜色"
-  },
   className: {
     type: String,
     default: "object-color-editor"
@@ -77,6 +72,7 @@ const emit = defineEmits(["apply"]);
 const value = ref(normalizeHexColor(props.modelValue) || "#ffffff");
 const hexDraft = ref(value.value);
 const hsl = reactive(hexToHsl(value.value));
+let lastEmittedColor = null;
 const predefinedColors = [
   "#c94c4c",
   "#d7a84f",
@@ -101,6 +97,7 @@ const lightnessGradient = computed(() => {
 
 watch(() => props.modelValue, next => {
   setColor(next || "#ffffff");
+  lastEmittedColor = null;
 });
 
 function setChannel(channel, rawValue) {
@@ -108,6 +105,7 @@ function setChannel(channel, rawValue) {
   hsl[channel] = clamp(Math.round(Number(rawValue) || 0), limits[0], limits[1]);
   value.value = hslToHex(hsl.hue, hsl.saturation, hsl.lightness);
   hexDraft.value = value.value;
+  lastEmittedColor = null;
 }
 
 function setColor(color) {
@@ -127,11 +125,23 @@ function commitHexDraft() {
     return;
   }
   setColor(normalized);
+  commitColor();
 }
 
-function applyColor() {
-  commitHexDraft();
-  emit("apply", value.value);
+function chooseColor(color) {
+  setColor(color);
+  lastEmittedColor = null;
+  commitColor();
+}
+
+function commitColor() {
+  const color = normalizeHexColor(value.value);
+  if (!color || color === normalizeHexColor(props.modelValue) || color === lastEmittedColor) return;
+  lastEmittedColor = color;
+  setTimeout(() => {
+    if (lastEmittedColor === color) lastEmittedColor = null;
+  }, 0);
+  emit("apply", color);
 }
 
 function normalizeHexColor(color) {

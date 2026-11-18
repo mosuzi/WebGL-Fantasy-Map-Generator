@@ -31,10 +31,11 @@
         role="dialog"
         :aria-label="activeActionLabel"
         @keydown.enter="closeQuickInputOnEnter"
+        @focusout="closeQuickInputOnBlur"
       >
         <header ref="panelHeader" class="ui-secondary-action-header" :class="{dragging: dragState}" @pointerdown="startPanelDrag">
           <div v-if="!isQuickInput" class="ui-secondary-action-title"><span class="ui-state-token">编辑中</span><strong>{{ activeActionLabel }}</strong></div>
-          <button type="button" class="ui-close-button ui-secondary-action-close" aria-label="关闭二级编辑面板" @pointerdown.stop @click="closePanel">×</button>
+          <button type="button" class="ui-close-button ui-secondary-action-close" aria-label="关闭二级编辑面板" @pointerdown.stop="onClosePointerDown" @click="closePanel">×</button>
         </header>
         <div ref="panelBody" class="ui-secondary-action-body">
           <slot :name="active" />
@@ -142,6 +143,7 @@ function isActionActive(action) {
 }
 
 function closePanel() {
+  if (isQuickInput.value) panelBody.value?.querySelector("[data-ui-text-edit-field]")?.setAttribute("data-ui-skip-blur-commit", "");
   panelDragSession?.cancel("panel-close");
   userPositioned.value = false;
   emit("update:active", null);
@@ -149,10 +151,19 @@ function closePanel() {
 }
 
 function closeQuickInputOnEnter(event) {
+  if (!event.defaultPrevented) return;
+  finishQuickInput(event);
+}
+
+function closeQuickInputOnBlur(event) {
+  finishQuickInput(event);
+}
+
+function finishQuickInput(event) {
   const input = event.target;
   const field = input instanceof HTMLInputElement ? input.closest("[data-ui-text-edit-field]") : null;
-  if (!isQuickInput.value || !event.defaultPrevented || event.isComposing || event.keyCode === 229
-    || !field
+  if (!isQuickInput.value || event.isComposing || event.keyCode === 229
+    || !field || field.hasAttribute("data-ui-skip-blur-commit")
     || !panelBody.value?.contains(input) || !input.value.trim()) return;
   // 军团名称只裁去两侧空白，其余名称命令还会合并中间空白。
   const normalize = value => field.getAttribute("data-ui-name-spacing") === "preserve"
@@ -171,6 +182,10 @@ function closeQuickInputOnEnter(event) {
   });
 }
 
+function onClosePointerDown(event) {
+  if (isQuickInput.value) event.preventDefault();
+}
+
 function focusQuickInput() {
   if (!isQuickInput.value) return;
   const view = panel.value?.ownerDocument?.defaultView;
@@ -185,6 +200,11 @@ function focusQuickInput() {
 function onDocumentPointerDown(event) {
   if (!props.active) return;
   if (panel.value?.contains(event.target)) return;
+  if (isQuickInput.value) {
+    const input = panelBody.value?.querySelector("[data-ui-text-edit-field] input");
+    if (input === document.activeElement) input.blur();
+    return;
+  }
   if (root.value?.contains(event.target)) {
     const action = event.target?.closest?.("button[data-action-id]");
     if (action && !action.disabled) return;

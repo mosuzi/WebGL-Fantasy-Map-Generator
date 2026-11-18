@@ -41,6 +41,46 @@ export class EditHistory {
     return command;
   }
 
+  rollbackExecutedCommand(command, context) {
+    const index = this.undoStack.lastIndexOf(command);
+    if (index < 0 || this.undoStack.slice(index + 1).some(entry => entry.domain === command.domain)) return false;
+    command.revert(context);
+    this.undoStack.splice(index, 1);
+    this.redoStack = [];
+    this.lastLabel = `撤回 ${command.label}`;
+    this.lastDomain = command.domain || "none";
+    this.lastAffected = this.captureCommandAffected(command);
+    this.onMutation?.({action: "rollback", command});
+    return true;
+  }
+
+  restoreFailedUndo(command, context, position) {
+    if (this.undoStack.includes(command) || this.undoStack.slice(position).some(entry => entry.domain === command.domain)) return false;
+    command.apply(context);
+    const redoIndex = this.redoStack.lastIndexOf(command);
+    if (redoIndex >= 0) this.redoStack.splice(redoIndex, 1);
+    this.undoStack.splice(Math.min(position, this.undoStack.length), 0, command);
+    if (this.undoStack.length > this.limit) this.undoStack.shift();
+    this.lastLabel = `恢复 ${command.label}`;
+    this.lastDomain = command.domain || "none";
+    this.lastAffected = this.captureCommandAffected(command);
+    this.onMutation?.({action: "redo", command});
+    return true;
+  }
+
+  restoreFailedRedo(command, context, position) {
+    const undoIndex = this.undoStack.lastIndexOf(command);
+    if (undoIndex < 0 || this.undoStack.slice(undoIndex + 1).some(entry => entry.domain === command.domain)) return false;
+    command.revert(context);
+    this.undoStack.splice(undoIndex, 1);
+    this.redoStack.splice(Math.min(position, this.redoStack.length), 0, command);
+    this.lastLabel = `恢复撤销 ${command.label}`;
+    this.lastDomain = command.domain || "none";
+    this.lastAffected = this.captureCommandAffected(command);
+    this.onMutation?.({action: "undo", command});
+    return true;
+  }
+
   redo(context) {
     const command = this.redoStack.pop();
     if (!command) return null;

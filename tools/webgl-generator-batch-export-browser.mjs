@@ -18,7 +18,9 @@ try{
  await page.locator('#export-png-explicit-size').check();
  await page.locator('#export-png-output-width').fill('1200');
  await page.getByRole('textbox',{name:'PNG 预设名称'}).fill('全幅验收');
- await page.getByRole('textbox',{name:'PNG 预设名称'}).press('Enter');
+ await page.getByRole('textbox',{name:'PNG 预设名称'}).evaluate(input=>input.blur());
+ await page.waitForFunction(()=>[...document.querySelectorAll('.png-presets select option')].some(option=>option.value==='全幅验收'));
+ check('失焦保存 PNG 预设',true);
  await page.getByRole('combobox',{name:'PNG 已存预设'}).selectOption('全幅验收');
  await page.locator('#export-png-output-width').fill('640');
  await page.locator('.png-presets').getByRole('button',{name:'应用',exact:true}).click();

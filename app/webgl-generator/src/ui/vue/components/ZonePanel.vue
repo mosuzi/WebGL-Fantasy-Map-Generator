@@ -71,9 +71,8 @@
             label="纹理"
             :model-value="styleDraft.pattern"
             :options="patternOptions"
-            @update:model-value="styleDraft.pattern = $event"
+            @update:model-value="applyPattern"
           />
-          <UiButton variant="secondary" @click="applyPattern">应用纹理</UiButton>
         </div>
       </div>
     </template>
@@ -306,9 +305,11 @@ function applyProperties() {
   propertyDraftDirty.value = false;
 }
 
-function applyPattern() {
+function applyPattern(pattern) {
   if (!selected.value) return;
-  props.callbacks.onStyleChange?.(selected.value.id, {pattern: styleDraft.pattern});
+  styleDraft.pattern = pattern;
+  if (pattern === selected.value.pattern) return;
+  props.callbacks.onStyleChange?.(selected.value.id, {pattern});
 }
 
 function handleEmptyAction(key) {

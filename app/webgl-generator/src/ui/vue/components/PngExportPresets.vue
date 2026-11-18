@@ -1,17 +1,18 @@
 <template><section class="png-presets" aria-label="PNG 输出尺寸和预设">
   <label><input id="export-png-explicit-size" type="checkbox" @change="refreshSize" />指定像素尺寸（锁定比例）</label>
   <div class="png-preset-row"><label>宽 <input id="export-png-output-width" type="number" min="1" max="8192" value="2048" @input="refreshSize" /> px</label><span>{{ size }}</span></div>
-  <div class="png-preset-row"><input v-model="name" maxlength="64" aria-label="PNG 预设名称" aria-keyshortcuts="Enter" title="按回车保存预设" placeholder="输入预设名称后按回车保存" @keydown.enter="saveOnEnter" @compositionstart="composing = true" @compositionend="composing = false" /></div>
+  <div class="png-preset-row"><input v-model="name" maxlength="64" aria-label="PNG 预设名称" aria-keyshortcuts="Enter" title="按回车或离开输入框保存预设" placeholder="输入名称后回车或离开输入框保存" @input="lastEnterValue = null" @blur="saveOnBlur" @keydown.enter="saveOnEnter" @compositionstart="composing = true" @compositionend="composing = false" /></div>
   <div class="png-preset-row"><select v-model="selected" aria-label="PNG 已存预设"><option value="">选择预设</option><option v-for="item in presets" :key="item.name">{{ item.name }}</option></select><button :disabled="!selected" @click="act('apply')">应用</button><button :disabled="!selected" @click="act('delete')">删除</button></div>
   <p role="status">{{ message || '全幅与固定世界范围的输出尺寸独立于窗口；预设保存在此浏览器。' }}</p>
 </section></template>
 <script setup>
 import {ref, onMounted, onBeforeUnmount} from "vue";
 import {PNG_PRESET_EVENT, PNG_PRESET_READY_EVENT} from "../../../runtime/png-export-presets.js";
-const name=ref(""),selected=ref(""),presets=ref([]),message=ref(""),size=ref(""),composing=ref(false); let timer;
-function request(payload) { document.dispatchEvent(new CustomEvent(PNG_PRESET_EVENT,{detail:{...payload,respond: response=>{if(response.presets)presets.value=response.presets; if(response.error)message.value=response.error; else if(response.message)message.value=response.message; if(response.height)size.value=`高 ${response.height} px`;}}})); }
-function act(action,value){request({action,name:action==='save'?(value??name.value):selected.value}); refreshSize();}
-function saveOnEnter(event){event.preventDefault();if(composing.value||event.isComposing||event.keyCode===229)return;act('save',event.target.value);}
+const name=ref(""),selected=ref(""),presets=ref([]),message=ref(""),size=ref(""),composing=ref(false),lastEnterValue=ref(null); let timer;
+function request(payload) { let outcome; document.dispatchEvent(new CustomEvent(PNG_PRESET_EVENT,{detail:{...payload,respond: response=>{outcome=response;if(response.presets)presets.value=response.presets; if(response.error)message.value=response.error; else if(response.message)message.value=response.message; if(response.height)size.value=`高 ${response.height} px`;}}})); return outcome; }
+function act(action,value){const outcome=request({action,name:action==='save'?(value??name.value):selected.value}); refreshSize(); return outcome;}
+function saveOnEnter(event){event.preventDefault();if(composing.value||event.isComposing||event.keyCode===229)return;if(!event.target.value.trim()||event.target.value===lastEnterValue.value)return;if(act('save',event.target.value)?.presets)lastEnterValue.value=event.target.value;}
+function saveOnBlur(event){if(composing.value||!event.target.value.trim()||event.target.value===lastEnterValue.value)return;if(act('save',event.target.value)?.presets)lastEnterValue.value=event.target.value;}
 function refreshSize(){request({action:'size'});}
 function refreshList(){request({action:'list'});}
 // 自动重开控制面板可能先于预设服务就绪，双方顺序均须能读取已存列表。

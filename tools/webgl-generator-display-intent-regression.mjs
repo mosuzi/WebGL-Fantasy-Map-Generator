@@ -18,6 +18,18 @@ const runningResults = await Promise.allSettled([runningFirst, runningSecond, ru
 assert.equal(runningResults[0].value, "A"); assert.equal(isSupersededDisplayIntent(runningResults[1].reason), true); assert.equal(runningResults[2].value, "C");
 assert.equal(firstCurrentAfterWait, false, "运行中的旧意图不得再提交控件状态");
 
+const independent = createLatestDisplayIntentQueue(), independentRuns = [];
+const layerA = independent.run(context => {independentRuns.push([context.key, context.isCurrent(), context.isLatestGlobal()]); return "A";}, {key: "layer:a"});
+const layerB = independent.run(context => {independentRuns.push([context.key, context.isCurrent(), context.isLatestGlobal()]); return "B";}, {key: "layer:b"});
+assert.deepEqual(await Promise.all([layerA, layerB]), ["A", "B"], "不同显示设置都应执行");
+assert.deepEqual(independentRuns, [["layer:a", true, false], ["layer:b", true, true]]);
+const sameKeyRuns = [];
+const oldA = independent.run(() => sameKeyRuns.push("old"), {key: "layer:a"});
+const newA = independent.run(() => sameKeyRuns.push("new"), {key: "layer:a"});
+const sameKeyResults = await Promise.allSettled([oldA, newA]);
+assert.equal(isSupersededDisplayIntent(sameKeyResults[0].reason), true);
+assert.deepEqual(sameKeyRuns, ["new"], "同一显示设置连续变化只保留最新待执行值");
+
 const failures = createLatestDisplayIntentQueue();
 const currentFailure = await Promise.allSettled([failures.run(() => { throw Object.assign(new Error("current"), {code: "current-failure"}); })]);
 assert.equal(currentFailure[0].reason?.code, "current-failure");

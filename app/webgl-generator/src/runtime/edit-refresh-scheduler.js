@@ -68,7 +68,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       measureStateBrush("invalidateBuffers", () => invalidateRendererBuffers(state.renderer, effects));
 
       if (effects.derived.includes("visual-theme")) {
-        applyVisualTheme?.(presentationPresetForRefresh(commandOrEffects, state.map));
+        applyVisualTheme?.(presentationPresetForRefresh(commandOrEffects, state.map), commandOrEffects);
       }
 
       const editedPalette = editedColorPaletteMode(effects.derived);
@@ -89,6 +89,14 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
             state.renderer.refreshPoliticalLineLayers({draw: false, binding: retainedBinding});
           } else {
             state.renderer.refreshLineLayers({draw: false, binding: retainedBinding});
+          }
+        });
+      }
+
+      if (effects.derived.includes("zone-texture")) {
+        measureStateBrush("zoneTexture", () => {
+          if (state.renderer.refreshZoneTextureLayer?.({draw: false, binding: retainedBinding}) === false) {
+            state.renderer.refreshLineLayers?.({draw: false, binding: retainedBinding});
           }
         });
       }
@@ -234,7 +242,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       // 先让命令补丁结束当前任务，再逐段恢复 GPU / DOM 投影，避免完整历史刷新合并成一个 LongTask。
       await checkpoint();
       if (effects.derived.includes("visual-theme")) {
-        await runStep(() => applyVisualTheme?.(presentationPresetForRefresh(commandOrEffects, state.map)));
+        await runStep(() => applyVisualTheme?.(presentationPresetForRefresh(commandOrEffects, state.map), commandOrEffects));
       }
       const editedPalette = editedColorPaletteMode(effects.derived);
       if (editedPalette) await runStep(() => state.renderer.refreshEditedColorPalette?.(editedPalette));
@@ -247,6 +255,13 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
       if (!queuedPoliticalPatch && (terrainCaches || effects.derived.includes("political-boundaries") || effects.derived.includes("line-layers")) && typeof state.renderer.refreshLineLayers === "function") {
         await runStep(() => state.renderer.refreshLineLayers({draw: false, binding: retainedBinding}));
+      }
+      if (effects.derived.includes("zone-texture")) {
+        await runStep(() => {
+          if (state.renderer.refreshZoneTextureLayer?.({draw: false, binding: retainedBinding}) === false) {
+            state.renderer.refreshLineLayers?.({draw: false, binding: retainedBinding});
+          }
+        });
       }
       if (effects.derived.includes("point-layers") && typeof state.renderer.refreshPointLayers === "function") {
         await runStep(() => state.renderer.refreshPointLayers({draw: false, binding: retainedBinding}));

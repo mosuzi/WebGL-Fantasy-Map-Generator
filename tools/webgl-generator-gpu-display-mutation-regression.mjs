@@ -82,7 +82,8 @@ assert.deepEqual(deferredEdgeDrawOptions, {updateDynamicBuffers: false, updateOv
 
 const calls = [], themeRenderer = {map: {layers: {background: [0, 0, 0, 1]}}, stage: {style: {backgroundColor: "", setProperty() {}, removeProperty() {}}},
   visualTheme: {id: "default"}, viewOptions: {smoothCellBorders: false}, layerVisibility: {routes: false}, dynamicBuffersDirty: {routes: false},
-  canApplyGpuResidentVisualTheme: () => true, refreshVisualThemeLineColors: () => calls.push(["lines"]),
+  canApplyGpuResidentVisualTheme: () => true, needsGpuResidentShoreSurfacePrewarm: () => false,
+  refreshVisualThemeLineColors: () => calls.push(["lines"]),
   refreshLabelThemeStyles: async () => calls.push(["labels"]), draw: options => calls.push(["draw", options])};
 await prototype.setVisualThemeGpuResident.call(themeRenderer, "ancient", {yieldToMain: async () => {}});
 assert.deepEqual([themeRenderer.visualTheme.id, themeRenderer.dynamicBuffersDirty.routes, calls.map(([name]) => name)], ["ancient", true, ["lines", "labels", "draw"]]);
@@ -99,7 +100,7 @@ assert.deepEqual([...recolorRenderer.shoreLineVertices.slice(2, 6)], ancientThem
 const appSource = readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 for (const pattern of [/setTheme:[\s\S]+canApplyGpuResidentVisualTheme/, /setShowOceanHeight:[\s\S]+canApplyGpuResidentOceanHeight/,
   /setSmoothCellBorders:[\s\S]+canApplyGpuResidentSmoothCellBorders/, /setVisible:[\s\S]+canApplyGpuResidentLayerVisibility/,
-  /const result = await apply\(\)/, /await rollback\?\.\(\)/]) assert.match(appSource, pattern);
+  /const result = await applyCurrent\(\)/, /await restore\(\)/]) assert.match(appSource, pattern);
 const rendererSource = readFileSync(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8");
 for (const [mode, code] of Object.entries({
   height: 1, biomes: 2, population: 3, states: 4, provinces: 5, temperature: 6,

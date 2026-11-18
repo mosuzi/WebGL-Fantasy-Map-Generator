@@ -36,14 +36,14 @@ const DESTRUCTIVE_UI_ACTIONS = Object.freeze([
   action("delete-note-batch", "删除选中备注", "note", "command-validation", "native-confirm", "one-command", "undo-after-success", "app/webgl-generator/src/ui/vue/components/NotesPanel.vue", "确定批量删除"),
   action("delete-measurement", "删除测量", "measurement", "command-validation", "no-user-confirm", "one-command", "undo-after-success", FILES.runtime, "deleteMeasurementViaApi"),
   action("delete-visual-theme", "删除用户主题", "visual-theme", "ui-validation", "no-user-confirm", "one-command", "undo-after-success", FILES.runtime, "deleteRuntimeVisualTheme"),
-  action("reset-label-styles", "重置全部标签样式", "label-style", "command-validation", "native-confirm", "one-command", "undo-after-success", FILES.controlPanel, "确定重置全部标签样式"),
+  action("reset-label-styles", "重置全部标签样式", "label-style", "command-validation", "no-user-confirm", "one-command", "undo-after-success", FILES.controlPanel, "webgl-generator-label-styles-reset-all"),
   action("delete-namebase", "删除用户名称库", "namebase", "shared-namebase-action", "native-confirm", "one-command", "undo-after-success", FILES.runtime, "deleteNamebaseViaAction"),
   action("clear-namebases", "清空用户名称库", "namebase", "shared-namebase-action", "native-confirm", "one-command", "undo-after-success", FILES.runtime, "clearNamebasesViaApi"),
   action("clear-battle-events-current", "清空当前战事", "battle-event", "command-validation", "native-confirm", "one-command", "undo-after-success", "app/webgl-generator/src/ui/vue/components/MilitaryPanel.vue", "clearSelectedBattleEvents"),
   action("clear-battle-events-filtered", "清空筛选战事", "battle-event", "command-validation", "native-confirm", "one-command", "undo-after-success", "app/webgl-generator/src/ui/vue/components/MilitaryPanel.vue", "clearFilteredBattleEvents"),
   action("delete-height-template", "删除高度用户模板", "height-template", "storage-validation", "native-confirm", "local-storage", "restore-last-delete", FILES.heightPanel, "saveHeightTerrainTemplateRecycleRecord"),
   action("delete-custom-unit", "删除自定义单位", "custom-unit", "storage-validation", "native-confirm", "local-storage", "restore-last-delete", FILES.controlPanel, "CUSTOM_UNIT_RECYCLE_STORAGE_KEY"),
-  action("reset-seafloor", "重设海底", "seafloor", "preview", "native-confirm", "one-command", "undo-after-success", FILES.runtime, "onSeafloorResetApply")
+  action("reset-seafloor", "重设海底", "seafloor", "preview", "no-user-confirm", "one-command", "undo-after-success", FILES.runtime, "onSeafloorResetApply")
 ]);
 
 const LOW_IMPACT_API_DANGER_POLICY_METHODS = Object.freeze([
@@ -287,7 +287,7 @@ function isDestructiveCallback(callback) {
     || callback.name === "onResetAllLabelStyles"
     || callback.name === "onSeafloorResetApply";
   if (!destructiveName || callback.name === "onDeleteMode") return false;
-  return /executeDeleteWithPreflight|createDelete[A-Z][A-Za-z0-9]*Command|runtimeActions[\s\S]*?\.(?:delete|deleteBatch|deleteTheme|resetStyles)\s*\(|deleteImportedNamebase|clearImportedNamebases|defaultView\?\.confirm/.test(callback.source);
+  return /executeDeleteWithPreflight|createDelete[A-Z][A-Za-z0-9]*Command|runtimeActions[\s\S]*?\.(?:delete|deleteBatch|deleteTheme|resetStyles|applySeafloorReset)\s*\(|deleteImportedNamebase|clearImportedNamebases|defaultView\?\.confirm/.test(callback.source);
 }
 
 function actionIdForCallback(container, callback, sourceIndex) {

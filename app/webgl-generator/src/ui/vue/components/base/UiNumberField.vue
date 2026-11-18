@@ -2,7 +2,7 @@
   <div :class="className" @keydown.enter="applyOnEnter" @compositionstart="composing = true" @compositionend="composing = false">
     <label>
       <span>{{ label }}</span>
-      <ElInputNumber v-model="value" v-bind="numberAttrs" controls-position="right" aria-keyshortcuts="Enter" title="按回车确认数值" @update:model-value="onValueUpdate" />
+      <ElInputNumber v-model="value" v-bind="numberAttrs" controls-position="right" aria-keyshortcuts="Enter" title="按回车或离开输入框确认数值" @update:model-value="onValueUpdate" @blur="applyOnBlur" />
     </label>
   </div>
 </template>
@@ -45,6 +45,7 @@ const emit = defineEmits(["apply", "update:modelValue"]);
 
 const value = ref(props.modelValue);
 const composing = ref(false);
+const lastEnterValue = ref(null);
 const normalizedValue = computed(() => Number(value.value));
 const numberAttrs = computed(() => ({
   ...(props.min !== null ? {min: props.min} : {}),
@@ -57,6 +58,7 @@ watch(() => props.modelValue, next => {
 });
 
 function onValueUpdate(next) {
+  lastEnterValue.value = null;
   const number = Number(next);
   if (Number.isFinite(number)) emit("update:modelValue", number);
 }
@@ -65,6 +67,17 @@ function applyOnEnter(event) {
   if (event.target?.tagName !== "INPUT") return;
   event.preventDefault();
   if (composing.value || event.isComposing || event.keyCode === 229) return;
+  lastEnterValue.value = normalizedValue.value;
   emit("apply", normalizedValue.value);
+}
+
+function applyOnBlur() {
+  if (composing.value) return;
+  const submitted = normalizedValue.value;
+  if (submitted === lastEnterValue.value) {
+    lastEnterValue.value = null;
+    return;
+  }
+  emit("apply", submitted);
 }
 </script>

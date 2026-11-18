@@ -193,7 +193,32 @@ try {
   await stateInput.press("Enter");
   await stateDialog.waitFor({state: "hidden"});
   assert.equal(await history(), historyAfterUndo, "等价空白名称不写历史");
-  report.state = {composition: true, singleHistory: true, noOp: true, empty: true, undo: true, escape: true, close: true, rejectedKeepsDraft: true, normalizedName: true, focusReturn: true, compact, labels: labelAfter};
+  await stateRenameButton.click();
+  await stateInput.fill("失焦测试国");
+  await stateInput.evaluate(input => input.blur());
+  await stateDialog.waitFor({state: "hidden"});
+  assert.equal(await stateName(), "失焦测试国", "有效失焦应提交国家名称");
+  assert.equal(await history(), historyAfterUndo + 1, "失焦只提交一次历史");
+  await page.evaluate(() => window.webglGeneratorApi.history.undo());
+  assert.equal(await stateName(), originalStateName, "失焦改名应可撤销");
+  await stateRenameButton.click();
+  await stateInput.fill("外点测试国");
+  await page.mouse.click(5, 5);
+  await stateDialog.waitFor({state: "hidden"});
+  assert.equal(await stateName(), "外点测试国", "点击弹框外应先失焦提交");
+  await page.evaluate(() => window.webglGeneratorApi.history.undo());
+  assert.equal(await stateName(), originalStateName);
+  await stateRenameButton.click();
+  await stateInput.evaluate(input => input.blur());
+  await stateDialog.waitFor({state: "hidden"});
+  assert.equal(await history(), historyAfterUndo, "同值失焦不写历史");
+  await stateRenameButton.click();
+  await stateInput.fill("");
+  await stateInput.evaluate(input => input.blur());
+  assert.equal(await stateDialog.isVisible(), true, "空名称失焦仍应保留编辑状态");
+  assert.equal(await stateName(), originalStateName);
+  await stateDialog.getByRole("button", {name: "关闭二级编辑面板"}).click();
+  report.state = {composition: true, singleHistory: true, noOp: true, empty: true, undo: true, escape: true, close: true, blur: true, outsideClick: true, rejectedKeepsDraft: true, normalizedName: true, focusReturn: true, compact, labels: labelAfter};
   await markPhase("state-complete");
 
   if (process.argv.includes("--check-zoom")) {
@@ -254,7 +279,16 @@ try {
   assert.equal(await history(), cityHistory + 1);
   await page.evaluate(() => window.webglGeneratorApi.history.undo());
   assert.equal(await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities[id].name, cityId), cityBefore);
-  report.city = {enterAndClose: true, undo: true};
+  const populationInput = page.locator('.floating-panel[data-panel-id="city-panel"]:not(.hidden) input[aria-label="城市人口（人）"]');
+  const populationBefore = await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities[id].population, cityId);
+  const populationHistory = await history();
+  await populationInput.fill(String(Number(await populationInput.inputValue()) + 111));
+  await populationInput.evaluate(input => input.blur());
+  await page.waitForFunction(({id, before}) => window.__webglGeneratorApp.map.settlements.cities[id].population !== before, {id: cityId, before: populationBefore});
+  assert.equal(await history(), populationHistory + 1, "城市人口失焦只写一次历史");
+  await page.evaluate(() => window.webglGeneratorApi.history.undo());
+  assert.equal(await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities[id].population, cityId), populationBefore);
+  report.city = {enterAndClose: true, blurPopulation: true, undo: true};
 
   await markPhase("culture-opening");
   const cultureId = await page.evaluate(() => {
@@ -402,7 +436,10 @@ try {
   await seedInput.fill("42");
   await seedInput.press("Enter");
   await page.waitForFunction(() => document.querySelector('pre.climate-downstream-result')?.textContent?.includes('"seed": 42'));
-  report.seed = {enter: true};
+  await seedInput.fill("73");
+  await seedInput.evaluate(input => input.blur());
+  await page.waitForFunction(() => document.querySelector('pre.climate-downstream-result')?.textContent?.includes('"seed": 73'));
+  report.seed = {enter: true, blur: true};
 
   await page.setViewportSize({width: 690, height: 900});
   const layouts = await page.locator(".state-name-editor, .city-name-editor, .climate-downstream-seed").evaluateAll(elements => elements.map(element => ({className: element.className, width: element.clientWidth, scroll: element.scrollWidth})));
