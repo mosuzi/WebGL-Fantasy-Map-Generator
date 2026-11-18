@@ -12,12 +12,12 @@ export function automaticPoliticalLabelOrder(items = []) {
   ));
 }
 
-export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "province", rotation = 0, bend = 0} = {}) {
+export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "province", rotation = 0, bend = 0, extraSpacing = 0, upright = false} = {}) {
   const characters = Array.from(String(text || ""));
   if (!characters.length) return {glyphs: [], box: emptyBox(), spacing: 0, bend: 0, rotation: 0};
   const fontSize = positive(style?.fontSize, targetKind === "state" ? 30 : 18);
-  const spacing = Math.max(finite(style?.letterSpacing), targetKind === "state" ? STATE_MIN_LETTER_SPACING : PROVINCE_MIN_LETTER_SPACING);
-  const advances = characters.map(character => characterAdvance(character, fontSize));
+  const spacing = Math.max(finite(style?.letterSpacing), targetKind === "state" ? STATE_MIN_LETTER_SPACING : PROVINCE_MIN_LETTER_SPACING) + extraSpacing;
+  const advances = characters.map(character => upright ? fontSize : characterAdvance(character, fontSize));
   const totalWidth = advances.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, characters.length - 1);
   const halfSpan = Math.max(fontSize / 2, totalWidth / 2);
   const glyphHeight = fontSize * 1.28 + labelDecorationSize(style);
@@ -30,12 +30,12 @@ export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "prov
     const width = advances[index] + labelDecorationSize(style);
     const centerX = cursor + advances[index] / 2;
     const unit = characters.length <= 1 ? 0 : centerX / halfSpan;
-    const curveY = characters.length <= 1 ? 0 : finite(bend) * (1 - unit * unit);
+    const curveY = characters.length <= 1 ? 0 : finite(bend) * ((upright ? 0.5 : 1) - unit * unit);
     const tangentRadians = characters.length <= 1 ? 0 : Math.atan2(-2 * finite(bend) * unit, halfSpan);
     const x = centerX * cos - curveY * sin;
     const y = centerX * sin + curveY * cos;
-    const angle = finite(rotation) + tangentRadians * 180 / Math.PI;
-    const bounds = rotatedGlyphBox(x, y, width, glyphHeight, angle);
+    const angle = upright ? 0 : finite(rotation) + tangentRadians * 180 / Math.PI;
+    const bounds = upright ? uprightInkBox(x, y, fontSize, style) : rotatedGlyphBox(x, y, width, glyphHeight, angle);
     box = unionBoxes(box, bounds);
     cursor += advances[index] + spacing;
     return {character, x: round(x), y: round(y), angle: round(angle), width: round(width), height: round(glyphHeight), box: roundBox(bounds)};
@@ -47,6 +47,76 @@ export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "prov
     bend: round(bend),
     rotation: round(rotation)
   };
+}
+
+function uprightInkBox(x, y, fontSize, style) {
+  const stroke = Math.max(0, finite(style?.strokeWidth));
+  const blur = 2 * Math.max(0, finite(style?.shadowBlur));
+  const shadowX = finite(style?.shadowOffsetX), shadowY = finite(style?.shadowOffsetY);
+  const halfWidth = fontSize * (style?.italic ? 0.67 : 0.5) + stroke;
+  const halfHeight = fontSize * 0.64 + stroke;
+  return {
+    left: x - halfWidth + Math.min(0, shadowX - blur),
+    right: x + halfWidth + Math.max(0, shadowX + blur),
+    top: y - halfHeight + Math.min(0, shadowY - blur),
+    bottom: y + halfHeight + Math.max(0, shadowY + blur)
+  };
+}
+
+// All automatic state candidates share one homeland anchor. Cache the
+// territory tests across pans. Visible city obstacles are tested afresh.
+export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding}) {
+  const baseSize = positive(item.resolvedStyle.fontSize, 30);
+  const short = item.state?.name?.trim() || item.text;
+  const names = scale < 1 ? [short] : [...new Set([item.text, short])];
+  const size = baseSize * Math.min(1, Math.max(0.5, Math.sqrt(scale)));
+  const sizes = [size];
+  const floor = Math.min(size, Math.max(11, baseSize * 0.48));
+  while (sizes.at(-1) > floor) sizes.push(Math.max(floor, sizes.at(-1) * 0.84));
+  const radians = item.rotation * Math.PI / 180;
+  const dx = sx * Math.cos(radians), dy = sy * Math.sin(radians);
+  // A principal axis has no reading direction. Read mostly vertical names
+  // top to bottom, and mostly horizontal names left to right on screen.
+  const direction = (Math.abs(dy) > Math.abs(dx) ? dy : dx) < 0 ? -1 : 1;
+  const rotation = Math.atan2(direction * dy, direction * dx) * 180 / Math.PI;
+  const key = [sx, sy, item.x, item.y, item.rotation, item.text, short, scale].join("|");
+  if (item.homelandCandidates?.key !== key || item.homelandCandidates.style !== item.resolvedStyle) {
+    item.homelandCandidates = {key, style: item.resolvedStyle, layouts: new Map()};
+  }
+  let index = 0;
+  for (const fontSize of sizes) {
+    let fallback = null;
+    for (const name of fontSize === size ? names : [short]) {
+      for (const [space, curve] of [[0, 0], [0.22, 0], [0.5, 0], [0.85, 0], [0, -0.7], [0, 0.7], [0.35, -1.15], [0.35, 1.15]]) {
+        const candidateIndex = index++;
+        const layouts = item.homelandCandidates.layouts;
+        if (!layouts.has(candidateIndex)) {
+          const layout = createPoliticalLabelGlyphLayout(name, {...item.resolvedStyle, fontSize}, {
+            targetKind: "state", upright: true, rotation, bend: curve * fontSize, extraSpacing: space * fontSize
+          });
+          layouts.set(candidateIndex, layout.glyphs.every(glyph => fits(glyph.box, Math.max(2, fontSize * 0.12))) ? layout : null);
+        }
+        const layout = layouts.get(candidateIndex);
+        if (!layout) continue;
+        const box = translateBox(layout.box, screen.x, screen.y);
+        const glyphs = layout.glyphs.map(glyph => ({...glyph, box: translateBox(glyph.box, screen.x, screen.y)}));
+        const city = overlapSummary(glyphs, box, obstacles, padding);
+        const peer = overlapSummary(glyphs, box, peers, padding);
+        const candidate = {...layout, anchor: screen, candidateIndex, box, glyphs, fontSize, rootSize: symmetricRootSize(layout.box, fontSize),
+          cityCollides: city.count > 0, peerCollides: peer.count > 0, collides: city.count + peer.count > 0};
+        if (!candidate.collides) return candidate;
+        const cost = peer.area * 10 + city.area;
+        if (!fallback || cost < fallback.cost) fallback = {...candidate, cost};
+      }
+    }
+    if (fallback) return fallback;
+  }
+  const number = String(item.targetId);
+  const fontSize = Math.min(baseSize, 13);
+  const diameter = Math.max(18, fontSize * (0.68 * number.length + 0.6));
+  const box = {left: -diameter / 2, right: diameter / 2, top: -diameter / 2, bottom: diameter / 2};
+  return {anchor: screen, box: translateBox(box, screen.x, screen.y), rootSize: {width: diameter, height: diameter}, fontSize,
+    glyphs: [{character: number, x: 0, y: 0, angle: 0}], number, candidateIndex: index, bend: 0, collides: false, cityCollides: false};
 }
 
 export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], peers = [], viewport, padding = 0, locked = false, anchorAllowed = null, preferredCandidateIndex = null, retainPreferred = false} = {}) {
@@ -113,6 +183,8 @@ export function restorePoliticalLabelPlacementSnapshot(item, screen) {
   const anchor = {x: finite(screen?.x) + offsetX, y: finite(screen?.y) + offsetY};
   return {
     anchor,
+    number: snapshot.number,
+    fontSize: snapshot.fontSize,
     candidateIndex: snapshot.candidateIndex,
     bend: snapshot.bend,
     rootSize: snapshot.rootSize,

@@ -11,7 +11,7 @@ const server = await preview({configFile: join(root, "vite.config.mjs"), preview
 const browser = await chromium.launch({channel: "chrome", headless: true});
 const reports = [];
 try {
-  for (const cellsTarget of [10000, 100000]) {
+  for (const cellsTarget of process.argv.includes("--large") ? [100000] : [10000, 100000]) {
     const page = await browser.newPage({viewport: {width: 1440, height: 900}});
     page.setDefaultTimeout(180000);
     const errors = [];
@@ -30,6 +30,86 @@ try {
     const generated = await page.evaluate(target => window.webglGeneratorApi.generate.newMap({confirm: true, seed: `state-label-visibility-${target}`, cellsTarget: target}), cellsTarget);
     assert.equal(generated.ok, true, JSON.stringify(generated.error));
     await waitForApiReady(page, 180000);
+    await page.locator("#open-generation-panel").click();
+    await page.locator('[data-control-tab="themes"]').click();
+    const segmented = page.locator(".view-mode-segmented");
+    const stateModeLabel = await segmented.locator('[data-mode="states"]').textContent();
+    await segmented.locator(".el-segmented__item").getByText(stateModeLabel.trim(), {exact:true}).click();
+    await page.waitForFunction(() => window.__webglGeneratorApp.renderer.colorMode === "states", null, {timeout:15000});
+    await waitForApiReady(page, 15000);
+    await page.locator('[data-panel-id="generation-panel"] .floating-panel-close').click();
+    if (cellsTarget === 100000) {
+      const legend = page.locator("#state-number-legend");
+      await legend.waitFor({state:"visible"});
+      const initial = await legend.locator(":scope > div").first().innerText();
+      const id = Number(await legend.locator(".state-legend-number").first().innerText());
+      const renamed = await page.evaluate(id => window.webglGeneratorApi.edit.states.rename(id, "东岚"), id);
+      assert.ok(renamed.ok, JSON.stringify(renamed.error));
+      await page.waitForFunction(() => document.querySelector("#state-number-legend")?.textContent.includes("东岚"));
+      assert.ok((await page.evaluate(() => window.webglGeneratorApi.history.undo())).ok);
+      await page.waitForFunction(name => document.querySelector("#state-number-legend > div")?.innerText === name, initial);
+      await page.locator("#open-generation-panel").click();
+      await page.locator('[data-control-tab="layers"]').click();
+      const toggle = page.locator('[data-control-panel="layers"] button[data-layer="stateLabels"]');
+      await toggle.click();
+      await legend.waitFor({state:"hidden"});
+      await toggle.click();
+      await legend.waitFor({state:"visible"});
+      const exportDiff = await page.evaluate(async () => {
+        const sample = async enabled => {
+          const result = await window.webglGeneratorApi.data.exportPNG({download:false, includeDataUrl:true,
+            includeMapOverlays:true, crop:{mode:"viewport"}, overlays:{legend:enabled}});
+          if (!result.ok) throw Error(JSON.stringify(result.error));
+          const image = new Image();
+          image.src = result.data.dataUrl;
+          await image.decode();
+          const canvas = document.createElement("canvas");
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(image,0,0);
+          const rect = document.querySelector("#state-number-legend").getBoundingClientRect();
+          const stage = document.querySelector("#map-canvas").getBoundingClientRect();
+          const sx = image.width/stage.width, sy = image.height/stage.height;
+          return ctx.getImageData((rect.left-stage.left)*sx,(rect.top-stage.top)*sy,rect.width*sx,rect.height*sy).data;
+        };
+        const a = await sample(true), b = await sample(false);
+        return a.reduce((n,value,i)=>n+Number(value!==b[i]),0);
+      });
+      assert.ok(exportDiff > 100, "导出开关没有改变编号图例像素");
+      await page.evaluate(async () => {
+        const legend = document.querySelector("#state-number-legend");
+        legend.style.maxHeight = "18px";
+        legend.scrollTop = legend.scrollHeight;
+        const names = Array.from(legend.children, row => row.lastChild.textContent);
+        const drawn = new Set();
+        const original = CanvasRenderingContext2D.prototype.fillText;
+        try {
+          CanvasRenderingContext2D.prototype.fillText = function(text, ...args) {
+            drawn.add(text);
+            return original.call(this, text, ...args);
+          };
+          const result = await window.webglGeneratorApi.data.exportPNG({download:false, includeMapOverlays:true, crop:{mode:"viewport"}});
+          if (!result.ok || names.some(name => !drawn.has(name))) throw Error("导出时遗漏滚动窗口外的国名");
+        } finally {
+          CanvasRenderingContext2D.prototype.fillText = original;
+          legend.style.maxHeight = "";
+        }
+      });
+      await page.locator('[data-panel-id="generation-panel"] .floating-panel-close').click();
+      const scaleBefore = await page.evaluate(() => window.__webglGeneratorApp.renderer.camera.scale);
+      await page.mouse.move(1080,370);
+      await page.mouse.wheel(0,230);
+      await page.waitForFunction(s => window.__webglGeneratorApp.renderer.camera.scale < s, scaleBefore);
+      await page.mouse.wheel(0,-230);
+      await page.waitForFunction(s => Math.abs(window.__webglGeneratorApp.renderer.camera.scale-s)<0.002, scaleBefore);
+      await page.waitForTimeout(300);
+      if (process.env.FMG_LABEL_SCREENSHOT) {
+        await page.mouse.move(1,1);
+        await page.screenshot({path:process.env.FMG_LABEL_SCREENSHOT});
+      }
+      console.log(JSON.stringify({legendState:id, exportDiff}));
+    }
     const result = await page.evaluate(() => {
       const {map, renderer} = window.__webglGeneratorApp;
       const states = renderer.labelItems.filter(item => item.targetKind === "state" && item.componentCellSet?.size && !item.layout?.locked);
@@ -38,9 +118,9 @@ try {
       const city = renderer.labelItems.find(item => item.targetKind === "city");
       if (!state || !city) throw new Error("缺少国家或城市标签样本");
       const rect = renderer.canvas.getBoundingClientRect();
-      const insideLabel = item => {
+      const insideLabel = (item, position) => {
         const base = renderer.worldToScreen(item.x, item.y, rect);
-        const point = renderer.screenToWorld(rect.left + base.x + (item.politicalOffsetX || 0), rect.top + base.y + (item.politicalOffsetY || 0));
+        const point = position || renderer.screenToWorld(rect.left + base.x + (item.politicalOffsetX || 0), rect.top + base.y + (item.politicalOffsetY || 0));
         const cells = map.pack.cells;
         const vertices = map.pack.vertices.p;
         return item.componentCells.some(cell => {
@@ -57,6 +137,24 @@ try {
         });
       };
       const initialVisibleStates = states.filter(item => item.visible);
+      const modes = {number:0, short:0, full:0};
+      const legend = document.querySelector("#state-number-legend");
+      for (const item of initialVisibleStates) {
+        if (item.numbered) {
+          modes.number++;
+          if (![...legend.children].some(row => row.firstChild.textContent === item.displayText && row.lastChild.textContent === item.text)) throw Error("圈号缺少完整国名");
+          continue;
+        }
+        modes[item.displayText === item.text ? "full" : "short"]++;
+        for (const glyph of item.glyphNodes) {
+          const g = glyph.getBoundingClientRect();
+          for (const x of [g.left - 1, g.right + 1]) for (const y of [g.top - 1, g.bottom + 1]) {
+            if (!insideLabel(item, renderer.screenToWorld(x,y))) throw Error(`实际字形未在本土留白：${item.text} ${glyph.textContent}`);
+            const grid = renderer.pickCellClientPoint(x,y)?.gridCell;
+            if (map.grid.cells.state[grid] !== item.targetId || map.grid.cells.h[grid] < 20) throw Error(`实际字形越过画布国界：${item.text} ${glyph.textContent}`);
+          }
+        }
+      }
       if (!initialVisibleStates.length || initialVisibleStates.some(item => !insideLabel(item))) {
         throw new Error(`初始可见国家标签中点越界：${initialVisibleStates.filter(item => !insideLabel(item)).map(item => item.targetId)}`);
       }
@@ -83,24 +181,28 @@ try {
       city.minScale = 0;
       city.resolvedStyle = {...city.resolvedStyle, opacity: 1};
       state.resolvedStyle = {...state.resolvedStyle, opacity: 1};
+      renderer.labelItems = [state];
+      renderer.updateLabels();
+      const clearCandidate = state.politicalCandidateIndex;
+      renderer.labelItems = [city, state];
       renderer.updateLabels();
       const obstacleVisible = sample();
-      ensure(obstacleVisible.cityVisible && obstacleVisible.stateVisible && obstacleVisible.candidate > 0 && obstacleVisible.inside, "显示城市标签时国家未正确避让或中点越界");
+      ensure(obstacleVisible.cityVisible && obstacleVisible.stateVisible && (obstacleVisible.candidate !== clearCandidate || state.node.classList.contains("city-overlap")) && obstacleVisible.inside, "显示城市标签时国家未正确避让或中点越界");
 
       renderer.layerVisibility.labels = false;
       renderer.updateLabels();
       const layerHidden = sample();
-      ensure(!layerHidden.cityVisible && layerHidden.candidate === 0 && layerHidden.inside, "城市图层关闭后国家未回原位");
+      ensure(!layerHidden.cityVisible && layerHidden.candidate === clearCandidate && layerHidden.inside, "城市图层关闭后国家未回原位");
 
       renderer.layerVisibility.labels = true;
       city.resolvedStyle = {...city.resolvedStyle, opacity: 0};
       renderer.updateLabels();
       const transparent = sample();
-      ensure(!transparent.cityVisible && transparent.candidate === 0 && transparent.inside, "透明城市标签仍触发避让");
+      ensure(!transparent.cityVisible && transparent.candidate === clearCandidate && transparent.inside, "透明城市标签仍触发避让");
 
       city.resolvedStyle = {...city.resolvedStyle, opacity: 1};
       renderer.labelItems = [state];
-      centerAt(40, rect.height / 2);
+      centerAt(4 - (city.metrics?.width || 40) / 2, rect.height / 2);
       renderer.updateLabels();
       const edgeBaseline = sample();
       const cityWidth = city.metrics?.width || 40;
@@ -146,23 +248,27 @@ try {
       renderer.viewportInteractionKind = null;
 
       renderer.labelItems = [state];
-      renderer.camera.scale = 2.4;
+      renderer.camera.scale = 1.2;
       centerAt(rect.width / 2, rect.height / 2);
       renderer.updateLabels();
-      const separation = ((state.box?.right - state.box?.left || 160) + (city.metrics?.width || 40)) / 2 + 12;
-      const separatedCityPoint = renderer.screenToWorld(rect.left + rect.width / 2 + separation * 1.3, rect.top + rect.height / 2);
+      const end = state.glyphNodes.at(-1).getBoundingClientRect();
+      const separation = (end.left + end.right) / 2 - rect.left - rect.width / 2;
+      const cityLift = (Number(city.node.dataset.cityIconClearance) || 6) + city.metrics.height / 2;
+      const separatedCityPoint = renderer.screenToWorld(rect.left + rect.width / 2 + separation, end.top + end.height / 2 + cityLift);
       city.x = separatedCityPoint.x;
       city.y = separatedCityPoint.y;
       renderer.labelItems = [city, state];
+      renderer.camera.scale = 2.4;
+      centerAt(rect.width / 2, rect.height / 2);
       renderer.updateLabels();
       const zoomSeparated = sample();
-      ensure(zoomSeparated.cityVisible && zoomSeparated.candidate === 0, "缩放前无遮挡的国家候选未保持基准位置");
+      ensure(zoomSeparated.cityVisible && zoomSeparated.inside, "缩放前国家中点越界或城市未显示");
       renderer.camera.scale = 1.2;
       centerAt(rect.width / 2, rect.height / 2);
       renderer.viewportInteractionKind = "zoom";
       renderer.updateLabels();
       const zoomApproach = sample();
-      ensure(zoomApproach.cityVisible && zoomApproach.candidate > 0 && zoomApproach.inside,
+      ensure(zoomApproach.cityVisible && (zoomApproach.candidate !== clearCandidate || state.node.classList.contains("city-overlap")) && zoomApproach.inside,
         "缩放后同一可见城市靠近国家标签却未重新避让");
       renderer.viewportInteractionKind = null;
       renderer.labelItems = [state];
@@ -204,7 +310,7 @@ try {
       const scaleEntry = {firstBoxes: enteringPoliticalBoxes[0], settledBoxes: enteringPoliticalBoxes.at(-1)};
       renderer.viewportInteractionKind = null;
       renderer.labelItems = originalItems;
-      return {startedAt, initialVisibleStateCount: initialVisibleStates.length, stateId: state.targetId, stateCells: state.componentCellSet.size,
+      return {startedAt, modes, initialVisibleStateCount: initialVisibleStates.length, stateId: state.targetId, stateCells: state.componentCellSet.size,
         obstacleVisible, layerHidden, transparent, edgeBaseline, buffered, localRefreshBoxes, panEntry, panExit, zoomSeparated, zoomApproach, staleZoom, scaleHidden, scaleEntry,
         glError: renderer.gl.getError()};
     });

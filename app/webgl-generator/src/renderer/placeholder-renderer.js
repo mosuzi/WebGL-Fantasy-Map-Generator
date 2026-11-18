@@ -66,10 +66,12 @@ import {hasManualLabelPriorities, resolveLabelLayout, sortLabelItemsByPriority} 
 import {
   PROVINCE_COLLISION_OPACITY,
   automaticPoliticalLabelOrder,
+  placeHomelandLabel,
   resolvePoliticalLabelPlacement,
   restorePoliticalLabelPlacementSnapshot
 } from "./political-label-layout.js";
-import {resolveStateLabelPlacement, stateLabelComponentContainsPoint} from "./state-label-territory.js";
+import {resolveStateLabelPlacement} from "./state-label-territory.js";
+import {homelandOutline, homelandContainsBox} from "./state-label-footprint.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {createPreparedDisplayIntent, gpuResidentShoreSurfaceKey} from "./prepared-display-intent.js";
 import {militaryIconLabelForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
@@ -5143,6 +5145,7 @@ export class PlaceholderMapRenderer {
 
   updateLabels() {
     if (!this.overlay || !this.map) {
+      updateStateNumberLegend(this, []);
       this.lastOverlayUpdate = emptyOverlayUpdateStats();
       return;
     }
@@ -5153,6 +5156,7 @@ export class PlaceholderMapRenderer {
     const occupied = [];
     const occupiedCityLabels = [];
     const occupiedStates = [];
+    const numberedStates = [];
     const occupiedProvinces = [];
     const occupiedByPriority = [];
     const visibleObstacleItems = [];
@@ -5196,15 +5200,15 @@ export class PlaceholderMapRenderer {
       }
       const baseScreen = this.worldToScreen(item.x, item.y, rect);
       const politicalPrewarm = provinceLabel ? Math.min(labelPrewarm, PROVINCE_LABEL_PREWARM_MAX_CSS_PX) : labelPrewarm;
-      const stateAnchorAllowed = stateLabel && !item.layout?.locked && item.componentCellSet?.size
-        ? anchor => stateLabelAnchorAllowed(this, item, anchor, rect)
-        : null;
       const unchangedObstacles = politicalLabel && sameLabelPrefix(visibleObstacleItems, item.politicalObstacleSource, item.politicalObstacleLength);
       const politicalSnapshot = politicalLabel && preservePoliticalCandidate && unchangedObstacles && (item.visible || item.buffered)
         ? restorePoliticalLabelPlacementSnapshot(item, baseScreen)
         : null;
       const retainedPoliticalPlacement = politicalSnapshot;
-      let politicalPlacement = retainedPoliticalPlacement || (politicalLabel ? resolvePoliticalLabelPlacement({
+      const autoState = stateLabel && !item.layout?.locked;
+      const politicalPlacement = retainedPoliticalPlacement || (autoState
+        ? layoutStateInHomeland(this, item, baseScreen, rect, occupied, occupiedStates, padding)
+        : politicalLabel ? resolvePoliticalLabelPlacement({
         item,
         screen: baseScreen,
         obstacles: occupied,
@@ -5213,8 +5217,7 @@ export class PlaceholderMapRenderer {
         padding,
         locked: item.layout?.locked,
         preferredCandidateIndex: null,
-        retainPreferred: false,
-        anchorAllowed: stateAnchorAllowed
+        retainPreferred: false
       }) : null);
       const screen = politicalPlacement?.anchor || baseScreen;
       const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
@@ -5223,7 +5226,7 @@ export class PlaceholderMapRenderer {
       const prewarm = politicalLabel ? politicalPrewarm : labelPrewarm;
       const canBuffer = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;
       const canRender = onScreen || canBuffer;
-      const blocked = canRender && (priorityLayout
+      const blocked = canRender && (priorityLayout && !autoState
         ? boxesOverlapAny(occupiedByPriority, box, padding)
         : stateLabel
         ? Boolean(politicalPlacement?.peerCollides)
@@ -5272,6 +5275,7 @@ export class PlaceholderMapRenderer {
       item.node.dataset.labelCandidate = String(politicalPlacement?.candidateIndex ?? 0);
       item.node.style.setProperty("--province-label-collision-opacity", String(PROVINCE_COLLISION_OPACITY));
       if (stateLabel) item.node.style.setProperty("--state-label-opacity", String(stateLabelScale.opacity));
+      if (shouldShow && politicalPlacement?.number) numberedStates.push(item);
       if (shouldShow && !scaleEntering) {
         if (stateLabel) {
           occupiedStates.push(box);
@@ -5296,6 +5300,7 @@ export class PlaceholderMapRenderer {
       if (shouldShow && stateCityOverlap) stateCityOverlaps++;
     }
 
+    updateStateNumberLegend(this, numberedStates);
     if (hasScaleEnteringLabels) {
       const map = this.map;
       const view = this.canvas.ownerDocument?.defaultView || globalThis;
@@ -6186,15 +6191,19 @@ function appendLabelNodeText(node, item, documentRef, styleType) {
     return {contentNode, glyphNodes: []};
   }
   node.setAttribute("aria-label", item.text);
-  const glyphNodes = Array.from(item.text || "").map(character => {
-    const glyph = documentRef.createElement("span");
+  const glyphNodes = appendPoliticalGlyphs(contentNode, Array.from(item.text || ""), styleType);
+  return {contentNode, glyphNodes};
+}
+
+function appendPoliticalGlyphs(contentNode, characters, styleType) {
+  return characters.map(character => {
+    const glyph = contentNode.ownerDocument.createElement("span");
     glyph.className = "political-label-glyph";
     glyph.setAttribute("aria-hidden", "true");
     setDynamicCanvasTextContent(glyph, styleType, character);
     contentNode.append(glyph);
     return glyph;
   });
-  return {contentNode, glyphNodes};
 }
 
 function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.anchor) {
@@ -6202,6 +6211,8 @@ function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.an
   item.politicalOffsetX = placement.anchor.x - baseScreen.x;
   item.politicalOffsetY = placement.anchor.y - baseScreen.y;
   item.politicalPlacementSnapshot = {
+    fontSize: placement.fontSize,
+    number: placement.number,
     candidateIndex: placement.candidateIndex,
     bend: placement.bend,
     rootSize: placement.rootSize,
@@ -6217,6 +6228,17 @@ function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.an
   };
   setStylePropertyIfChanged(item.node, "--label-box-width", `${placement.rootSize.width}px`);
   setStylePropertyIfChanged(item.node, "--label-box-height", `${placement.rootSize.height}px`);
+  if (item.targetKind === "state") {
+    const text = placement.glyphs.map(glyph => glyph.character).join("");
+    if ((item.displayText ?? item.text) !== text || Boolean(item.numbered) !== Boolean(placement.number)) {
+      item.contentNode.replaceChildren();
+      item.glyphNodes = appendPoliticalGlyphs(item.contentNode, placement.glyphs.map(glyph => glyph.character), "state");
+      item.numbered = Boolean(placement.number);
+      item.node.classList.toggle("state-label--number", item.numbered);
+    }
+    item.displayText = text;
+    setStylePropertyIfChanged(item.contentNode, "font-size", `${placement.fontSize ?? item.resolvedStyle.fontSize}px`);
+  }
   for (let index = 0; index < item.glyphNodes.length; index++) {
     const glyph = item.glyphNodes[index];
     const layout = placement.glyphs[index];
@@ -6327,7 +6349,7 @@ function getLabelStates(map, stateIds = null) {
         priority: Number(state.area || 0) + Number(state.burgs || 0) * 100,
         state,
         rank,
-        minScale: 0.5
+        minScale: 0
       } : null;
     })
     .filter(Boolean)
@@ -6778,12 +6800,35 @@ function provinceLabelPlacement(map, province) {
   return isWorldPoint(point) ? {x: point[0], y: point[1], rotation: 0} : null;
 }
 
-function stateLabelAnchorAllowed(renderer, item, anchor, rect) {
-  const ndcX = anchor.x / rect.width * 2 - 1;
-  const ndcY = 1 - anchor.y / rect.height * 2;
-  const x = (((ndcX - renderer.camera.offsetX) / renderer.camera.scale + 1) / 2) * renderer.map.metadata.graphWidth;
-  const y = ((1 - (ndcY - renderer.camera.offsetY) / renderer.camera.scale) / 2) * renderer.map.metadata.graphHeight;
-  return stateLabelComponentContainsPoint(renderer.map, item.componentCellSet, x, y, item.anchorCell);
+function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding) {
+  const scale = renderer.camera.scale;
+  const sx = rect.width * scale / renderer.map.metadata.graphWidth;
+  const sy = rect.height * scale / renderer.map.metadata.graphHeight;
+  const outline = homelandOutline(renderer.map, item.componentCellSet);
+  const fits = (box, margin) => homelandContainsBox(outline,
+    item.x + (box.left - margin) / sx, item.y + (box.top - margin) / sy,
+    item.x + (box.right + margin) / sx, item.y + (box.bottom + margin) / sy);
+  return placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding});
+}
+
+function updateStateNumberLegend(renderer, states) {
+  const legend = renderer.stage?.ownerDocument?.getElementById("state-number-legend");
+  if (!legend) return;
+  const entries = states.sort((a, b) => a.targetId - b.targetId).map(item => [String(item.targetId), item.text]);
+  const signature = JSON.stringify(entries);
+  if (legend.dataset.entries === signature) return;
+  legend.dataset.entries = signature;
+  legend.hidden = !entries.length;
+  legend.replaceChildren(...entries.map(([number, name]) => {
+    const row = legend.ownerDocument.createElement("div");
+    const mark = legend.ownerDocument.createElement("span");
+    const text = legend.ownerDocument.createElement("span");
+    mark.className = "state-legend-number";
+    setDynamicCanvasTextContent(mark, "legend", number);
+    setDynamicCanvasTextContent(text, "legend", name);
+    row.append(mark, text);
+    return row;
+  }));
 }
 
 function isSelectedOrHighlighted(selection, highlights, kind, id) {

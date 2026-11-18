@@ -8,7 +8,7 @@ export function resolveStateLabelPlacement(map, state, text = "") {
       const capitalCell = resolveStateCapitalPackCell(map, state);
       const component = components.find(item => item.cellSet.has(capitalCell)) || largestComponent(components);
       const centroid = weightedCentroid(cells, component.cells);
-      const anchorCell = nearestComponentCell(cells, component.cells, centroid);
+      const anchorCell = centralInteriorCell(cells, component, centroid);
       const point = cells.p[anchorCell];
       return {
         x: point[0],
@@ -17,7 +17,7 @@ export function resolveStateLabelPlacement(map, state, text = "") {
         componentCells: component.cells,
         componentCellSet: component.cellSet,
         source: component.cellSet.has(capitalCell) ? "capital-component" : "largest-component",
-        rotation: stateLabelRotation(cells, component.cells, stateId, centroid, text)
+        rotation: stateLabelRotation(cells, component.cells, centroid)
       };
     }
   }
@@ -213,8 +213,37 @@ function nearestComponentCell(cells, componentCells, point) {
   return best;
 }
 
-function stateLabelRotation(cells, componentCells, stateId, centroid, text) {
-  if (Array.from(text || "").length < 5) return 0;
+// Prefer a central cell with land on all sides, including when the centroid falls in a bay.
+function centralInteriorCell(cells, component, centroid) {
+  const depth = new Map();
+  const queue = [];
+  for (const cell of component.cells) {
+    const neighbors = cells.c?.[cell] || [];
+    if (cells.b?.[cell] || neighbors.length < (cells.v?.[cell]?.length || 0) || neighbors.some(next => !component.cellSet.has(next))) {
+      queue.push(cell);
+      depth.set(cell, 0);
+    }
+  }
+  if (!queue.length) return nearestComponentCell(cells, component.cells, centroid);
+  for (let index = 0; index < queue.length; index++) {
+    const cell = queue[index];
+    for (const next of cells.c?.[cell] || []) {
+      if (!component.cellSet.has(next) || depth.has(next)) continue;
+      depth.set(next, depth.get(cell) + 1);
+      queue.push(next);
+    }
+  }
+  const cellWidth = Math.sqrt(component.area / component.cells.length);
+  let best = queue[0], bestScore = -Infinity;
+  for (const cell of queue) {
+    const [x, y] = cells.p[cell];
+    const score = depth.get(cell) * cellWidth - 0.85 * Math.hypot(x - centroid.x, y - centroid.y);
+    if (score > bestScore) { best = cell; bestScore = score; }
+  }
+  return best;
+}
+
+function stateLabelRotation(cells, componentCells, centroid) {
   let weightSum = 0;
   let xx = 0;
   let yy = 0;
@@ -229,18 +258,11 @@ function stateLabelRotation(cells, componentCells, stateId, centroid, text) {
     xy += dx * dy * weight;
   }
   if (!weightSum) return 0;
-  const radians = 0.5 * Math.atan2(2 * xy, xx - yy);
-  const angle = clampLabelAngle((radians * 180) / Math.PI);
-  return Math.abs(angle) >= 8 ? angle : (stateId % 2 ? -12 : 12);
-}
-
-function clampLabelAngle(angle) {
-  let value = angle;
-  while (value > 90) value -= 180;
-  while (value < -90) value += 180;
-  if (value > 45) value -= 90;
-  if (value < -45) value += 90;
-  return Math.round(Math.max(-28, Math.min(28, value)) * 10) / 10;
+  const spread = Math.hypot(xx - yy, 2 * xy);
+  // The eigenvalue ratio is the squared aspect ratio of the fitted ellipse.
+  if (xx + yy + spread <= 1.4 ** 2 * (xx + yy - spread)) return 0;
+  const angle = Math.atan2(2 * xy, xx - yy) * 90 / Math.PI;
+  return Math.round((angle < -80 ? angle + 180 : angle) * 10) / 10;
 }
 
 function politicalId(item) {

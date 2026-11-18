@@ -26,6 +26,7 @@ export const PNG_FIXED_TEXT_ELEMENT_IDS = Object.freeze(Object.fromEntries(
 const DYNAMIC_CANVAS_TEXT_IDS = new Set([
   ...SEMANTIC_LABEL_TEXT_CONTRACT.map(entry => entry.id),
   "military-count",
+  "legend",
   "grid-cell-id"
 ]);
 

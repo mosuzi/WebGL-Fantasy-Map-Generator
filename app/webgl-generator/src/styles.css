@@ -1183,6 +1183,41 @@ select:disabled {
   display: none;
 }
 
+.state-number-legend {
+  left: auto;
+  right: 18px;
+  top: 64px;
+  bottom: auto;
+  width: max-content;
+  max-width: min(40%, 240px);
+  max-height: 32%;
+  overflow: auto;
+  pointer-events: auto;
+  font-size: 13px;
+}
+.state-number-legend > div { display: flex; align-items: center; gap: 6px; margin-block: 2px; }
+.state-legend-number, .state-label--number .political-label-glyph {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  letter-spacing: 0;
+}
+.state-legend-number { min-width: 1.5em; aspect-ratio: 1; flex-shrink: 0; }
+.state-label--number .map-label-content {
+  color: var(--theme-legend-text, #dfe9ed);
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+.state-label--number .political-label-glyph {
+  width: var(--label-box-width);
+  height: var(--label-box-height);
+  background: var(--theme-legend-bg, rgba(12, 18, 22, 0.78));
+}
+.state-label .political-label-glyph { letter-spacing: 0; }
+.state-label.city-overlap, .state-label.state-label--number { z-index: 4; }
+
 .map-scale-bar {
   position: absolute;
   left: 18px;

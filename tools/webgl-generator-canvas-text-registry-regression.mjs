@@ -72,7 +72,7 @@ assert.equal(PNG_FIXED_TEXT_ELEMENT_IDS.scaleBar, annotation.find(entry => entry
 const sourceAudit = auditCanvasTextSources({indexSource: index, rendererSource: renderer, stylesSource: styles, registry: CANVAS_TEXT_REGISTRY});
 assert.equal(sourceAudit.violationCount, 0, "真实源码存在未登记画布文字");
 assertSetEqual(sourceAudit.declaredFixedIds, [...ids(hud), "legend", "scale-bar"], "map-stage 固定文字 ID 与 registry 存在差集");
-assertSetEqual(unique(sourceAudit.dynamicHelperCalls.map(call => call.id)), ["<semantic-style-type>", "military-count", "grid-cell-id"], "renderer 动态文字 helper 与 registry 存在差集");
+assertSetEqual(unique(sourceAudit.dynamicHelperCalls.map(call => call.id)), ["<semantic-style-type>", "legend", "military-count", "grid-cell-id"], "renderer 动态文字 helper 与 registry 存在差集");
 
 for (const entry of semantic) {
   assert.equal(entry.rendered, true);

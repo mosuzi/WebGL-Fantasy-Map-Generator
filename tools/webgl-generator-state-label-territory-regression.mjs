@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
-import {resolvePoliticalLabelPlacement} from "../app/webgl-generator/src/renderer/political-label-layout.js";
+import {resolvePoliticalLabelPlacement, placeHomelandLabel} from "../app/webgl-generator/src/renderer/political-label-layout.js";
+import {homelandOutline, homelandContainsBox} from "../app/webgl-generator/src/renderer/state-label-footprint.js";
 import {collectStateLandComponents, resolveStateLabelPlacement, stateLabelComponentContainsPoint} from "../app/webgl-generator/src/renderer/state-label-territory.js";
 import {patchLabelLayout, resolveLabelLayout} from "../app/webgl-generator/src/runtime/label-layout-registry.js";
 import {PNG_SEMANTIC_LABEL_SELECTORS} from "../app/webgl-generator/src/runtime/canvas-text-contract.js";
@@ -102,6 +103,9 @@ for (const seed of ["audit-archipelago-001", "audit-archipelago-002", "audit-arc
     if (placement.componentCellSet.size) assert.ok(placement.componentCellSet.has(placement.cell), `${seed} 国家 #${generatedState.i} 标签锚点不在所选陆块`);
   }
   if (seed === "audit-archipelago-001") {
+    const seven = resolveStateLabelPlacement(generated,generated.politics.states[7]);
+    const territory = homelandOutline(generated,seven.componentCellSet);
+    assert.equal(homelandContainsBox(territory,486.159,138.884,486.160,138.885),false,"弗洛伦不能占用邻国的 grid #725");
     const state17 = generated.politics.states[17];
     const placement17 = resolveStateLabelPlacement(generated, state17, state17.fullName || state17.name);
     assert.equal(stateLabelComponentContainsPoint(generated, placement17.componentCellSet, 128.2114, 569.0295, 1359), true,
@@ -116,7 +120,46 @@ const [rendererSource, mapIoSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8")
 ]);
 assert.match(rendererSource, /resolveStateLabelPlacement\(map, state, text\)/, "实时标签没有接入国家本土布局");
-assert.match(rendererSource, /anchorAllowed:[\s\S]*stateLabelAnchorAllowed/, "国家标签避让没有限制在选定陆地块");
+assert.equal(changedCapitalPlacement.rotation, 90);
+const square = createArchipelagoFixture();
+square.pack.cells.p.splice(3, 4, [90, 1], [100, 1], [90, 11], [100, 11]);
+square.politics.states[1].capital = 8;
+assert.equal(resolveStateLabelPlacement(square, square.politics.states[1]).rotation, 0);
+const ringMap = {metadata:{graphHeight: 60}, pack:{cells:{v:[]},vertices:{p:[]}}};
+for (let y=0; y<4; y++) for (let x=0; x<4; x++) ringMap.pack.vertices.p.push([20*x,20*y]);
+for (let y=0; y<3; y++) for (let x=0; x<3; x++) {
+  const v = y*4+x;
+  ringMap.pack.cells.v.push([v,v+1,v+5,v+4]);
+}
+const outline = homelandOutline(ringMap,new Set([0,1,2,3,5,6,7,8]));
+assert.ok(homelandContainsBox(outline,2,2,58,18));
+assert.equal(homelandContainsBox(outline,3,3,57,57),false,"四角在境内仍不能跨过飞地");
+assert.equal(homelandContainsBox(outline,3,3,60,18),false,"不能贴边");
+const label = {text:"燕王国", state:{name:"燕"}, targetId:71, resolvedStyle:{fontSize:20}, rotation:90, x:0, y:0};
+const place = (overrides={}) => placeHomelandLabel({item:{...label}, screen:{x:0,y:0}, sx:1,sy:1, scale:1,
+  fits:()=>true, obstacles:[],peers:[],padding:0,...overrides});
+const linear = place();
+assert.ok(linear.glyphs.every(g => g.angle === 0 && Math.abs(g.x) < 0.01));
+assert.equal(linear.glyphs.map(g=>g.character).join(""),label.text);
+for (const axis of [-72, 108]) {
+  const {glyphs} = place({item:{...label, rotation:axis}});
+  assert.ok(glyphs[0].y < glyphs.at(-1).y && glyphs[0].x > glyphs.at(-1).x, "倾斜竖排应从上往下读");
+}
+const wide = place({item:{...label,text:"燕国",rotation:0}, obstacles:[{left:-3,right:3,top:-3,bottom:3}]});
+assert.ok(wide.spacing > linear.spacing && wide.bend === 0 && !wide.collides);
+const arced = place({obstacles:[{left:-1,right:1,top:-2,bottom:2}]});
+assert.ok(arced.bend && arced.glyphs.every(g => g.angle === 0), "中心障碍应先尝试曲线");
+assert.deepEqual(arced.anchor,linear.anchor);
+const overlap = place({obstacles:[{left:-500,right:500,top:-500,bottom:500}]});
+assert.ok(overlap.cityCollides && !overlap.number);
+const short = place({scale:0.8});
+assert.equal(short.glyphs.map(g=>g.character).join(""),"燕");
+assert.ok(short.fontSize < linear.fontSize);
+const badge = place({fits:()=>false});
+assert.equal(badge.number,"71");
+const offsetShadow = place({item:{...label,text:"田",state:{name:"田"},resolvedStyle:{fontSize:20,shadowOffsetX:20}},
+  fits:(box,gap)=>box.left-gap > -24 && box.right+gap < 24});
+assert.equal(offsetShadow.number,"71","向右的字影不能越过右侧国界");
 assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".state-label.visible"), "PNG 语义标签契约没有继续包含国家标签节点");
 assert.match(mapIoSource, /selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG 导出没有消费共享语义标签契约");
 
