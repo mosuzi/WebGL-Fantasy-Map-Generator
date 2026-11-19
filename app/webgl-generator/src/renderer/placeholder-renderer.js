@@ -6805,7 +6805,7 @@ function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, p
   const fits = (box, margin, site) => homelandContainsBox(outline,
     site.x + (box.left - margin) / sx, site.y + (box.top - margin) / sy,
     site.x + (box.right + margin) / sx, site.y + (box.bottom + margin) / sy);
-  return placeHomelandLabel({item, screen, scale, sx, sy, sites, banks, fits, obstacles, peers, padding});
+  return placeHomelandLabel({item, screen, scale, sx, sy, sites, banks, outline, fits, obstacles, peers, padding});
 }
 
 function isSelectedOrHighlighted(selection, highlights, kind, id) {

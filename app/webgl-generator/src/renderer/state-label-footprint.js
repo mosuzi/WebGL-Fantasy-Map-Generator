@@ -7,6 +7,21 @@ export function homelandOutline(map, cells) {
   if (outlines.has(cells)) return outlines.get(cells);
   const step = Math.max(1, map.metadata.graphHeight / 96);
   const outline = indexEdges(cells, map.pack.cells.v, map.pack.vertices.p, step);
+  if (outline && map.pack.cells.p) {
+    let weight = 0, cx = 0, cy = 0;
+    for (const cell of cells) {
+      const [px, py] = map.pack.cells.p[cell], area = map.pack.cells.area?.[cell] || 1;
+      weight += area;
+      cx += area * px;
+      cy += area * py;
+    }
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const edge of outline.segments) {
+      x0 = Math.min(x0, edge.left); x1 = Math.max(x1, edge.right);
+      y0 = Math.min(y0, edge.top); y1 = Math.max(y1, edge.bottom);
+    }
+    outline.frame = {cx: cx / weight, cy: cy / weight, x0, x1, y0, y1, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0)};
+  }
   if (outline && map.grid?.cells?.state && map.grid?.vertices?.p) {
     const grid = map.grid.cells;
     const queue = [], territory = new Set();

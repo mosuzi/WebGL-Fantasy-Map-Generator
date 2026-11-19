@@ -1,3 +1,5 @@
+import {homelandAnchorBands} from "./homeland-label-scan.js";
+
 const STATE_MIN_LETTER_SPACING = 2.4;
 const PROVINCE_MIN_LETTER_SPACING = 0.7;
 const BANK_INSETS = [0.25, 0.8, 1.35, 1.9];
@@ -68,9 +70,13 @@ function uprightInkBox(x, y, fontSize, style) {
 }
 
 // Cache geometric fits across pans. Visible city obstacles are tested afresh.
-export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, banks = NO_BANKS, obstacles, peers, padding}) {
+export function placeHomelandLabel(options) {
+  const preferred = placeAtHomelandSites(options);
+  return options.outline?.frame ? searchHomelandInterior(options, preferred) : preferred;
+}
+
+function placeAtHomelandSites({item, screen, scale, sx, sy, fits, sites, banks = NO_BANKS, obstacles, peers, padding}) {
   const anchors = sites ?? [item];
-  if (!anchors.length && !banks.length) return null;
   const baseSize = positive(item.resolvedStyle.fontSize, 30);
   const short = item.state?.name?.trim() || item.text;
   const names = item.text === short ? [item.text] : [item.text, short];
@@ -87,8 +93,9 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, ba
   const key = [sx, sy, item.x, item.y, item.rotation, item.text, short, scale].join("|");
   const cached = item.homelandCandidates;
   if (cached?.key !== key || cached.style !== item.resolvedStyle || cached.sites !== sites || cached.banks !== banks) {
-    item.homelandCandidates = {key, style: item.resolvedStyle, sites, banks, layouts: new Map(), bankLayouts: new Map()};
+    item.homelandCandidates = {key, style: item.resolvedStyle, sites, banks, layouts: new Map(), bankLayouts: new Map(), strips: new Map(), scans: new Map()};
   }
+  if (!anchors.length && !banks.length) return null;
   let index = 0;
   let fallback = null;
   const snugSpacing = 1 - Math.max(STATE_MIN_LETTER_SPACING, finite(item.resolvedStyle.letterSpacing));
@@ -97,18 +104,10 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, ba
       let overlapping = null;
       const consider = (layout, site, candidateIndex) => {
         const anchor = {x: screen.x + (site.x - item.x) * sx, y: screen.y + (site.y - item.y) * sy};
-        const box = translateBox(layout.box, anchor.x, anchor.y);
-        const glyphs = layout.glyphs.map(glyph => ({...glyph, box: translateBox(glyph.box, anchor.x, anchor.y)}));
-        const city = overlapSummary(glyphs, box, obstacles, padding);
-        const peer = overlapSummary(glyphs, box, peers, padding);
-        const candidate = {
-          ...layout, anchor, box, glyphs, fontSize, candidateIndex, rootSize: symmetricRootSize(layout.box, fontSize),
-          cityCollides: city.count > 0, peerCollides: peer.count > 0, collides: city.count + peer.count > 0
-        };
+        const candidate = positionedHomelandLabel(layout, anchor, fontSize, candidateIndex, obstacles, peers, padding);
         if (!candidate.collides) return candidate;
-        const cost = peer.area * 10 + city.area;
-        if (!overlapping || (candidate.peerCollides !== overlapping.peerCollides ? !candidate.peerCollides : cost < overlapping.cost)) {
-          overlapping = {...candidate, cost};
+        if (!overlapping || (candidate.peerCollides !== overlapping.peerCollides ? !candidate.peerCollides : candidate.cost < overlapping.cost)) {
+          overlapping = candidate;
         }
         return null;
       };
@@ -142,6 +141,91 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, ba
     }
   }
   return fallback;
+}
+
+function positionedHomelandLabel(layout, anchor, fontSize, candidateIndex, obstacles, peers, padding) {
+  const box = translateBox(layout.box, anchor.x, anchor.y);
+  const glyphs = layout.glyphs.map(g => ({...g, box: translateBox(g.box, anchor.x, anchor.y)}));
+  const city = overlapSummary(glyphs, box, obstacles, padding);
+  const peer = overlapSummary(glyphs, box, peers, padding);
+  return {...layout, anchor, box, glyphs, fontSize, candidateIndex, rootSize: symmetricRootSize(layout.box, fontSize),
+    cityCollides: city.count > 0, peerCollides: peer.count > 0, collides: city.count + peer.count > 0, cost: peer.area * 10 + city.area};
+}
+
+function searchHomelandInterior({item, outline, sx, sy, scale, screen, fits, obstacles, peers, padding}, preferred) {
+  const f = outline.frame, cache = item.homelandCandidates;
+  const bias = (x, y) => Math.hypot((x - f.cx) / f.width, (y - f.cy) / f.height);
+  const originalName = preferred?.glyphs.map(g => g.character).join("");
+  const mean = (axis, factor) => item[axis] + (preferred.anchor[axis] - screen[axis]
+    + preferred.glyphs.reduce((s, g) => s + g[axis], 0) / preferred.glyphs.length) / factor;
+  const oldBias = preferred ? bias(mean("x", sx), mean("y", sy)) : Infinity;
+  const full = item.text;
+  if (originalName === full && oldBias < 0.14 && !preferred.peerCollides) return preferred;
+  const base = item.resolvedStyle.fontSize || 30, normal = base * Math.min(1, Math.max(0.5, Math.sqrt(scale)));
+  const floor = Math.min(normal, Math.max(11, base * 0.48));
+  const rad = item.rotation * Math.PI / 180;
+  const axis = Math.atan2(sy * Math.sin(rad), sx * Math.cos(rad)) * 180 / Math.PI;
+  const angles = [...new Set([axis, 0, axis - 20, axis + 20, 90, 45, -45].map(a => {
+    a = (a % 180 + 180) % 180;
+    return a >= 135 ? a - 180 : a;
+  }))];
+  // A long name in a narrow inlet can fit at an intermediate angle only.
+  // Pay for the finer sweep only at the last readable size, before dropping it.
+  const fineAngles = [...new Set([...angles, ...Array.from({length: 36}, (_, i) => i * 5 - 45)])];
+  const nativeSpacing = Math.max(STATE_MIN_LETTER_SPACING, finite(item.resolvedStyle.letterSpacing));
+  for (const name of new Set([full, item.state?.name?.trim() || full])) {
+    const same = originalName === name;
+    if (same && oldBias < 0.14 && !preferred.peerCollides) return preferred;
+    const sizes = same ? [preferred.fontSize] : [...new Set([normal, (normal + floor) / 2, floor])];
+    const trials = sizes.map(fontSize => ({fontSize, fine: false}));
+    if (!same) trials.push({fontSize: floor, fine: true});
+    let overlapFallback = null;
+    for (const {fontSize, fine} of trials) {
+      if (fine && overlapFallback) break;
+      let best = null;
+      const single = Array.from(name).length === 1;
+      const shapes = fine || single ? [[1, 0, 0]] : [[nativeSpacing, 0, 0], [1, 0, 0], [1, -0.65, 0], [1, 0.65, 0], [nativeSpacing, 0, 1.5], [1, 0, 2.4]];
+      for (const rotation of single ? [0] : fine ? fineAngles : angles) {
+        for (const [spacing, bend, gap] of shapes) {
+          const key = [name, fontSize, rotation, spacing, bend, gap, fine].join("|");
+          if (!cache.scans.has(key)) {
+            const layout = createPoliticalLabelGlyphLayout(name, {...item.resolvedStyle, fontSize}, {upright: true, targetKind: "state", rotation,
+              extraSpacing: spacing - nativeSpacing, bend: bend * fontSize, splitAt: gap ? Math.ceil(Array.from(name).length / 2) : 0, extraGap: gap * fontSize});
+            cache.scans.set(key, {layout, index: cache.scans.size, ...homelandAnchorBands(outline, layout, fontSize, sx, sy, cache.strips, fine)});
+          }
+          const {layout, index, bands, meanX, meanY} = cache.scans.get(key);
+          for (const {left, right, y} of bands) {
+            const center = Math.max(left, Math.min(right, f.cx - meanX));
+            for (const x of [center, (left + right) / 2, left + (right - left) * 0.15, right - (right - left) * 0.15]) {
+              const distance = bias(x + meanX, y + meanY);
+              if (distance >= (same && !preferred.peerCollides ? oldBias - 0.025 : Infinity) || (best && distance >= best.distance)) continue;
+              if (!layout.glyphs.every(g => fits(g.box, Math.max(2, fontSize * 0.12), {x, y}))) continue;
+              const anchor = {x: screen.x + (x - item.x) * sx, y: screen.y + (y - item.y) * sy};
+              const candidate = positionedHomelandLabel(layout, anchor, fontSize, -10000000 - index, obstacles, peers, padding);
+              if (candidate.peerCollides) continue;
+              candidate.distance = distance;
+              if (candidate.cityCollides) {
+                if (!overlapFallback || candidate.cost < overlapFallback.cost) overlapFallback = candidate;
+                // In crowded homelands the city label's buffer can be wider
+                // than the bay. Keep actual ink clear and trade that buffer
+                // only for a substantial improvement in centring.
+                const improvesCenter = distance < 0.12 || (same && oldBias >= 0.23 && distance < oldBias - 0.085);
+                if (!improvesCenter || overlapSummary(candidate.glyphs, candidate.box, obstacles, 1).count) continue;
+                candidate.distance += 0.025;
+              }
+              if (!best || candidate.distance < best.distance) best = candidate;
+              if (best.distance < 0.075) return best;
+            }
+          }
+          if (best && best.distance < 0.13) return best;
+        }
+      }
+      if (best) return best;
+    }
+    if (same && !preferred.peerCollides) return preferred;
+    if (overlapFallback) return overlapFallback;
+  }
+  return preferred;
 }
 
 function bankLabelLayouts({name, short, fontSize, item, sx, sy, rotation, banks, fits, axisScale}) {

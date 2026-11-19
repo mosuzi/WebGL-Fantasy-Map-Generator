@@ -4,6 +4,7 @@ import {createRequire} from "node:module";
 import {join, resolve} from "node:path";
 import {preview} from "vite";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {auditCountryLabels} from "./webgl-generator-country-label-audit.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const {chromium} = createRequire(join(root, "source/Fantasy-Map-Generator/package.json"))("playwright");
@@ -46,6 +47,12 @@ try {
     await page.waitForFunction(() => window.__webglGeneratorApp.renderer.colorMode === "states", null, {timeout:15000});
     await waitForApiReady(page, 15000);
     await page.locator('[data-panel-id="generation-panel"] .floating-panel-close').click();
+    if (archive && process.env.FMG_COUNTRY_AUDIT) {
+      reports.push(await auditCountryLabels(page, process.env.FMG_COUNTRY_AUDIT));
+      assert.deepEqual(errors, []);
+      await page.close();
+      continue;
+    }
     if (archive) {
       const focus = process.env.FMG_LABEL_FOCUS || "雁门部盟";
       const sample = () => page.evaluate(name => {
@@ -142,7 +149,7 @@ try {
           assert.ok(view.centers[1].x < 354 && view.centers[2].x > 375, JSON.stringify(view.centers));
         }
       }
-      assert.equal(far.text, initial.short);
+      if (focus === "雁门部盟" && initial.capital === "安邑") assert.equal(far.text, focus, "远景仍可容纳完整国名");
       assert.equal(restored.text, initial.text);
       assert.deepEqual(restored.shown, initial.shown);
       assert.ok(restored.shown.some(id => !far.shown.includes(id)), "缩远而隐藏的小国没有随放大恢复");

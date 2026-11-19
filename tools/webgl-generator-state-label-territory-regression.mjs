@@ -171,6 +171,20 @@ const gapLabel = resolvePoliticalLabelPlacement({
   peers: [{...bankLabel.box, parts: bankLabel.glyphs.map(g => g.box)}], viewport: {width: 200, height: 140}
 });
 assert.equal(gapLabel.collides, false, "上一国家国名的字间水面应允许放置其它标签");
+// A single-cell country still has a two-dimensional interior. Its principal
+// direction and the shortlist near the shore cannot justify dropping its name.
+const singleCell = {metadata: {graphHeight: 60}, pack: {
+  cells: {p: [[40, 15]], v: [[0, 1, 2, 3]]}, vertices: {p: [[0,0], [80,0], [80,30], [0,30]]}
+}};
+const singleOutline = homelandOutline(singleCell, new Set([0]));
+const inlandName = placeHomelandLabel({
+  item: {...ringLabel, x: 3, y: 3, rotation: 90, resolvedStyle: {fontSize: 18}}, screen: {x: 3, y: 3},
+  outline: singleOutline, sites: [{x: 3, y: 3}], sx: 1, sy: 1, scale: 1, obstacles: [], peers: [], padding: 0,
+  fits: (box, margin, {x, y}) => homelandContainsBox(singleOutline, x + box.left - margin, y + box.top - margin,
+    x + box.right + margin, y + box.bottom + margin)
+});
+assert.equal(inlandName?.glyphs.map(g => g.character).join(""), ringLabel.text);
+assert.ok(Math.abs(inlandName.anchor.x - 40) < 5 && Math.abs(inlandName.anchor.y - 15) < 5);
 const label = {text:"燕王国", state:{name:"燕"}, targetId:71, resolvedStyle:{fontSize:20}, rotation:90, x:0, y:0};
 const place = (overrides={}) => placeHomelandLabel({item:{...label}, screen:{x:0,y:0}, sx:1,sy:1, scale:1,
   fits:()=>true, obstacles:[],peers:[],padding:0,...overrides});
