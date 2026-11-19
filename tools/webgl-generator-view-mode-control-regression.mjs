@@ -28,7 +28,9 @@ assert.doesNotMatch(bindRuntimePanelSource, /querySelectorAll\(VIEW_MODE_SELECTO
 assert.doesNotMatch(bindRuntimePanelSource, /setActiveModeButton\(documentRef, button\.dataset\.mode\)/);
 assert.match(schemaSource, /\["height", "temperature", "precipitation", "biomes", "cultures", "religions", "diplomacy", "governments", "states", "provinces", "regions", "population"\]/);
 assert.match(appSource, /stage === lastProgressStage && current - lastProgressAt < 80/);
-assert.match(appSource, /const onCommitted = \(\) => \{[\s\S]*?intent\.isCurrent\(\)[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/);
+const commit = appSource.slice(appSource.indexOf("const onCommitted = () => {"), appSource.indexOf('if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName'));
+assert.match(commit, /if \(state\.renderer\?\.workerRenderInstallSuspended > 0\) return;/);
+assert.match(commit, /const syncAll = intent\.isLatestGlobal\(\);\s*if \(syncAll\) restoreRuntimeDisplayControls\(state, documentRef\)/);
 assert.match(appSource, /createWorkerRegenerationRenderContextToken\(state, "display", \{includeViewport: false\}\)/);
 assert.match(appSource, /const sourceViewportToken = createWorkerRegenerationViewportToken\(state\)/);
 assert.match(appSource, /markWorkerRenderInstallViewportChanged/);

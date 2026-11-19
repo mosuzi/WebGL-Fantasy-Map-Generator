@@ -243,7 +243,11 @@ export function installKeyboardShortcuts(documentRef, options = {}) {
     }
     if (hasExclusiveKeyboardModal(documentRef)) return;
     const item = resolveShortcut(event, registry, {platform, scopes: options.getActiveScopes?.(event) || ["global"]});
-    if (!item || (item.id !== "selection.cancel" && isEditableShortcutTarget(event.target))) return;
+    if (!item) return;
+    if (item.id !== "selection.cancel" && isEditableShortcutTarget(event.target)) {
+      const viewHistory = item.group === "history" && event.target.matches?.('.view-mode-segmented input[type="radio"]');
+      if (!viewHistory) return;
+    }
     event.preventDefault();
     event.stopPropagation();
     hideHint();

@@ -143,7 +143,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     if (layers.surface) {
       const inPlaceColorPatch = layers.surface.mode === "cell-colors" && options.inPlaceSurfaceColorPatch === true;
       if (inPlaceColorPatch) {
-        surfaceColorPatch = await prepareInPlaceSurfaceColorPatch(renderer, map, layers.surface, binding, gate);
+        surfaceColorPatch = await prepareInPlaceSurfaceColorPatch(renderer, map, layers.surface, binding, gate, options.displaySurfaceOwner);
         surfaceValues = layers.surface;
       } else {
         surfaceValues = layers.surface.mode === "cell-colors"
@@ -1059,7 +1059,7 @@ function rendererSurfaceFloatLength(renderer) {
     : Number(renderer.surfaceSourceFloatLength) || 0;
 }
 
-async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, binding, gate) {
+async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, binding, gate, displaySurfaceOwner) {
   const source = renderer.surfaceVertices;
   const ranges = renderer.surfaceCellRanges;
   const bufferSet = renderer.surfaceBaseBufferSet;
@@ -1076,7 +1076,7 @@ async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, binding, ga
     || renderer.viewOptions?.smoothCellBorders === false || renderer.surfacePatchCells?.size) {
     throw renderInstallError("render-surface-color-patch-base", "当前 surface geometry 不支持原位颜色补丁");
   }
-  assertInPlaceSurfaceBindingTransition(owner, binding);
+  assertInPlaceSurfaceBindingTransition(owner, binding, displaySurfaceOwner);
   const targetOwner = createSurfaceResourceOwner(binding, {
     surfaceFloatLength: source.length,
     correctionWordLength: renderer.cellVisualCorrectionGeometry?.length || 0,
@@ -1206,16 +1206,19 @@ function hasInPlaceSurfaceOwner(renderer, map, patch, phase = "source") {
     && renderer.vertexBuffer === expectedBufferSet?.segments[0]?.buffer);
 }
 
-function assertInPlaceSurfaceBindingTransition(owner, binding) {
+function assertInPlaceSurfaceBindingTransition(owner, binding, displaySurfaceOwner) {
   const source = renderResourceBindingFromOwner(owner);
   const target = normalizeRenderResourceBinding(binding, "preparedInstall.surfacePatch.binding");
   const sourceDelta = target.sourceRevision - source.sourceRevision;
   const topologyDelta = target.topologyRevision - source.topologyRevision;
+  // A display request only recolors its captured geometry. Renames and their
+  // undo/redo advance document revisions without replacing that geometry.
+  const validRevision = displaySurfaceOwner !== undefined
+    ? owner === displaySurfaceOwner && topologyDelta === 0 && sourceDelta >= 0
+    : (sourceDelta === 0 || sourceDelta === 1) && topologyDelta === sourceDelta;
   if (target.mapIdentity !== source.mapIdentity
     || target.renderGeneration !== source.renderGeneration
-    || !new Set([0, 1]).has(sourceDelta)
-    || !new Set([0, 1]).has(topologyDelta)
-    || sourceDelta !== topologyDelta) {
+    || !validRevision) {
     throw renderInstallError("render-surface-color-patch-binding", "surface 颜色补丁与正式资源 owner 不属于同一受控 revision");
   }
 }

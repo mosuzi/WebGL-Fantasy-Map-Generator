@@ -413,6 +413,30 @@ async function testSurfaceColorPatchTransaction() {
 }
 
 async function testInPlaceSurfaceColorPatchTransaction() {
+  const displayRenderer = createRenderer(new FakeGl());
+  const initialOwner = displayRenderer.surfaceResourceOwner;
+  const prepareDisplay = (revision, topology, displaySurfaceOwner, mapIdentity = initialOwner.mapIdentity, generation = initialOwner.renderGeneration) => {
+    const target = resourceBinding(mapIdentity, revision, topology, "display:" + revision, generation);
+    displayRenderer.latestIssuedRenderBinding = target;
+    return prepareRendererWorkerInstall(displayRenderer, displayRenderer.map, createColorPatchPrepared([0.2, 0.3, 0.4, 0.8], target), {
+      binding: target, inPlaceSurfaceColorPatch: true, displaySurfaceOwner, yieldToMain: async () => {}
+    });
+  };
+  const invalid = error => error.code === "render-surface-color-patch-binding";
+  await assert.rejects(prepareDisplay(3, 0, undefined), invalid, "数据重建不可跨过历史版本");
+  await assert.rejects(prepareDisplay(3, 1, initialOwner), invalid);
+  await assert.rejects(prepareDisplay(3, 0, initialOwner, "different-map"), invalid);
+  await assert.rejects(prepareDisplay(3, 0, initialOwner, initialOwner.mapIdentity, 1), invalid);
+  const display = await prepareDisplay(3, 0, initialOwner);
+  await display.prepareCommit();
+  display.commit();
+  display.finalize();
+  const current = displayRenderer.surfaceResourceOwner;
+  assert.equal(current.sourceRevision, 3);
+  assert.equal(current.topologyRevision, 0);
+  await assert.rejects(prepareDisplay(2, 0, current), invalid, "不得回写历史中的旧颜色");
+  await assert.rejects(prepareDisplay(3, 0, initialOwner), invalid, "不能接纳基于过期色面的显示请求");
+
   const gl = new FakeGl();
   const renderer = createRenderer(gl);
   const beforeSet = renderer.surfaceBaseBufferSet;

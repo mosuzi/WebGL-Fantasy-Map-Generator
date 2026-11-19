@@ -66,6 +66,7 @@ assert.throws(() => validateShortcutRegistry([
 ]), /快捷键冲突/);
 
 assert.equal(isEditableShortcutTarget({tagName: "INPUT"}), true);
+assert.equal(isEditableShortcutTarget({tagName: "INPUT", type: "radio"}), true);
 assert.equal(isEditableShortcutTarget({tagName: "TEXTAREA"}), true);
 assert.equal(isEditableShortcutTarget({tagName: "SELECT"}), true);
 assert.equal(isEditableShortcutTarget({tagName: "DIV", isContentEditable: true}), true);
@@ -176,6 +177,22 @@ assert.equal(fake.hint.hidden, true);
 assert.equal(lastError, null);
 controller.destroy();
 
+const viewRadio = {tagName:"INPUT", matches:selector => selector === '.view-mode-segmented input[type="radio"]'};
+const otherRadio = {tagName:"INPUT", matches:() => false};
+const commands = [];
+const historyController = installKeyboardShortcuts(fake.documentRef, {
+  registry: KEYBOARD_SHORTCUTS.filter(item => item.group === "history" || item.id === save.id),
+  execute: item => commands.push(item.id)
+});
+for (const [code, target, composing] of [
+  ["KeyZ", viewRadio, false], ["KeyY", viewRadio, false], ["KeyS", viewRadio, false],
+  ["KeyY", otherRadio, false], ["KeyZ", viewRadio, true]
+]) {
+  fake.dispatch("keydown", keyEvent(code, {ctrlKey:true, target, isComposing:composing}));
+}
+assert.deepEqual(commands, ["history.undo", "history.redo"]);
+historyController.destroy();
+
 const cancel = KEYBOARD_SHORTCUTS.find(item => item.id === "selection.cancel");
 let cancelExecutions = 0;
 const cancelController = installKeyboardShortcuts(fake.documentRef, {
@@ -207,7 +224,7 @@ const canvasModeBlock = appSource.slice(appSource.indexOf("export const CANVAS_T
 const canvasModeKeys = [...canvasModeBlock.matchAll(/^\s{2}([A-Z0-9_]+):\s*"[^"]+"/gm)].map(match => match[1]);
 const registrationScope = appSource.slice(appSource.indexOf("function registerCanvasToolModes"), appSource.indexOf("function enterCanvasToolMode"));
 const registeredCanvasModeKeys = [...registrationScope.matchAll(/CANVAS_TOOL_MODE\.([A-Z0-9_]+)/g)].map(match => match[1]);
-assert.equal(canvasModeKeys.length, 29, "当前运行时画布模式分母漂移时必须重新冻结 Escape 验收");
+assert.equal(canvasModeKeys.length, 30, "当前运行时画布模式分母漂移时必须重新冻结 Escape 验收");
 assert.deepEqual([...new Set(registeredCanvasModeKeys)].sort(), [...canvasModeKeys].sort(), "存在未接入通用注册器的画布模式");
 assert.match(appSource, /invokePublicApi\(documentRef/);
 assert.doesNotMatch(appSource.slice(appSource.indexOf("async function executeKeyboardShortcut"), appSource.indexOf("async function invokePublicApi")), /\.click\(/, "快捷键通过 DOM click 执行动作");

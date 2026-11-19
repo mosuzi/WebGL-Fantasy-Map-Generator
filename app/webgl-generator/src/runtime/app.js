@@ -3389,13 +3389,15 @@ function restoreRuntimeDisplayControls(state, documentRef) {
   syncRuntimeBooleanControl(documentRef.getElementById("smooth-cell-borders"), smoothCellBorders);
   syncRuntimeBooleanControl(documentRef.getElementById("map-edge-fade"), mapEdgeFade);
   syncRuntimeControlValue(documentRef, "max-city-labels", maxCityLabels);
-  updateControlPreferences(documentRef, {colorMode, visualTheme, showOceanHeight, smoothCellBorders, mapEdgeFade, stateBorderBlend, maxCityLabels});
+  const layers = {};
   for (const control of documentRef.querySelectorAll("[data-layer]")) {
     const layer = control.dataset.layer;
     if (!Object.prototype.hasOwnProperty.call(rendererLayers, layer)) continue;
     syncRuntimeBooleanControl(control, rendererLayers[layer]);
-    updateLayerPreference(documentRef, layer, rendererLayers[layer]);
+    layers[layer] = Boolean(rendererLayers[layer]);
   }
+  updateControlPreferences(documentRef, {colorMode, visualTheme, showOceanHeight, smoothCellBorders, mapEdgeFade, stateBorderBlend, maxCityLabels,
+    layers: normalizeLayerVisibilityPreferences(layers)});
   syncLayerGroupControls(documentRef, rendererLayers);
   updateRuntimePanel(documentRef, state);
 }
@@ -3421,16 +3423,18 @@ function createRuntimeActions(state, documentRef, options = {}) {
     const activeName = state.runtimeOperationSnapshot?.current?.name || "";
     const onCommitted = () => {
       if (state.renderer?.workerRenderInstallSuspended > 0) return;
+      const syncAll = intent.isLatestGlobal();
+      if (syncAll) restoreRuntimeDisplayControls(state, documentRef);
       if (intentKey === "view-mode") {
         const colorMode = state.renderer?.colorMode;
         if (colorMode) {
-          setActiveModeButton(documentRef, colorMode);
-          updateControlPreferences(documentRef, {colorMode});
-          updateRuntimePanel(documentRef, state);
+          if (!syncAll) {
+            setActiveModeButton(documentRef, colorMode);
+            updateRuntimePanel(documentRef, state);
+          }
           updatePickPanel(documentRef, state);
         }
       }
-      if (intent.isLatestGlobal()) restoreRuntimeDisplayControls(state, documentRef);
     };
     if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers.")) {
       try {
@@ -4175,6 +4179,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     }
 
     const binding = createRegenerationWorkerBinding(state, operation);
+    const displaySurfaceOwner = renderer.surfaceResourceOwner;
     const renderRequest = createWorkerRegenerationDeferredRenderRequest(state, "display", binding, snapshot);
     const sourceToken = createWorkerRegenerationRenderContextToken(state, "display", {includeViewport: false});
     const sourceViewportToken = createWorkerRegenerationViewportToken(state);
@@ -4223,6 +4228,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
         signal: operation?.signal,
         isCurrent: isSourceCurrent,
         inPlaceSurfaceColorPatch,
+        displaySurfaceOwner,
         onProgress: () => reportDisplayProgress("render-install", "正在更新地图显示")
       });
     } catch (error) {
@@ -4392,7 +4398,6 @@ function setRuntimeViewMode(state, documentRef, mode) {
     state.renderer?.setColorMode?.(nextMode);
     if (state.renderer?.colorMode === nextMode) {
       setActiveModeButton(documentRef, nextMode);
-      updateControlPreferences(documentRef, {colorMode: nextMode});
       updateRuntimePanel(documentRef, state);
       updatePickPanel(documentRef, state);
     }
