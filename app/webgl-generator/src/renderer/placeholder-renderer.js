@@ -67,6 +67,8 @@ import {
   PROVINCE_COLLISION_OPACITY,
   automaticPoliticalLabelOrder,
   placeHomelandLabel,
+  placeStateNumber,
+  stateNumberDiameter,
   resolvePoliticalLabelPlacement,
   restorePoliticalLabelPlacementSnapshot
 } from "./political-label-layout.js";
@@ -5204,10 +5206,13 @@ export class PlaceholderMapRenderer {
       const politicalSnapshot = politicalLabel && preservePoliticalCandidate && unchangedObstacles && (item.visible || item.buffered)
         ? restorePoliticalLabelPlacementSnapshot(item, baseScreen)
         : null;
-      const retainedPoliticalPlacement = politicalSnapshot;
+      const nextNumber = numberedStates.length + 1;
+      const retainedPoliticalPlacement = politicalSnapshot?.number
+        ? placeStateNumber(baseScreen, nextNumber, politicalSnapshot.candidateIndex)
+        : politicalSnapshot;
       const autoState = stateLabel && !item.layout?.locked;
       const politicalPlacement = retainedPoliticalPlacement || (autoState
-        ? layoutStateInHomeland(this, item, baseScreen, rect, occupied, occupiedStates, padding)
+        ? layoutStateInHomeland(this, item, baseScreen, rect, occupied, occupiedStates, padding, nextNumber)
         : politicalLabel ? resolvePoliticalLabelPlacement({
         item,
         screen: baseScreen,
@@ -6800,7 +6805,7 @@ function provinceLabelPlacement(map, province) {
   return isWorldPoint(point) ? {x: point[0], y: point[1], rotation: 0} : null;
 }
 
-function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding) {
+function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding, nextNumber) {
   const scale = renderer.camera.scale;
   const sx = rect.width * scale / renderer.map.metadata.graphWidth;
   const sy = rect.height * scale / renderer.map.metadata.graphHeight;
@@ -6808,18 +6813,13 @@ function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, p
   const fits = (box, margin) => homelandContainsBox(outline,
     item.x + (box.left - margin) / sx, item.y + (box.top - margin) / sy,
     item.x + (box.right + margin) / sx, item.y + (box.bottom + margin) / sy);
-  const mapIdentity = renderer.map.metadata.mapIdentity ?? renderer.map;
-  if (renderer.stateLegendMap !== mapIdentity) {
-    renderer.stateLegendMap = mapIdentity;
-    renderer.stateLegendNumbers = new Map();
-  }
-  return placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding, legendNumbers: renderer.stateLegendNumbers});
+  return placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding, nextNumber});
 }
 
 function updateStateNumberLegend(renderer, states) {
   const legend = renderer.stage?.ownerDocument?.getElementById("state-number-legend");
   if (!legend) return;
-  const entries = states.map(item => [item.displayText, item.text, item.targetId]).sort((a, b) => Number(a[0]) - Number(b[0]));
+  const entries = states.map(item => [item.displayText, item.text, item.targetId]);
   const signature = JSON.stringify(entries);
   if (legend.dataset.entries === signature) return;
   legend.dataset.entries = signature;
@@ -6830,6 +6830,7 @@ function updateStateNumberLegend(renderer, states) {
     const mark = legend.ownerDocument.createElement("span");
     const text = legend.ownerDocument.createElement("span");
     mark.className = "state-legend-number";
+    mark.style.setProperty("--label-box-width", `${stateNumberDiameter(number)}px`);
     setDynamicCanvasTextContent(mark, "legend", number);
     setDynamicCanvasTextContent(text, "legend", name);
     row.append(mark, text);

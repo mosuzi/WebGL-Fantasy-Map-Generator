@@ -122,9 +122,12 @@ assert.match(rendererSource, /priorityLayout \? this\.labelItems : automaticPoli
 assert.match(rendererSource, /preservePoliticalCandidate = this\.viewportInteractionKind === "pan"/, "纯平移没有保留稳定的政治标签候选");
 assert.match(
   rendererSource,
-  /const unchangedObstacles = politicalLabel && sameLabelPrefix\(visibleObstacleItems, item\.politicalObstacleSource, item\.politicalObstacleLength\)[\s\S]*const politicalSnapshot = politicalLabel && preservePoliticalCandidate && unchangedObstacles[\s\S]*restorePoliticalLabelPlacementSnapshot\(item, baseScreen\)[\s\S]*const retainedPoliticalPlacement = politicalSnapshot[\s\S]*let politicalPlacement = retainedPoliticalPlacement \|\| \(politicalLabel \? resolvePoliticalLabelPlacement/,
+  /preservePoliticalCandidate && unchangedObstacles && \(item\.visible \|\| item\.buffered\)\s*\? restorePoliticalLabelPlacementSnapshot\(item, baseScreen\)/,
   "政治标签平移快照没有按当前可见障碍核对复用"
 );
+assert.match(rendererSource, /sameLabelPrefix\(visibleObstacleItems, item\.politicalObstacleSource, item\.politicalObstacleLength\)/);
+assert.match(rendererSource, /retainedPoliticalPlacement \|\| \(autoState\s*\? layoutStateInHomeland[\s\S]*?: politicalLabel \? resolvePoliticalLabelPlacement/,
+  "有效快照应先于本土与一般政治标签布局使用");
 assert.match(rendererSource, /preferredCandidateIndex: null,[\s\S]*retainPreferred: false/,
   "普通重排仍沿用旧避让候选");
 assert.match(rendererSource, /provinceLabel\s*\n\s*\? false/, "省份碰撞仍可能被自动布局完全隐藏");

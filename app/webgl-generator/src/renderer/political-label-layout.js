@@ -65,10 +65,10 @@ function uprightInkBox(x, y, fontSize, style) {
 
 // All automatic state candidates share one homeland anchor. Cache the
 // territory tests across pans. Visible city obstacles are tested afresh.
-export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding, legendNumbers}) {
+export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding, nextNumber}) {
   const baseSize = positive(item.resolvedStyle.fontSize, 30);
   const short = item.state?.name?.trim() || item.text;
-  const names = scale < 1 ? [short] : [...new Set([item.text, short])];
+  const names = item.text === short ? [item.text] : [item.text, short];
   const size = baseSize * Math.min(1, Math.max(0.5, Math.sqrt(scale)));
   const sizes = [size];
   const floor = Math.min(size, Math.max(11, baseSize * 0.48));
@@ -84,15 +84,18 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles
     item.homelandCandidates = {key, style: item.resolvedStyle, layouts: new Map()};
   }
   let index = 0;
-  for (const fontSize of sizes) {
-    let fallback = null;
-    for (const name of fontSize === size ? names : [short]) {
-      for (const [space, curve] of [[0, 0], [0.22, 0], [0.5, 0], [0.85, 0], [0, -0.7], [0, 0.7], [0.35, -1.15], [0.35, 1.15]]) {
+  let fallback = null;
+  const snugSpacing = 1 - Math.max(STATE_MIN_LETTER_SPACING, finite(item.resolvedStyle.letterSpacing));
+  for (const name of names) {
+    for (const fontSize of sizes) {
+      let overlapping = null;
+      for (const [extraSpacing, curve] of [[0, 0], [snugSpacing, 0], [0.22 * fontSize, 0], [0.5 * fontSize, 0], [0.85 * fontSize, 0],
+        [0, -0.7], [0, 0.7], [0.35 * fontSize, -1.15], [0.35 * fontSize, 1.15]]) {
         const candidateIndex = index++;
         const layouts = item.homelandCandidates.layouts;
         if (!layouts.has(candidateIndex)) {
           const layout = createPoliticalLabelGlyphLayout(name, {...item.resolvedStyle, fontSize}, {
-            targetKind: "state", upright: true, rotation, bend: curve * fontSize, extraSpacing: space * fontSize
+            targetKind: "state", upright: true, rotation, bend: curve * fontSize, extraSpacing
           });
           layouts.set(candidateIndex, layout.glyphs.every(glyph => fits(glyph.box, Math.max(2, fontSize * 0.12))) ? layout : null);
         }
@@ -106,19 +109,27 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles
           cityCollides: city.count > 0, peerCollides: peer.count > 0, collides: city.count + peer.count > 0};
         if (!candidate.collides) return candidate;
         const cost = peer.area * 10 + city.area;
-        if (!fallback || cost < fallback.cost) fallback = {...candidate, cost};
+        if (!overlapping || (candidate.peerCollides !== overlapping.peerCollides ? !candidate.peerCollides : cost < overlapping.cost)) {
+          overlapping = {...candidate, cost};
+        }
       }
+      if (overlapping && (!fallback || (fallback.peerCollides && !overlapping.peerCollides))) fallback = overlapping;
     }
-    if (fallback) return fallback;
   }
-  // Allocate only for countries that actually need a key. Keep it across camera changes.
-  if (!legendNumbers.has(item.targetId)) legendNumbers.set(item.targetId, legendNumbers.size + 1);
-  const number = String(legendNumbers.get(item.targetId));
-  const fontSize = 10;
-  const diameter = Math.max(13, number.length * 6 + 4);
+  return fallback || placeStateNumber(screen, nextNumber, index);
+}
+
+export function stateNumberDiameter(number) {
+  return Math.max(20, String(number).length * 9 + 4);
+}
+
+export function placeStateNumber(screen, ordinal, candidateIndex) {
+  const number = String(ordinal);
+  const fontSize = 16;
+  const diameter = stateNumberDiameter(number);
   const box = {left: -diameter / 2, right: diameter / 2, top: -diameter / 2, bottom: diameter / 2};
   return {anchor: screen, box: translateBox(box, screen.x, screen.y), rootSize: {width: diameter, height: diameter}, fontSize,
-    glyphs: [{character: number, x: 0, y: 0, angle: 0}], number, candidateIndex: index, bend: 0, collides: false, cityCollides: false};
+    glyphs: [{character: number, x: 0, y: 0, angle: 0}], number, candidateIndex, bend: 0, collides: false, cityCollides: false};
 }
 
 export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], peers = [], viewport, padding = 0, locked = false, anchorAllowed = null, preferredCandidateIndex = null, retainPreferred = false} = {}) {

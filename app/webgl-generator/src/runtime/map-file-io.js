@@ -2822,6 +2822,7 @@ function drawFixedMapUiElements(documentRef, context, canvasRect, scale, options
       drawScaleBarElement(context, element, canvasRect, scale);
     } else if (element.id === "state-number-legend") {
       const panel = elementBox(element, canvasRect, scale);
+      if (!panel || !boxIntersectsCanvas(panel, context.canvas)) continue;
       if (element.scrollHeight > element.clientHeight) {
         drawFullStateNumberLegend(context, element, panel, scale);
         continue;
@@ -2833,7 +2834,8 @@ function drawFixedMapUiElements(documentRef, context, canvasRect, scale, options
       drawStyledPanel(context, panel, element.ownerDocument.defaultView.getComputedStyle(element), scale);
       for (const row of element.children) {
         const [number, name] = row.children;
-        drawSimpleTextElement(context, number, canvasRect, scale, {align: "right"});
+        drawNumberRing(context, number, canvasRect, scale);
+        drawSimpleTextElement(context, number, canvasRect, scale, {align: "center"});
         drawSimpleTextElement(context, name, canvasRect, scale, {align: "left"});
       }
       context.restore();
@@ -2847,45 +2849,53 @@ function drawFixedMapUiElements(documentRef, context, canvasRect, scale, options
 // columns, keeping the complete key on the exported page.
 function drawFullStateNumberLegend(context, element, panel, scale) {
   const style = element.ownerDocument.defaultView.getComputedStyle(element);
-  const entries = Array.from(element.children, row => Array.from(row.children, child => child.textContent));
+  const entries = Array.from(element.children, row => {
+    const [mark, name] = row.children;
+    const diameter = parseFloat(element.ownerDocument.defaultView.getComputedStyle(mark).width);
+    return {number: mark.textContent, name: name.textContent, diameter};
+  });
   if (!entries.length) return;
   context.save();
   context.font = cssCanvasFont(style, scale.y);
   const font = cssPixelValue(style.fontSize, scale.y);
-  const rowHeight = Math.ceil(font * 1.4);
+  const maxDiameter = Math.max(...entries.map(entry => entry.diameter));
+  const rowHeight = Math.ceil(Math.max(maxDiameter * scale.y + scale.y, font * 1.25));
   const inset = font * 0.5;
-  const nameWidth = Math.max(...entries.map(([, name]) => context.measureText(name).width));
+  const nameWidth = Math.max(...entries.map(({name}) => context.measureText(name).width));
   const numberStyle = element.ownerDocument.defaultView.getComputedStyle(element.firstElementChild.firstElementChild);
   const numberFont = cssCanvasFont(numberStyle, scale.y);
-  context.font = numberFont;
-  const numberWidth = Math.max(...entries.map(([number]) => context.measureText(number).width));
+  const numberWidth = maxDiameter * scale.x;
   const colWidth = numberWidth + font + nameWidth;
+  const availableWidth = context.canvas.width - Math.max(0, panel.x);
+  const availableHeight = Math.min(context.canvas.height, panel.y + panel.height);
   let rows = Math.max(1, Math.floor((Math.max(panel.height, rowHeight + 2 * inset) - 2 * inset) / rowHeight));
-  if (Math.ceil(entries.length / rows) * colWidth + 2 * inset > context.canvas.width) {
-    rows = Math.max(rows, Math.floor((context.canvas.height - 2 * inset) / rowHeight));
+  if (Math.ceil(entries.length / rows) * colWidth + 2 * inset > availableWidth) {
+    rows = Math.max(rows, Math.floor((availableHeight - 2 * inset) / rowHeight));
   }
   rows = Math.min(entries.length, rows);
   const width = Math.ceil(entries.length / rows) * colWidth + 2 * inset;
   const height = rows * rowHeight + 2 * inset;
-  const factor = Math.min(1, context.canvas.width / width, context.canvas.height / height);
-  const left = Math.max(0, Math.min(context.canvas.width, panel.x + panel.width) - width * factor);
-  const top = Math.max(0, Math.min(panel.y, context.canvas.height - height * factor));
+  const factor = Math.min(1, availableWidth / width, availableHeight / height);
+  const left = Math.max(0, panel.x);
+  const top = availableHeight - height * factor;
   context.translate(left, top);
   context.scale(factor, factor);
   drawStyledPanel(context, {x:0, y:0, width, height}, style, scale);
   context.textBaseline = "middle";
   const columns = Math.ceil(entries.length / rows);
-  entries.forEach(([number, name], index) => {
-    const x = inset + index % columns * colWidth + numberWidth;
+  entries.forEach(({number, name, diameter}, index) => {
+    const x = inset + index % columns * colWidth + numberWidth / 2;
     const y = inset + (Math.floor(index / columns) + 0.5) * rowHeight;
+    const w = diameter * scale.x, h = diameter * scale.y;
+    paintNumberRing(context, {x:x-w/2, y:y-h/2, width:w, height:h}, numberStyle, scale);
     context.font = numberFont;
     context.fillStyle = numberStyle.color;
-    context.textAlign = "right";
+    context.textAlign = "center";
     context.fillText(number, x, y);
     context.font = cssCanvasFont(style, scale.y);
     context.fillStyle = style.color;
     context.textAlign = "left";
-    context.fillText(name, x + font * 0.35, y);
+    context.fillText(name, x + numberWidth / 2 + font * 0.25, y);
   });
   context.restore();
 }
@@ -3083,9 +3093,11 @@ function drawTextOverlayElement(context, element, canvasRect, scale) {
 
 function drawNumberRing(context, element, canvasRect, scale) {
   const box = elementBox(element, canvasRect, scale);
-  if (!box) return;
+  if (box) paintNumberRing(context, box, element.ownerDocument.defaultView.getComputedStyle(element), scale);
+}
+
+function paintNumberRing(context, box, style, scale) {
   context.save();
-  const style = element.ownerDocument.defaultView.getComputedStyle(element);
   context.strokeStyle = style.borderColor;
   context.lineWidth = Math.min(scale.x, scale.y);
   context.beginPath();

@@ -137,7 +137,7 @@ assert.equal(homelandContainsBox(outline,3,3,57,57),false,"四角在境内仍不
 assert.equal(homelandContainsBox(outline,3,3,60,18),false,"不能贴边");
 const label = {text:"燕王国", state:{name:"燕"}, targetId:71, resolvedStyle:{fontSize:20}, rotation:90, x:0, y:0};
 const place = (overrides={}) => placeHomelandLabel({item:{...label}, screen:{x:0,y:0}, sx:1,sy:1, scale:1,
-  fits:()=>true, obstacles:[],peers:[],padding:0,legendNumbers:new Map(),...overrides});
+  fits:()=>true, obstacles:[],peers:[],padding:0,nextNumber:1,...overrides});
 const linear = place();
 assert.ok(linear.glyphs.every(g => g.angle === 0 && Math.abs(g.x) < 0.01));
 assert.equal(linear.glyphs.map(g=>g.character).join(""),label.text);
@@ -152,17 +152,25 @@ assert.ok(arced.bend && arced.glyphs.every(g => g.angle === 0), "中心障碍应
 assert.deepEqual(arced.anchor,linear.anchor);
 const overlap = place({obstacles:[{left:-500,right:500,top:-500,bottom:500}]});
 assert.ok(overlap.cityCollides && !overlap.number);
-const short = place({scale:0.8});
+const overview = place({scale:0.8});
+assert.equal(overview.glyphs.map(g=>g.character).join(""),label.text);
+const within = halfWidth => (box, margin) => box.left-margin >= -halfWidth && box.right+margin <= halfWidth;
+const snug = place({item:{...label,rotation:0},fits:within(34)});
+assert.equal(snug.glyphs.map(g=>g.character).join(""),label.text);
+assert.equal(snug.fontSize,linear.fontSize);
+assert.equal(snug.spacing,1);
+const reduced = place({item:{...label,rotation:0},scale:0.8,fits:within(27)});
+assert.equal(reduced.glyphs.map(g=>g.character).join(""),label.text);
+assert.ok(reduced.fontSize < overview.fontSize, "稍微缩小全称即可容纳时应保留政体");
+const short = place({item:{...label,rotation:0},scale:0.8,fits:within(13)});
 assert.equal(short.glyphs.map(g=>g.character).join(""),"燕");
 assert.ok(short.fontSize < linear.fontSize);
-const legendNumbers = new Map();
-const fallback = id => place({item:{...label, targetId:id}, fits:()=>false, legendNumbers});
-assert.equal(fallback(4009).number,"1");
-assert.equal(fallback(2545).number,"2");
-assert.equal(fallback(4009).rootSize.width,13);
-for (let index = 3; index <= 10; index++) assert.equal(fallback(5000 + index).number, String(index));
-assert.equal(fallback(5010).rootSize.width,16);
-assert.equal(fallback(4009).number,"1");
+for (const [nextNumber, diameter] of [[1,20], [9,20], [10,22], [100,31]]) {
+  const badge = place({item:{...label, targetId:4009}, fits:()=>false, nextNumber});
+  assert.equal(badge.number,String(nextNumber));
+  assert.equal(badge.fontSize,16);
+  assert.deepEqual(badge.rootSize,{width:diameter,height:diameter});
+}
 const offsetShadow = place({item:{...label,text:"田",state:{name:"田"},resolvedStyle:{fontSize:20,shadowOffsetX:20}},
   fits:(box,gap)=>box.left-gap > -24 && box.right+gap < 24});
 assert.equal(offsetShadow.number,"1","向右的字影不能越过右侧国界");

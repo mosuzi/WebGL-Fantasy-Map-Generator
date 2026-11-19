@@ -51,21 +51,34 @@ try {
       await legend.waitFor({state:"visible"});
       const readKey = () => legend.evaluate(el => {
         const items = window.__webglGeneratorApp.renderer.labelItems.filter(item => item.visible && item.numbered);
-        const rows = [...el.children].map(row => {
+        const rows = [...el.children].map((row, index) => {
           const id = Number(row.dataset.stateId);
           const item = items.find(item => item.targetId === id);
           const glyph = item?.glyphNodes[0];
           const box = glyph?.getBoundingClientRect();
           const number = Number(row.firstElementChild.textContent);
+          const mark = row.firstElementChild;
+          const keyBox = mark.getBoundingClientRect();
           if (!box || glyph.textContent !== String(number) || row.lastElementChild.textContent !== item.text
-            || Math.abs(box.width - box.height) > 0.5 || Math.abs(box.width - Math.max(13, String(number).length * 6 + 4)) > 0.6) {
+            || number !== index + 1 || [glyph, mark].some(node => getComputedStyle(node).fontSize !== "16px")
+            || getComputedStyle(mark).borderRadius !== "50%" || Math.abs(keyBox.width - keyBox.height) > 0.5
+            || Math.abs(keyBox.width - box.width) > 0.6 || Math.abs(box.width - box.height) > 0.5
+            || Math.abs(box.width - Math.max(20, String(number).length * 9 + 4)) > 0.6) {
             throw Error("图上圈号、直径与国名图例不符：" + JSON.stringify({id, number, width:box?.width}));
           }
           return {id, number, diameter:Math.round(box.width)};
         });
         if (rows.length !== items.length || new Set(rows.map(row => row.number)).size !== rows.length) throw Error("圈号遗漏或重复");
         const box = el.getBoundingClientRect();
-        return {rows, height:box.height, width:box.width, columns:getComputedStyle(el).gridTemplateColumns.split(" ").length};
+        const scale = document.querySelector("#map-scale-bar").getBoundingClientRect();
+        if (scale.width && (Math.abs(scale.left-box.left) > 1 || Math.abs(scale.top-box.bottom-6) > 1)) throw Error("图例与比例尺未对齐");
+        const names = {full:[], short:[]};
+        for (const item of window.__webglGeneratorApp.renderer.labelItems) {
+          if (item.visible && item.targetKind === "state" && !item.numbered) {
+            names[item.displayText === item.text ? "full" : "short"].push(item.displayText);
+          }
+        }
+        return {rows, names, height:box.height, width:box.width, columns:getComputedStyle(el).gridTemplateColumns.split(" ").length};
       });
       const before = await readKey();
       assert.ok(before.height <= 125 && before.rows.every(row => row.number > 0 && row.number < 100));
@@ -114,17 +127,24 @@ try {
         const legend = document.querySelector("#state-number-legend");
         legend.style.maxHeight = "18px";
         legend.scrollTop = legend.scrollHeight;
-        const names = Array.from(legend.children, row => row.lastChild.textContent);
-        const drawn = new Set();
+        const entries = Array.from(legend.children, row => [row.firstChild.textContent, row.lastChild.textContent]);
+        const drawn = [];
         const original = CanvasRenderingContext2D.prototype.fillText;
+        const ellipse = CanvasRenderingContext2D.prototype.ellipse;
         try {
+          CanvasRenderingContext2D.prototype.ellipse = function(...args) {
+            drawn.push(null);
+            return ellipse.apply(this, args);
+          };
           CanvasRenderingContext2D.prototype.fillText = function(text, ...args) {
-            drawn.add(text);
+            drawn.push(text);
             return original.call(this, text, ...args);
           };
           const result = await window.webglGeneratorApi.data.exportPNG({download:false, includeMapOverlays:true, crop:{mode:"viewport"}});
-          if (!result.ok || names.some(name => !drawn.has(name))) throw Error("导出时遗漏滚动窗口外的国名");
+          if (!result.ok || entries.some(([number, name]) => !drawn.some((text, i) =>
+            text === name && drawn[i-1] === number && drawn[i-2] === null))) throw Error("导出时遗漏圈号或对应的全称");
         } finally {
+          CanvasRenderingContext2D.prototype.ellipse = ellipse;
           CanvasRenderingContext2D.prototype.fillText = original;
           legend.style.maxHeight = "";
         }
@@ -144,14 +164,31 @@ try {
       await page.waitForTimeout(300);
       const after = await readKey();
       const shared = before.rows.filter(row => after.rows.some(other => other.id === row.id));
-      assert.ok(shared.length && shared.every(row => after.rows.find(other => other.id === row.id).number === row.number));
+      assert.ok(shared.length);
+      if (shared.length === before.rows.length && shared.length === after.rows.length) assert.deepEqual(after.rows, before.rows);
       console.log(JSON.stringify({legendState:id, exportDiff, before, shared:shared.length}));
       if (archive) {
+        const firstMark = await page.locator(".state-label--number.visible .political-label-glyph").evaluateAll(
+          nodes => nodes.find(node => node.textContent === "1").getBoundingClientRect().x);
+        const offset = Math.ceil(firstMark + 42);
+        await page.mouse.move(1400,400);
+        await page.mouse.down({button:"middle"});
+        await page.mouse.move(1400-offset,400,{steps:4});
+        await page.mouse.up({button:"middle"});
+        await page.waitForFunction(id => !document.querySelector('#state-number-legend [data-state-id="' + id + '"]'), after.rows[0].id);
+        const subset = await readKey();
+        assert.ok(subset.rows.length && subset.rows.length < after.rows.length && subset.rows[0].number === 1);
+        await page.mouse.down({button:"middle"});
+        await page.mouse.move(1400,400,{steps:4});
+        await page.mouse.up({button:"middle"});
+        await page.waitForFunction(id => document.querySelector('#state-number-legend [data-state-id="' + id + '"]'), after.rows[0].id);
+        assert.deepEqual((await readKey()).rows,after.rows);
         await page.mouse.move(720,450);
         await page.mouse.wheel(0,650);
         await page.waitForFunction(s => window.__webglGeneratorApp.renderer.camera.scale < s * 0.65, scaleBefore);
         await page.waitForTimeout(350);
         const overview = await readKey();
+        assert.ok(overview.names.full.length && overview.names.short.length, "远景应同时保留能容纳的全称和受限国家的简称");
         assert.ok(overview.rows.length >= 7 && overview.columns === 2 && overview.height <= 125, JSON.stringify(overview));
         if (process.env.FMG_LEGEND_OVERVIEW) {
           await page.locator("#open-generation-panel").hover();
@@ -165,7 +202,7 @@ try {
         const narrow = await readKey();
         assert.ok(narrow.rows.length && narrow.columns === 1 && narrow.height <= 125 && narrow.width < 176);
         assert.deepEqual(errors, []);
-        reports.push({cellsTarget, archive:true, overview, narrow});
+        reports.push({cellsTarget, archive:true, subset, overview, narrow});
         await page.close();
         continue;
       }
