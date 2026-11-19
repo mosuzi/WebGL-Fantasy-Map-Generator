@@ -63,9 +63,9 @@ function indexEdges(cells, rings, vertices, step) {
 // Sample inland spans along the country's long axis. Split at bays, holes
 // and enclaves, using both the homeland and the visible grid shoreline.
 export function homelandLabelSites(outline, x, y, rotation) {
-  if (!outline) return [];
+  if (!outline) return {sites: [], banks: []};
   const cached = outline.labelSites;
-  if (cached && cached.x === x && cached.y === y && cached.rotation === rotation) return cached.sites;
+  if (cached && cached.x === x && cached.y === y && cached.rotation === rotation) return cached;
   const angle = rotation * Math.PI / 180;
   const cos = Math.cos(angle), sin = Math.sin(angle);
   const project = ({a, b}) => [
@@ -80,11 +80,16 @@ export function homelandLabelSites(outline, x, y, rotation) {
     high = Math.max(high, firstY, lastY);
   }
   const candidates = [];
-  const scanRows = 15;
+  const banks = [];
+  const centerAlong = x * cos + y * sin;
+  const scanRows = 45;
   for (let row = 0; row < scanRows; row++) {
     const across = low + (row + 0.5) / scanRows * (high - low);
     const packCuts = scanCrossings(pack, across);
     const gridCuts = grid ? scanCrossings(grid, across) : packCuts;
+    const sampleInterior = row % 3 === 1;
+    if (!sampleInterior && packCuts.length <= 2 && gridCuts.length <= 2) continue;
+    const spans = [];
     for (let i = 0, j = 0; i + 1 < packCuts.length && j + 1 < gridCuts.length;) {
       const start = Math.max(packCuts[i], gridCuts[j]);
       const packEnd = packCuts[i + 1], gridEnd = gridCuts[j + 1];
@@ -95,10 +100,26 @@ export function homelandLabelSites(outline, x, y, rotation) {
         const halfSpan = (end - start) / 2;
         const room = inlandClearance(outline, px, py, halfSpan);
         const score = Math.min(halfSpan, room * 2.5) - 0.18 * Math.hypot(px - x, py - y);
-        if (room > 0) candidates.push({x: px, y: py, room, score});
+        if (room > 0) {
+          if (sampleInterior) candidates.push({x: px, y: py, room, score});
+          spans.push({start, end, room, along});
+        }
       }
       if (packEnd <= gridEnd) i += 2;
       if (gridEnd <= packEnd) j += 2;
+    }
+    // A name can straddle a bay when useful inland spans flank the centre.
+    // Ignore narrow shoreline fragments when identifying the two banks.
+    const substantial = spans.filter(span => span.room >= (high - low) / 25);
+    for (let i = 1; i < substantial.length; i++) {
+      const left = substantial[i - 1], right = substantial[i];
+      const gap = right.start - left.end;
+      if (left.along >= centerAlong || right.along <= centerAlong || gap <= 0) continue;
+      if (gap > Math.min(left.end - left.start, right.end - right.start)) continue;
+      const along = (left.end + right.start) / 2;
+      const px = along * cos - across * sin, py = along * sin + across * cos;
+      const score = Math.min(left.room, right.room) - 0.35 * Math.hypot(px - x, py - y);
+      banks.push({x: px, y: py, gap, score});
     }
   }
   const sites = homelandContainsBox(outline, x, y, x, y) ? [{x, y}] : [];
@@ -107,8 +128,9 @@ export function homelandLabelSites(outline, x, y, rotation) {
     if (sites.every(site => Math.hypot(site.x - candidate.x, site.y - candidate.y) > separation)) sites.push(candidate);
     if (sites.length === 5) break;
   }
-  outline.labelSites = {x, y, rotation, sites};
-  return sites;
+  banks.sort((a, b) => b.score - a.score);
+  outline.labelSites = {x, y, rotation, sites, banks: banks.slice(0, 8)};
+  return outline.labelSites;
 }
 
 function inlandClearance(outline, x, y, limit) {

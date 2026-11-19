@@ -1,5 +1,7 @@
 const STATE_MIN_LETTER_SPACING = 2.4;
 const PROVINCE_MIN_LETTER_SPACING = 0.7;
+const BANK_INSETS = [0.25, 0.8, 1.35, 1.9];
+const NO_BANKS = [];
 
 export const PROVINCE_COLLISION_OPACITY = 0.76;
 
@@ -12,13 +14,13 @@ export function automaticPoliticalLabelOrder(items = []) {
   ));
 }
 
-export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "province", rotation = 0, bend = 0, extraSpacing = 0, upright = false} = {}) {
+export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "province", rotation = 0, bend = 0, extraSpacing = 0, upright = false, splitAt = 0, extraGap = 0} = {}) {
   const characters = Array.from(String(text || ""));
   if (!characters.length) return {glyphs: [], box: emptyBox(), spacing: 0, bend: 0, rotation: 0};
   const fontSize = positive(style?.fontSize, targetKind === "state" ? 30 : 18);
   const spacing = Math.max(finite(style?.letterSpacing), targetKind === "state" ? STATE_MIN_LETTER_SPACING : PROVINCE_MIN_LETTER_SPACING) + extraSpacing;
   const advances = characters.map(character => upright ? fontSize : characterAdvance(character, fontSize));
-  const totalWidth = advances.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, characters.length - 1);
+  const totalWidth = advances.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, characters.length - 1) + extraGap;
   const halfSpan = Math.max(fontSize / 2, totalWidth / 2);
   const glyphHeight = fontSize * 1.28 + labelDecorationSize(style);
   const baseRadians = finite(rotation) * Math.PI / 180;
@@ -38,12 +40,14 @@ export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "prov
     const bounds = upright ? uprightInkBox(x, y, fontSize, style) : rotatedGlyphBox(x, y, width, glyphHeight, angle);
     box = unionBoxes(box, bounds);
     cursor += advances[index] + spacing;
+    if (index + 1 === splitAt) cursor += extraGap;
     return {character, x: round(x), y: round(y), angle: round(angle), width: round(width), height: round(glyphHeight), box: roundBox(bounds)};
   });
   return {
     glyphs,
     box: roundBox(box || emptyBox()),
     spacing: round(spacing),
+    splitAt,
     bend: round(bend),
     rotation: round(rotation)
   };
@@ -64,9 +68,9 @@ function uprightInkBox(x, y, fontSize, style) {
 }
 
 // Cache geometric fits across pans. Visible city obstacles are tested afresh.
-export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, obstacles, peers, padding}) {
+export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, banks = NO_BANKS, obstacles, peers, padding}) {
   const anchors = sites ?? [item];
-  if (!anchors.length) return null;
+  if (!anchors.length && !banks.length) return null;
   const baseSize = positive(item.resolvedStyle.fontSize, 30);
   const short = item.state?.name?.trim() || item.text;
   const names = item.text === short ? [item.text] : [item.text, short];
@@ -81,8 +85,9 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, ob
   const direction = (Math.abs(dy) > Math.abs(dx) ? dy : dx) < 0 ? -1 : 1;
   const rotation = Math.atan2(direction * dy, direction * dx) * 180 / Math.PI;
   const key = [sx, sy, item.x, item.y, item.rotation, item.text, short, scale].join("|");
-  if (item.homelandCandidates?.key !== key || item.homelandCandidates.style !== item.resolvedStyle || item.homelandCandidates.sites !== sites) {
-    item.homelandCandidates = {key, style: item.resolvedStyle, sites, layouts: new Map()};
+  const cached = item.homelandCandidates;
+  if (cached?.key !== key || cached.style !== item.resolvedStyle || cached.sites !== sites || cached.banks !== banks) {
+    item.homelandCandidates = {key, style: item.resolvedStyle, sites, banks, layouts: new Map(), bankLayouts: new Map()};
   }
   let index = 0;
   let fallback = null;
@@ -90,6 +95,31 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, ob
   for (const name of names) {
     for (const fontSize of sizes) {
       let overlapping = null;
+      const consider = (layout, site, candidateIndex) => {
+        const anchor = {x: screen.x + (site.x - item.x) * sx, y: screen.y + (site.y - item.y) * sy};
+        const box = translateBox(layout.box, anchor.x, anchor.y);
+        const glyphs = layout.glyphs.map(glyph => ({...glyph, box: translateBox(glyph.box, anchor.x, anchor.y)}));
+        const city = overlapSummary(glyphs, box, obstacles, padding);
+        const peer = overlapSummary(glyphs, box, peers, padding);
+        const candidate = {
+          ...layout, anchor, box, glyphs, fontSize, candidateIndex, rootSize: symmetricRootSize(layout.box, fontSize),
+          cityCollides: city.count > 0, peerCollides: peer.count > 0, collides: city.count + peer.count > 0
+        };
+        if (!candidate.collides) return candidate;
+        const cost = peer.area * 10 + city.area;
+        if (!overlapping || (candidate.peerCollides !== overlapping.peerCollides ? !candidate.peerCollides : cost < overlapping.cost)) {
+          overlapping = {...candidate, cost};
+        }
+        return null;
+      };
+      if (banks.length && Array.from(name).length >= 2) {
+        const cache = item.homelandCandidates.bankLayouts;
+        if (!cache.has(index)) cache.set(index, bankLabelLayouts({name, short, fontSize, item, sx, sy, rotation, banks, fits, axisScale: Math.hypot(dx, dy)}));
+        for (const {layout, site, bankIndex} of cache.get(index)) {
+          const result = consider(layout, site, -(1 + index * banks.length * BANK_INSETS.length ** 2 + bankIndex));
+          if (result) return result;
+        }
+      }
       for (const [extraSpacing, curve] of [[0, 0], [snugSpacing, 0], [0.22 * fontSize, 0], [0.5 * fontSize, 0], [0.85 * fontSize, 0],
         [0, -0.7], [0, 0.7], [0.35 * fontSize, -1.15], [0.35 * fontSize, 1.15]]) {
         const shapeIndex = index++;
@@ -104,27 +134,45 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, ob
         for (const [siteIndex, site] of anchors.entries()) {
           valid[siteIndex] ??= layout.glyphs.every(glyph => fits(glyph.box, Math.max(2, fontSize * 0.12), site));
           if (!valid[siteIndex]) continue;
-          const anchor = {x: screen.x + (site.x - item.x) * sx, y: screen.y + (site.y - item.y) * sy};
-          const box = translateBox(layout.box, anchor.x, anchor.y);
-          const glyphs = layout.glyphs.map(glyph => ({...glyph, box: translateBox(glyph.box, anchor.x, anchor.y)}));
-          const city = overlapSummary(glyphs, box, obstacles, padding);
-          const peer = overlapSummary(glyphs, box, peers, padding);
-          const candidate = {
-            ...layout, anchor, box, glyphs, fontSize, candidateIndex: shapeIndex * anchors.length + siteIndex,
-            rootSize: symmetricRootSize(layout.box, fontSize),
-            cityCollides: city.count > 0, peerCollides: peer.count > 0, collides: city.count + peer.count > 0
-          };
-          if (!candidate.collides) return candidate;
-          const cost = peer.area * 10 + city.area;
-          if (!overlapping || (candidate.peerCollides !== overlapping.peerCollides ? !candidate.peerCollides : cost < overlapping.cost)) {
-            overlapping = {...candidate, cost};
-          }
+          const result = consider(layout, site, shapeIndex * anchors.length + siteIndex);
+          if (result) return result;
         }
       }
       if (overlapping && (!fallback || (fallback.peerCollides && !overlapping.peerCollides))) fallback = overlapping;
     }
   }
   return fallback;
+}
+
+function bankLabelLayouts({name, short, fontSize, item, sx, sy, rotation, banks, fits, axisScale}) {
+  const count = Array.from(name).length;
+  const stemLength = Array.from(short).length;
+  let splitAt = Math.ceil(count / 2);
+  if (name !== short && name.startsWith(short)) splitAt = stemLength;
+  else if (name !== short && name.endsWith(short)) splitAt = count - stemLength;
+  const spacing = Math.max(STATE_MIN_LETTER_SPACING, finite(item.resolvedStyle.letterSpacing));
+  const radians = rotation * Math.PI / 180;
+  // Centre the word break over the channel, even if the two groups differ in length.
+  const groupOffset = (count / 2 - splitAt) * (fontSize + spacing);
+  const maxGap = (Math.min(splitAt, count - splitAt) === 1 ? 2 : 4) * fontSize;
+  const valid = [];
+  for (const [i, bank] of banks.entries()) {
+    for (const [j, leftInset] of BANK_INSETS.entries()) {
+      for (const [k, rightInset] of BANK_INSETS.entries()) {
+        const gap = bank.gap * axisScale + (leftInset + rightInset) * fontSize;
+        if (gap > maxGap) break;
+        const shift = groupOffset + (rightInset - leftInset) * fontSize / 2;
+        const site = {x: bank.x + shift * Math.cos(radians) / sx, y: bank.y + shift * Math.sin(radians) / sy};
+        const layout = createPoliticalLabelGlyphLayout(name, {...item.resolvedStyle, fontSize}, {
+          targetKind: "state", upright: true, rotation, splitAt, extraGap: Math.max(0, gap - spacing)
+        });
+        if (layout.glyphs.every(glyph => fits(glyph.box, Math.max(2, fontSize * 0.12), site))) {
+          valid.push({layout, site, bankIndex: (i * BANK_INSETS.length + j) * BANK_INSETS.length + k});
+        }
+      }
+    }
+  }
+  return valid;
 }
 
 export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], peers = [], viewport, padding = 0, locked = false, anchorAllowed = null, preferredCandidateIndex = null, retainPreferred = false} = {}) {
@@ -189,13 +237,16 @@ export function restorePoliticalLabelPlacementSnapshot(item, screen) {
     || typeof snapshot.collides !== "boolean"
     || typeof snapshot.cityCollides !== "boolean") return null;
   const anchor = {x: finite(screen?.x) + offsetX, y: finite(screen?.y) + offsetY};
+  const dx = anchor.x - (snapshot.anchor?.x ?? anchor.x);
+  const dy = anchor.y - (snapshot.anchor?.y ?? anchor.y);
   return {
     anchor,
     fontSize: snapshot.fontSize,
     candidateIndex: snapshot.candidateIndex,
+    splitAt: snapshot.splitAt,
     bend: snapshot.bend,
     rootSize: snapshot.rootSize,
-    glyphs: snapshot.glyphs,
+    glyphs: dx || dy ? snapshot.glyphs.map(glyph => ({...glyph, box: translateBox(glyph.box, dx, dy)})) : snapshot.glyphs,
     box: {
       left: anchor.x + boxOffset.left,
       right: anchor.x + boxOffset.right,
@@ -271,7 +322,9 @@ function overlapSummary(glyphs, candidateBox, boxes, padding) {
     const obstacle = boxes[index];
     if (!boxesOverlap(candidateBox, obstacle, padding)) continue;
     for (const glyph of glyphs) {
-      const overlap = overlapArea(glyph.box, obstacle, padding);
+      const overlap = obstacle.parts
+        ? obstacle.parts.reduce((sum, part) => sum + overlapArea(glyph.box, part, padding), 0)
+        : overlapArea(glyph.box, obstacle, padding);
       if (overlap <= 0) continue;
       count++;
       area += overlap;
@@ -322,9 +375,10 @@ function labelDecorationSize(style) {
 }
 
 function rotatedGlyphBox(x, y, width, height, angle) {
-  const radians = Math.abs(angle) * Math.PI / 180;
-  const boxWidth = width * Math.cos(radians) + height * Math.sin(radians);
-  const boxHeight = width * Math.sin(radians) + height * Math.cos(radians);
+  const radians = angle * Math.PI / 180;
+  const cos = Math.abs(Math.cos(radians)), sin = Math.abs(Math.sin(radians));
+  const boxWidth = width * cos + height * sin;
+  const boxHeight = width * sin + height * cos;
   return {left: x - boxWidth / 2, right: x + boxWidth / 2, top: y - boxHeight / 2, bottom: y + boxHeight / 2};
 }
 

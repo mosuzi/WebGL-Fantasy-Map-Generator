@@ -5219,6 +5219,7 @@ export class PlaceholderMapRenderer {
       const screen = politicalPlacement?.anchor || baseScreen;
       const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
       const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
+      if (stateLabel && politicalPlacement) box.parts = politicalPlacement.glyphs.map(glyph => glyph.box);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const prewarm = politicalLabel ? politicalPrewarm : labelPrewarm;
       const canBuffer = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;
@@ -5672,6 +5673,7 @@ export class PlaceholderMapRenderer {
       if (item.targetKind === LABEL_TARGET_KIND.CITY) continue;
       if (!item.visible || !item.box) continue;
       if (x < item.box.left || x > item.box.right || y < item.box.top || y > item.box.bottom) continue;
+      if (item.box.parts && !item.box.parts.some(part => x >= part.left && x <= part.right && y >= part.top && y <= part.bottom)) continue;
       return {
         kind: OBJECT_KIND.LABEL,
         id: item.targetId,
@@ -6206,6 +6208,8 @@ function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.an
   item.politicalOffsetX = placement.anchor.x - baseScreen.x;
   item.politicalOffsetY = placement.anchor.y - baseScreen.y;
   item.politicalPlacementSnapshot = {
+    anchor: placement.anchor,
+    splitAt: placement.splitAt,
     fontSize: placement.fontSize,
     candidateIndex: placement.candidateIndex,
     bend: placement.bend,
@@ -6797,11 +6801,11 @@ function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, p
   const sx = rect.width * scale / renderer.map.metadata.graphWidth;
   const sy = rect.height * scale / renderer.map.metadata.graphHeight;
   const outline = homelandOutline(renderer.map, item.componentCellSet);
-  const sites = homelandLabelSites(outline, item.x, item.y, item.rotation);
+  const {sites, banks} = homelandLabelSites(outline, item.x, item.y, item.rotation);
   const fits = (box, margin, site) => homelandContainsBox(outline,
     site.x + (box.left - margin) / sx, site.y + (box.top - margin) / sy,
     site.x + (box.right + margin) / sx, site.y + (box.bottom + margin) / sy);
-  return placeHomelandLabel({item, screen, scale, sx, sy, sites, fits, obstacles, peers, padding});
+  return placeHomelandLabel({item, screen, scale, sx, sy, sites, banks, fits, obstacles, peers, padding});
 }
 
 function isSelectedOrHighlighted(selection, highlights, kind, id) {
@@ -8713,7 +8717,11 @@ function smootherStep(edge0, edge1, value) {
 }
 
 function boxesOverlap(a, b, padding) {
-  return a.left - padding < b.right && a.right + padding > b.left && a.top - padding < b.bottom && a.bottom + padding > b.top;
+  const intersects = a.left - padding < b.right && a.right + padding > b.left && a.top - padding < b.bottom && a.bottom + padding > b.top;
+  if (!intersects) return false;
+  if (a.parts) return a.parts.some(part => boxesOverlap(part, b, padding));
+  if (b.parts) return b.parts.some(part => boxesOverlap(a, part, padding));
+  return true;
 }
 
 function boxesOverlapAny(boxes, box, padding) {

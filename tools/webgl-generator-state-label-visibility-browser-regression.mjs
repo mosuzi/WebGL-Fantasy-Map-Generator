@@ -66,10 +66,31 @@ try {
         const states = renderer.labelItems.filter(label => label.targetKind === "state");
         const shown = states.filter(label => label.visible);
         const full = shown.filter(label => label.displayText === label.text).length;
+        const centers = item.glyphNodes.map(glyph => {
+          const box = glyph.getBoundingClientRect();
+          return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+        });
+        let waterInWordBreak = false, pickedWater = false;
+        if (centers.length === 4) {
+          const [, left, right] = centers;
+          for (let step = 1; step < 32; step++) {
+            const x = left.x + (right.x - left.x) * step / 32, y = left.y + (right.y - left.y) * step / 32;
+            const cell = renderer.pickCellClientPoint(x, y)?.gridCell;
+            if (cell == null || map.grid.cells.h[cell] >= 20) continue;
+            waterInWordBreak = true;
+            const picked = renderer.pickLabel(x, y);
+            if (picked?.targetKind === "state" && picked.targetId === item.targetId) pickedWater = true;
+          }
+        }
         return {
           id: item.targetId, name: item.text, short: item.state.name, capital: map.pack.burgs[item.state.capital]?.name,
           cells: cells.size, visible: item.visible, text: item.glyphNodes.map(glyph => glyph.textContent).join(""),
           font: parseFloat(getComputedStyle(item.contentNode).fontSize), scale: renderer.camera.scale, inkInside,
+          centers: centers.map(point => renderer.screenToWorld(point.x, point.y)), waterInWordBreak, pickedWater,
+          hitGlyphs: centers.filter(point => {
+            const hit = renderer.pickLabel(point.x, point.y);
+            return hit?.targetKind === "state" && hit.targetId === item.targetId;
+          }).length,
           origin: {x: rect.left + origin.x, y: rect.top + origin.y}, shown: shown.map(label => label.targetId),
           modes: {full, short: shown.length - full, hidden: states.length - shown.length}
         };
@@ -102,6 +123,25 @@ try {
       }
       assert.equal(initial.text, focus);
       assert.equal(detail.text, focus);
+      if (focus === "雁门部盟" && initial.capital === "安邑") {
+        const pan = async (x, y) => {
+          const before = await page.evaluate(() => window.__webglGeneratorApp.renderer.camera.offsetX);
+          await page.mouse.down({button: "middle"});
+          await page.mouse.move(x, y, {steps: 4});
+          await page.mouse.up({button: "middle"});
+          await page.waitForFunction(start => {
+            const r = window.__webglGeneratorApp.renderer;
+            return r.camera.offsetX !== start && r.overlayCommittedCamera?.offsetX === r.camera.offsetX && !r.viewportInteractionKind;
+          }, before);
+          return sample();
+        };
+        const moved = await pan(initial.origin.x + 45, initial.origin.y + 25);
+        const back = await pan(initial.origin.x, initial.origin.y);
+        for (const view of [initial, detail, restored, moved, back]) {
+          assert.ok(view.visible && view.inkInside && view.waterInWordBreak && !view.pickedWater && view.hitGlyphs === 4, JSON.stringify(view));
+          assert.ok(view.centers[1].x < 354 && view.centers[2].x > 375, JSON.stringify(view.centers));
+        }
+      }
       assert.equal(far.text, initial.short);
       assert.equal(restored.text, initial.text);
       assert.deepEqual(restored.shown, initial.shown);
@@ -113,12 +153,30 @@ try {
         const calls = [];
         const original = CanvasRenderingContext2D.prototype.fillText;
         try {
-          CanvasRenderingContext2D.prototype.fillText = function(text,...args) { calls.push(text); return original.call(this,text,...args); };
+          CanvasRenderingContext2D.prototype.fillText = function(text, x, y, ...args) {
+            const point = this.getTransform().transformPoint({x, y});
+            calls.push({text, x: point.x, y: point.y});
+            return original.call(this, text, x, y, ...args);
+          };
           const result = await window.webglGeneratorApi.data.exportPNG({download:false,includeMapOverlays:true,crop:{mode:"viewport"}});
-          return result.ok && calls.join("").includes(name);
+          const chars = Array.from(name);
+          const start = calls.findIndex((_, i) => chars.every((char, j) => calls[i + j]?.text === char));
+          if (!result.ok || start < 0) return false;
+          const item = window.__webglGeneratorApp.renderer.labelItems.find(label => label.targetKind === "state" && label.text === name);
+          const dom = item.glyphNodes.map(glyph => {
+            const box = glyph.getBoundingClientRect();
+            return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+          });
+          const proportions = points => {
+            const steps = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
+            const total = steps.reduce((sum, step) => sum + step, 0);
+            return steps.map(step => step / total);
+          };
+          const exported = proportions(calls.slice(start, start + chars.length));
+          return proportions(dom).every((step, i) => Math.abs(exported[i] - step) < 0.01);
         } finally { CanvasRenderingContext2D.prototype.fillText = original; }
       }, initial.text);
-      assert.ok(checkExport, "PNG 未绘制当前显示的国名");
+      assert.ok(checkExport, "PNG 中的国名与屏幕排字位置不一致");
       const renamed = await page.evaluate(id => window.webglGeneratorApi.edit.states.rename(id, "东岚"), initial.id);
       assert.ok(renamed.ok, JSON.stringify(renamed.error));
       const renderedName = (id, name) => page.waitForFunction(({id, name}) => {
@@ -151,6 +209,12 @@ try {
       if (!state || !city) throw new Error("缺少国家或城市标签样本");
       const rect = renderer.canvas.getBoundingClientRect();
       const insideLabel = (item, position) => {
+        if (!position && item.politicalPlacementSnapshot?.splitAt) {
+          return item.glyphNodes.every(glyph => {
+            const bounds = glyph.getBoundingClientRect();
+            return insideLabel(item, renderer.screenToWorld(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2));
+          });
+        }
         const base = renderer.worldToScreen(item.x, item.y, rect);
         const point = position || renderer.screenToWorld(rect.left + base.x + (item.politicalOffsetX || 0), rect.top + base.y + (item.politicalOffsetY || 0));
         const cells = map.pack.cells;

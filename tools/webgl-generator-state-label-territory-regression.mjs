@@ -75,6 +75,12 @@ const manualPolitical = resolvePoliticalLabelPlacement({
   anchorAllowed: () => false
 });
 assert.deepEqual(manualPolitical.anchor, {x: 420, y: 240}, "手工锁定仍被本土候选过滤");
+const rotated = angle => resolvePoliticalLabelPlacement({
+  item: {...politicalItem, rotation: angle}, screen: {x: 420, y: 240}, locked: true
+}).glyphs[0].box;
+const rightTilt = rotated(85), leftTilt = rotated(95);
+assert.ok(Math.abs((rightTilt.right - rightTilt.left) - (leftTilt.right - leftTilt.left)) < 0.01,
+  "锁定标签跨过垂直方向后仍应覆盖完整字形");
 
 const polygonMap = {pack: {
   cells: {v: [[0, 1, 2, 3], [1, 4, 5, 2]], c: [[1], [0]]},
@@ -136,8 +142,8 @@ assert.ok(homelandContainsBox(outline,2,2,58,18));
 assert.equal(homelandContainsBox(outline,3,3,57,57),false,"四角在境内仍不能跨过飞地");
 assert.equal(homelandContainsBox(outline,3,3,60,18),false,"不能贴边");
 // The centroid falls in the enclave. A full name fits on either land bridge.
-const inlandSites = homelandLabelSites(outline, 30, 30, 0);
-assert.equal(homelandLabelSites(outline, 30, 30, 0), inlandSites);
+const {sites: inlandSites} = homelandLabelSites(outline, 30, 30, 0);
+assert.equal(homelandLabelSites(outline, 30, 30, 0).sites, inlandSites);
 assert.ok(inlandSites.length && inlandSites.every(site => homelandContainsBox(outline, site.x, site.y, site.x, site.y)));
 const ringLabel = {text: "燕王国", state: {name: "燕"}, resolvedStyle: {fontSize: 11}, x: 30, y: 30, rotation: 0};
 const onRing = sites => placeHomelandLabel({
@@ -147,6 +153,24 @@ const onRing = sites => placeHomelandLabel({
 });
 assert.equal(onRing([{x: 30, y: 30}]), null);
 assert.equal(onRing(inlandSites)?.glyphs.map(g => g.character).join(""), "燕王国");
+const bayMap = structuredClone(ringMap);
+bayMap.pack.vertices.p = bayMap.pack.vertices.p.map(([x, y]) => [[0, 80, 105, 185][x / 20], y * 2]);
+const bay = homelandOutline(bayMap, new Set([0, 2, 3, 5, 6, 7, 8]));
+const bankSites = homelandLabelSites(bay, 92, 55, 0);
+const bayItem = {...ringLabel, x: 92, y: 55, text: "东岚部盟", state: {name: "东岚"}, resolvedStyle: {fontSize: 18}};
+const bankLabel = placeHomelandLabel({
+  item: bayItem, screen: {x: 92, y: 55}, sx: 1, sy: 1, scale: 1, ...bankSites,
+  obstacles: [{left: 82, right: 101, top: 0, bottom: 80}], peers: [], padding: 1,
+  fits: (box, margin, site) => homelandContainsBox(bay,
+    site.x + box.left - margin, site.y + box.top - margin, site.x + box.right + margin, site.y + box.bottom + margin)
+});
+assert.equal(bankLabel.glyphs.map(g => g.character).join(""), "东岚部盟");
+assert.ok(!bankLabel.collides && bankLabel.glyphs[1].box.right < 80 && bankLabel.glyphs[2].box.left > 105);
+const gapLabel = resolvePoliticalLabelPlacement({
+  item: {...politicalItem, text: "湾", resolvedStyle: {fontSize: 9}}, locked: true, screen: bankLabel.anchor,
+  peers: [{...bankLabel.box, parts: bankLabel.glyphs.map(g => g.box)}], viewport: {width: 200, height: 140}
+});
+assert.equal(gapLabel.collides, false, "上一国家国名的字间水面应允许放置其它标签");
 const label = {text:"燕王国", state:{name:"燕"}, targetId:71, resolvedStyle:{fontSize:20}, rotation:90, x:0, y:0};
 const place = (overrides={}) => placeHomelandLabel({item:{...label}, screen:{x:0,y:0}, sx:1,sy:1, scale:1,
   fits:()=>true, obstacles:[],peers:[],padding:0,...overrides});
