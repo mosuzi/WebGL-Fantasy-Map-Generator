@@ -2820,90 +2820,15 @@ function drawFixedMapUiElements(documentRef, context, canvasRect, scale, options
   for (const element of fixedMapUiElements(documentRef, options.overlays)) {
     if (element.id === "map-scale-bar") {
       drawScaleBarElement(context, element, canvasRect, scale);
-    } else if (element.id === "state-number-legend") {
-      const panel = elementBox(element, canvasRect, scale);
-      if (!panel || !boxIntersectsCanvas(panel, context.canvas)) continue;
-      if (element.scrollHeight > element.clientHeight) {
-        drawFullStateNumberLegend(context, element, panel, scale);
-        continue;
-      }
-      context.save();
-      context.beginPath();
-      context.rect(panel.x, panel.y, panel.width, panel.height);
-      context.clip();
-      drawStyledPanel(context, panel, element.ownerDocument.defaultView.getComputedStyle(element), scale);
-      for (const row of element.children) {
-        const [number, name] = row.children;
-        drawNumberRing(context, number, canvasRect, scale);
-        drawSimpleTextElement(context, number, canvasRect, scale, {align: "center"});
-        drawSimpleTextElement(context, name, canvasRect, scale, {align: "left"});
-      }
-      context.restore();
     } else if (element.id === "map-legend") {
       drawLegendElement(context, element, canvasRect, scale);
     }
   }
 }
 
-// A printed legend has no scrollbar. Flow every visible country's key into
-// columns, keeping the complete key on the exported page.
-function drawFullStateNumberLegend(context, element, panel, scale) {
-  const style = element.ownerDocument.defaultView.getComputedStyle(element);
-  const entries = Array.from(element.children, row => {
-    const [mark, name] = row.children;
-    const diameter = parseFloat(element.ownerDocument.defaultView.getComputedStyle(mark).width);
-    return {number: mark.textContent, name: name.textContent, diameter};
-  });
-  if (!entries.length) return;
-  context.save();
-  context.font = cssCanvasFont(style, scale.y);
-  const font = cssPixelValue(style.fontSize, scale.y);
-  const maxDiameter = Math.max(...entries.map(entry => entry.diameter));
-  const rowHeight = Math.ceil(Math.max(maxDiameter * scale.y + scale.y, font * 1.25));
-  const inset = font * 0.5;
-  const nameWidth = Math.max(...entries.map(({name}) => context.measureText(name).width));
-  const numberStyle = element.ownerDocument.defaultView.getComputedStyle(element.firstElementChild.firstElementChild);
-  const numberFont = cssCanvasFont(numberStyle, scale.y);
-  const numberWidth = maxDiameter * scale.x;
-  const colWidth = numberWidth + font + nameWidth;
-  const availableWidth = context.canvas.width - Math.max(0, panel.x);
-  const availableHeight = Math.min(context.canvas.height, panel.y + panel.height);
-  let rows = Math.max(1, Math.floor((Math.max(panel.height, rowHeight + 2 * inset) - 2 * inset) / rowHeight));
-  if (Math.ceil(entries.length / rows) * colWidth + 2 * inset > availableWidth) {
-    rows = Math.max(rows, Math.floor((availableHeight - 2 * inset) / rowHeight));
-  }
-  rows = Math.min(entries.length, rows);
-  const width = Math.ceil(entries.length / rows) * colWidth + 2 * inset;
-  const height = rows * rowHeight + 2 * inset;
-  const factor = Math.min(1, availableWidth / width, availableHeight / height);
-  const left = Math.max(0, panel.x);
-  const top = availableHeight - height * factor;
-  context.translate(left, top);
-  context.scale(factor, factor);
-  drawStyledPanel(context, {x:0, y:0, width, height}, style, scale);
-  context.textBaseline = "middle";
-  const columns = Math.ceil(entries.length / rows);
-  entries.forEach(({number, name, diameter}, index) => {
-    const x = inset + index % columns * colWidth + numberWidth / 2;
-    const y = inset + (Math.floor(index / columns) + 0.5) * rowHeight;
-    const w = diameter * scale.x, h = diameter * scale.y;
-    paintNumberRing(context, {x:x-w/2, y:y-h/2, width:w, height:h}, numberStyle, scale);
-    context.font = numberFont;
-    context.fillStyle = numberStyle.color;
-    context.textAlign = "center";
-    context.fillText(number, x, y);
-    context.font = cssCanvasFont(style, scale.y);
-    context.fillStyle = style.color;
-    context.textAlign = "left";
-    context.fillText(name, x + numberWidth / 2 + font * 0.25, y);
-  });
-  context.restore();
-}
-
 function fixedMapUiElements(documentRef, overlays = PNG_OVERLAY_DEFAULTS) {
   const ids = [];
   if (overlays.legend !== false) ids.push(PNG_FIXED_TEXT_ELEMENT_IDS.legend);
-  if (overlays.legend !== false && overlays.labels !== false) ids.push("state-number-legend");
   if (overlays.scaleBar !== false) ids.push(PNG_FIXED_TEXT_ELEMENT_IDS.scaleBar);
   return ids
     .map(id => documentRef.getElementById(id))
@@ -3069,14 +2994,10 @@ function drawTextOverlayElement(context, element, canvasRect, scale) {
     for (const glyph of politicalGlyphs) {
       const glyphBox = elementBox(glyph, canvasRect, scale);
       if (!glyphBox) continue;
-      if (element.classList.contains("state-label--number")) drawNumberRing(context, glyph, canvasRect, scale);
       context.save();
       context.translate(glyphBox.x + glyphBox.width / 2, glyphBox.y + glyphBox.height / 2);
       context.rotate(cssRotationDegrees(glyph) * Math.PI / 180);
-      if (element.classList.contains("state-label--number")) {
-        if ("letterSpacing" in context) context.letterSpacing = "0px";
-        context.fillText(glyph.textContent, 0, 0, glyphBox.width);
-      } else drawTextWithResolvedStyle(context, content, glyph.textContent || "", 0, 0, glyphMaxWidth, scale);
+      drawTextWithResolvedStyle(context, content, glyph.textContent || "", 0, 0, glyphMaxWidth, scale);
       context.restore();
     }
   } else if (isStateLabel || isProvinceLabel) {
@@ -3088,23 +3009,6 @@ function drawTextOverlayElement(context, element, canvasRect, scale) {
     const maxWidth = Math.max(20, box.width - (isCustomLabel ? 10 * scale.x : 0));
     drawTextWithResolvedStyle(context, content, text, box.x + box.width / 2, box.y + box.height / 2, maxWidth, scale);
   }
-  context.restore();
-}
-
-function drawNumberRing(context, element, canvasRect, scale) {
-  const box = elementBox(element, canvasRect, scale);
-  if (box) paintNumberRing(context, box, element.ownerDocument.defaultView.getComputedStyle(element), scale);
-}
-
-function paintNumberRing(context, box, style, scale) {
-  context.save();
-  context.strokeStyle = style.borderColor;
-  context.lineWidth = Math.min(scale.x, scale.y);
-  context.beginPath();
-  context.ellipse(box.x + box.width / 2, box.y + box.height / 2, (box.width - context.lineWidth) / 2, (box.height - context.lineWidth) / 2, 0, 0, 2 * Math.PI);
-  context.fillStyle = style.backgroundColor;
-  context.fill();
-  context.stroke();
   context.restore();
 }
 

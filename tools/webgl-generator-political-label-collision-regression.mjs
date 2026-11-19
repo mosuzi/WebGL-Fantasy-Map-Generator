@@ -126,7 +126,7 @@ assert.match(
   "政治标签平移快照没有按当前可见障碍核对复用"
 );
 assert.match(rendererSource, /sameLabelPrefix\(visibleObstacleItems, item\.politicalObstacleSource, item\.politicalObstacleLength\)/);
-assert.match(rendererSource, /retainedPoliticalPlacement \|\| \(autoState\s*\? layoutStateInHomeland[\s\S]*?: politicalLabel \? resolvePoliticalLabelPlacement/,
+assert.match(rendererSource, /politicalSnapshot \|\| \(autoState\s*\? layoutStateInHomeland[\s\S]*?: politicalLabel \? resolvePoliticalLabelPlacement/,
   "有效快照应先于本土与一般政治标签布局使用");
 assert.match(rendererSource, /preferredCandidateIndex: null,[\s\S]*retainPreferred: false/,
   "普通重排仍沿用旧避让候选");

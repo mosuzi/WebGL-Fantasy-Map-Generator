@@ -67,13 +67,11 @@ import {
   PROVINCE_COLLISION_OPACITY,
   automaticPoliticalLabelOrder,
   placeHomelandLabel,
-  placeStateNumber,
-  stateNumberDiameter,
   resolvePoliticalLabelPlacement,
   restorePoliticalLabelPlacementSnapshot
 } from "./political-label-layout.js";
 import {resolveStateLabelPlacement} from "./state-label-territory.js";
-import {homelandOutline, homelandContainsBox} from "./state-label-footprint.js";
+import {homelandOutline, homelandContainsBox, homelandLabelSites} from "./state-label-footprint.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {createPreparedDisplayIntent, gpuResidentShoreSurfaceKey} from "./prepared-display-intent.js";
 import {militaryIconLabelForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
@@ -5147,7 +5145,6 @@ export class PlaceholderMapRenderer {
 
   updateLabels() {
     if (!this.overlay || !this.map) {
-      updateStateNumberLegend(this, []);
       this.lastOverlayUpdate = emptyOverlayUpdateStats();
       return;
     }
@@ -5158,7 +5155,6 @@ export class PlaceholderMapRenderer {
     const occupied = [];
     const occupiedCityLabels = [];
     const occupiedStates = [];
-    const numberedStates = [];
     const occupiedProvinces = [];
     const occupiedByPriority = [];
     const visibleObstacleItems = [];
@@ -5206,13 +5202,9 @@ export class PlaceholderMapRenderer {
       const politicalSnapshot = politicalLabel && preservePoliticalCandidate && unchangedObstacles && (item.visible || item.buffered)
         ? restorePoliticalLabelPlacementSnapshot(item, baseScreen)
         : null;
-      const nextNumber = numberedStates.length + 1;
-      const retainedPoliticalPlacement = politicalSnapshot?.number
-        ? placeStateNumber(baseScreen, nextNumber, politicalSnapshot.candidateIndex)
-        : politicalSnapshot;
       const autoState = stateLabel && !item.layout?.locked;
-      const politicalPlacement = retainedPoliticalPlacement || (autoState
-        ? layoutStateInHomeland(this, item, baseScreen, rect, occupied, occupiedStates, padding, nextNumber)
+      const politicalPlacement = politicalSnapshot || (autoState
+        ? layoutStateInHomeland(this, item, baseScreen, rect, occupied, occupiedStates, padding)
         : politicalLabel ? resolvePoliticalLabelPlacement({
         item,
         screen: baseScreen,
@@ -5230,7 +5222,7 @@ export class PlaceholderMapRenderer {
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const prewarm = politicalLabel ? politicalPrewarm : labelPrewarm;
       const canBuffer = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;
-      const canRender = onScreen || canBuffer;
+      const canRender = (onScreen || canBuffer) && (!autoState || Boolean(politicalPlacement));
       const blocked = canRender && (priorityLayout && !autoState
         ? boxesOverlapAny(occupiedByPriority, box, padding)
         : stateLabel
@@ -5280,7 +5272,6 @@ export class PlaceholderMapRenderer {
       item.node.dataset.labelCandidate = String(politicalPlacement?.candidateIndex ?? 0);
       item.node.style.setProperty("--province-label-collision-opacity", String(PROVINCE_COLLISION_OPACITY));
       if (stateLabel) item.node.style.setProperty("--state-label-opacity", String(stateLabelScale.opacity));
-      if (shouldShow && politicalPlacement?.number) numberedStates.push(item);
       if (shouldShow && !scaleEntering) {
         if (stateLabel) {
           occupiedStates.push(box);
@@ -5305,7 +5296,6 @@ export class PlaceholderMapRenderer {
       if (shouldShow && stateCityOverlap) stateCityOverlaps++;
     }
 
-    updateStateNumberLegend(this, numberedStates);
     if (hasScaleEnteringLabels) {
       const map = this.map;
       const view = this.canvas.ownerDocument?.defaultView || globalThis;
@@ -6217,7 +6207,6 @@ function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.an
   item.politicalOffsetY = placement.anchor.y - baseScreen.y;
   item.politicalPlacementSnapshot = {
     fontSize: placement.fontSize,
-    number: placement.number,
     candidateIndex: placement.candidateIndex,
     bend: placement.bend,
     rootSize: placement.rootSize,
@@ -6235,11 +6224,9 @@ function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.an
   setStylePropertyIfChanged(item.node, "--label-box-height", `${placement.rootSize.height}px`);
   if (item.targetKind === "state") {
     const text = placement.glyphs.map(glyph => glyph.character).join("");
-    if ((item.displayText ?? item.text) !== text || Boolean(item.numbered) !== Boolean(placement.number)) {
+    if ((item.displayText ?? item.text) !== text) {
       item.contentNode.replaceChildren();
       item.glyphNodes = appendPoliticalGlyphs(item.contentNode, placement.glyphs.map(glyph => glyph.character), "state");
-      item.numbered = Boolean(placement.number);
-      item.node.classList.toggle("state-label--number", item.numbered);
     }
     item.displayText = text;
     setStylePropertyIfChanged(item.contentNode, "font-size", `${placement.fontSize ?? item.resolvedStyle.fontSize}px`);
@@ -6805,37 +6792,16 @@ function provinceLabelPlacement(map, province) {
   return isWorldPoint(point) ? {x: point[0], y: point[1], rotation: 0} : null;
 }
 
-function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding, nextNumber) {
+function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding) {
   const scale = renderer.camera.scale;
   const sx = rect.width * scale / renderer.map.metadata.graphWidth;
   const sy = rect.height * scale / renderer.map.metadata.graphHeight;
   const outline = homelandOutline(renderer.map, item.componentCellSet);
-  const fits = (box, margin) => homelandContainsBox(outline,
-    item.x + (box.left - margin) / sx, item.y + (box.top - margin) / sy,
-    item.x + (box.right + margin) / sx, item.y + (box.bottom + margin) / sy);
-  return placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding, nextNumber});
-}
-
-function updateStateNumberLegend(renderer, states) {
-  const legend = renderer.stage?.ownerDocument?.getElementById("state-number-legend");
-  if (!legend) return;
-  const entries = states.map(item => [item.displayText, item.text, item.targetId]);
-  const signature = JSON.stringify(entries);
-  if (legend.dataset.entries === signature) return;
-  legend.dataset.entries = signature;
-  legend.hidden = !entries.length;
-  legend.replaceChildren(...entries.map(([number, name, id]) => {
-    const row = legend.ownerDocument.createElement("div");
-    row.dataset.stateId = String(id);
-    const mark = legend.ownerDocument.createElement("span");
-    const text = legend.ownerDocument.createElement("span");
-    mark.className = "state-legend-number";
-    mark.style.setProperty("--label-box-width", `${stateNumberDiameter(number)}px`);
-    setDynamicCanvasTextContent(mark, "legend", number);
-    setDynamicCanvasTextContent(text, "legend", name);
-    row.append(mark, text);
-    return row;
-  }));
+  const sites = homelandLabelSites(outline, item.x, item.y, item.rotation);
+  const fits = (box, margin, site) => homelandContainsBox(outline,
+    site.x + (box.left - margin) / sx, site.y + (box.top - margin) / sy,
+    site.x + (box.right + margin) / sx, site.y + (box.bottom + margin) / sy);
+  return placeHomelandLabel({item, screen, scale, sx, sy, sites, fits, obstacles, peers, padding});
 }
 
 function isSelectedOrHighlighted(selection, highlights, kind, id) {

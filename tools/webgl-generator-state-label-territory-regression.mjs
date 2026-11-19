@@ -4,7 +4,7 @@ import {readFile} from "node:fs/promises";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {resolvePoliticalLabelPlacement, placeHomelandLabel} from "../app/webgl-generator/src/renderer/political-label-layout.js";
-import {homelandOutline, homelandContainsBox} from "../app/webgl-generator/src/renderer/state-label-footprint.js";
+import {homelandOutline, homelandContainsBox, homelandLabelSites} from "../app/webgl-generator/src/renderer/state-label-footprint.js";
 import {collectStateLandComponents, resolveStateLabelPlacement, stateLabelComponentContainsPoint} from "../app/webgl-generator/src/renderer/state-label-territory.js";
 import {patchLabelLayout, resolveLabelLayout} from "../app/webgl-generator/src/runtime/label-layout-registry.js";
 import {PNG_SEMANTIC_LABEL_SELECTORS} from "../app/webgl-generator/src/runtime/canvas-text-contract.js";
@@ -135,9 +135,21 @@ const outline = homelandOutline(ringMap,new Set([0,1,2,3,5,6,7,8]));
 assert.ok(homelandContainsBox(outline,2,2,58,18));
 assert.equal(homelandContainsBox(outline,3,3,57,57),false,"四角在境内仍不能跨过飞地");
 assert.equal(homelandContainsBox(outline,3,3,60,18),false,"不能贴边");
+// The centroid falls in the enclave. A full name fits on either land bridge.
+const inlandSites = homelandLabelSites(outline, 30, 30, 0);
+assert.equal(homelandLabelSites(outline, 30, 30, 0), inlandSites);
+assert.ok(inlandSites.length && inlandSites.every(site => homelandContainsBox(outline, site.x, site.y, site.x, site.y)));
+const ringLabel = {text: "燕王国", state: {name: "燕"}, resolvedStyle: {fontSize: 11}, x: 30, y: 30, rotation: 0};
+const onRing = sites => placeHomelandLabel({
+  item: ringLabel, screen: {x: 30, y: 30}, sx: 1, sy: 1, scale: 1, sites, obstacles: [], peers: [], padding: 0,
+  fits: (box, margin, site) => homelandContainsBox(outline,
+    site.x + box.left - margin, site.y + box.top - margin, site.x + box.right + margin, site.y + box.bottom + margin)
+});
+assert.equal(onRing([{x: 30, y: 30}]), null);
+assert.equal(onRing(inlandSites)?.glyphs.map(g => g.character).join(""), "燕王国");
 const label = {text:"燕王国", state:{name:"燕"}, targetId:71, resolvedStyle:{fontSize:20}, rotation:90, x:0, y:0};
 const place = (overrides={}) => placeHomelandLabel({item:{...label}, screen:{x:0,y:0}, sx:1,sy:1, scale:1,
-  fits:()=>true, obstacles:[],peers:[],padding:0,nextNumber:1,...overrides});
+  fits:()=>true, obstacles:[],peers:[],padding:0,...overrides});
 const linear = place();
 assert.ok(linear.glyphs.every(g => g.angle === 0 && Math.abs(g.x) < 0.01));
 assert.equal(linear.glyphs.map(g=>g.character).join(""),label.text);
@@ -151,7 +163,7 @@ const arced = place({obstacles:[{left:-1,right:1,top:-2,bottom:2}]});
 assert.ok(arced.bend && arced.glyphs.every(g => g.angle === 0), "中心障碍应先尝试曲线");
 assert.deepEqual(arced.anchor,linear.anchor);
 const overlap = place({obstacles:[{left:-500,right:500,top:-500,bottom:500}]});
-assert.ok(overlap.cityCollides && !overlap.number);
+assert.ok(overlap.cityCollides && overlap.glyphs.length);
 const overview = place({scale:0.8});
 assert.equal(overview.glyphs.map(g=>g.character).join(""),label.text);
 const within = halfWidth => (box, margin) => box.left-margin >= -halfWidth && box.right+margin <= halfWidth;
@@ -165,15 +177,10 @@ assert.ok(reduced.fontSize < overview.fontSize, "稍微缩小全称即可容纳�
 const short = place({item:{...label,rotation:0},scale:0.8,fits:within(13)});
 assert.equal(short.glyphs.map(g=>g.character).join(""),"燕");
 assert.ok(short.fontSize < linear.fontSize);
-for (const [nextNumber, diameter] of [[1,20], [9,20], [10,22], [100,31]]) {
-  const badge = place({item:{...label, targetId:4009}, fits:()=>false, nextNumber});
-  assert.equal(badge.number,String(nextNumber));
-  assert.equal(badge.fontSize,16);
-  assert.deepEqual(badge.rootSize,{width:diameter,height:diameter});
-}
+assert.equal(place({fits:()=>false}),null, "无可用本土空间时应隐藏");
 const offsetShadow = place({item:{...label,text:"田",state:{name:"田"},resolvedStyle:{fontSize:20,shadowOffsetX:20}},
   fits:(box,gap)=>box.left-gap > -24 && box.right+gap < 24});
-assert.equal(offsetShadow.number,"1","向右的字影不能越过右侧国界");
+assert.equal(offsetShadow,null,"向右的字影不能越过右侧国界");
 assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".state-label.visible"), "PNG 语义标签契约没有继续包含国家标签节点");
 assert.match(mapIoSource, /selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG 导出没有消费共享语义标签契约");
 

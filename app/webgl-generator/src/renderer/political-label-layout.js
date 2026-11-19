@@ -63,9 +63,10 @@ function uprightInkBox(x, y, fontSize, style) {
   };
 }
 
-// All automatic state candidates share one homeland anchor. Cache the
-// territory tests across pans. Visible city obstacles are tested afresh.
-export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding, nextNumber}) {
+// Cache geometric fits across pans. Visible city obstacles are tested afresh.
+export function placeHomelandLabel({item, screen, scale, sx, sy, fits, sites, obstacles, peers, padding}) {
+  const anchors = sites ?? [item];
+  if (!anchors.length) return null;
   const baseSize = positive(item.resolvedStyle.fontSize, 30);
   const short = item.state?.name?.trim() || item.text;
   const names = item.text === short ? [item.text] : [item.text, short];
@@ -80,8 +81,8 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles
   const direction = (Math.abs(dy) > Math.abs(dx) ? dy : dx) < 0 ? -1 : 1;
   const rotation = Math.atan2(direction * dy, direction * dx) * 180 / Math.PI;
   const key = [sx, sy, item.x, item.y, item.rotation, item.text, short, scale].join("|");
-  if (item.homelandCandidates?.key !== key || item.homelandCandidates.style !== item.resolvedStyle) {
-    item.homelandCandidates = {key, style: item.resolvedStyle, layouts: new Map()};
+  if (item.homelandCandidates?.key !== key || item.homelandCandidates.style !== item.resolvedStyle || item.homelandCandidates.sites !== sites) {
+    item.homelandCandidates = {key, style: item.resolvedStyle, sites, layouts: new Map()};
   }
   let index = 0;
   let fallback = null;
@@ -91,45 +92,39 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles
       let overlapping = null;
       for (const [extraSpacing, curve] of [[0, 0], [snugSpacing, 0], [0.22 * fontSize, 0], [0.5 * fontSize, 0], [0.85 * fontSize, 0],
         [0, -0.7], [0, 0.7], [0.35 * fontSize, -1.15], [0.35 * fontSize, 1.15]]) {
-        const candidateIndex = index++;
+        const shapeIndex = index++;
         const layouts = item.homelandCandidates.layouts;
-        if (!layouts.has(candidateIndex)) {
+        if (!layouts.has(shapeIndex)) {
           const layout = createPoliticalLabelGlyphLayout(name, {...item.resolvedStyle, fontSize}, {
             targetKind: "state", upright: true, rotation, bend: curve * fontSize, extraSpacing
           });
-          layouts.set(candidateIndex, layout.glyphs.every(glyph => fits(glyph.box, Math.max(2, fontSize * 0.12))) ? layout : null);
+          layouts.set(shapeIndex, {layout, valid: []});
         }
-        const layout = layouts.get(candidateIndex);
-        if (!layout) continue;
-        const box = translateBox(layout.box, screen.x, screen.y);
-        const glyphs = layout.glyphs.map(glyph => ({...glyph, box: translateBox(glyph.box, screen.x, screen.y)}));
-        const city = overlapSummary(glyphs, box, obstacles, padding);
-        const peer = overlapSummary(glyphs, box, peers, padding);
-        const candidate = {...layout, anchor: screen, candidateIndex, box, glyphs, fontSize, rootSize: symmetricRootSize(layout.box, fontSize),
-          cityCollides: city.count > 0, peerCollides: peer.count > 0, collides: city.count + peer.count > 0};
-        if (!candidate.collides) return candidate;
-        const cost = peer.area * 10 + city.area;
-        if (!overlapping || (candidate.peerCollides !== overlapping.peerCollides ? !candidate.peerCollides : cost < overlapping.cost)) {
-          overlapping = {...candidate, cost};
+        const {layout, valid} = layouts.get(shapeIndex);
+        for (const [siteIndex, site] of anchors.entries()) {
+          valid[siteIndex] ??= layout.glyphs.every(glyph => fits(glyph.box, Math.max(2, fontSize * 0.12), site));
+          if (!valid[siteIndex]) continue;
+          const anchor = {x: screen.x + (site.x - item.x) * sx, y: screen.y + (site.y - item.y) * sy};
+          const box = translateBox(layout.box, anchor.x, anchor.y);
+          const glyphs = layout.glyphs.map(glyph => ({...glyph, box: translateBox(glyph.box, anchor.x, anchor.y)}));
+          const city = overlapSummary(glyphs, box, obstacles, padding);
+          const peer = overlapSummary(glyphs, box, peers, padding);
+          const candidate = {
+            ...layout, anchor, box, glyphs, fontSize, candidateIndex: shapeIndex * anchors.length + siteIndex,
+            rootSize: symmetricRootSize(layout.box, fontSize),
+            cityCollides: city.count > 0, peerCollides: peer.count > 0, collides: city.count + peer.count > 0
+          };
+          if (!candidate.collides) return candidate;
+          const cost = peer.area * 10 + city.area;
+          if (!overlapping || (candidate.peerCollides !== overlapping.peerCollides ? !candidate.peerCollides : cost < overlapping.cost)) {
+            overlapping = {...candidate, cost};
+          }
         }
       }
       if (overlapping && (!fallback || (fallback.peerCollides && !overlapping.peerCollides))) fallback = overlapping;
     }
   }
-  return fallback || placeStateNumber(screen, nextNumber, index);
-}
-
-export function stateNumberDiameter(number) {
-  return Math.max(20, String(number).length * 9 + 4);
-}
-
-export function placeStateNumber(screen, ordinal, candidateIndex) {
-  const number = String(ordinal);
-  const fontSize = 16;
-  const diameter = stateNumberDiameter(number);
-  const box = {left: -diameter / 2, right: diameter / 2, top: -diameter / 2, bottom: diameter / 2};
-  return {anchor: screen, box: translateBox(box, screen.x, screen.y), rootSize: {width: diameter, height: diameter}, fontSize,
-    glyphs: [{character: number, x: 0, y: 0, angle: 0}], number, candidateIndex, bend: 0, collides: false, cityCollides: false};
+  return fallback;
 }
 
 export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], peers = [], viewport, padding = 0, locked = false, anchorAllowed = null, preferredCandidateIndex = null, retainPreferred = false} = {}) {
@@ -196,7 +191,6 @@ export function restorePoliticalLabelPlacementSnapshot(item, screen) {
   const anchor = {x: finite(screen?.x) + offsetX, y: finite(screen?.y) + offsetY};
   return {
     anchor,
-    number: snapshot.number,
     fontSize: snapshot.fontSize,
     candidateIndex: snapshot.candidateIndex,
     bend: snapshot.bend,

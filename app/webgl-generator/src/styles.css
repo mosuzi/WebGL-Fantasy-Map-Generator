@@ -1192,52 +1192,8 @@ select:disabled {
   display: none;
 }
 
-.state-number-legend {
-  display: grid;
-  gap: 1px 12px;
-  width: max-content;
-  box-sizing: border-box;
-  max-width: min(50%, 288px);
-  max-height: min(18vh, 124px);
-  padding: 4px 7px;
-  border-radius: 3px;
-  box-shadow: none;
-  overflow: auto;
-  scrollbar-width: thin;
-  pointer-events: auto;
-  font: 16px/1.25 system-ui, sans-serif;
-}
-.state-number-legend > div { display: flex; gap: 4px; align-items: center; }
-.state-number-legend > div > :last-child { overflow-wrap: anywhere; }
-.state-legend-number {
-  flex: none;
-}
-@media (min-width: 640px) {
-  .state-number-legend:has(> :nth-child(7)) { grid-template-columns: repeat(2, minmax(0, auto)); }
-}
-.state-label--number .map-label-content, .state-legend-number {
-  font: 500 16px/1 Arial, sans-serif;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
-  text-shadow: none;
-  -webkit-text-stroke: 0;
-}
-.state-label--number .political-label-glyph, .state-legend-number {
-  display: inline-grid;
-  place-items: center;
-  box-sizing: border-box;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  width: var(--label-box-width);
-  height: var(--label-box-width);
-}
-.state-label--number .map-label-content { color: #342d23; }
-.state-label--number .political-label-glyph {
-  border-color: #766956;
-  background: rgba(255, 250, 232, 0.9);
-}
 .state-label .political-label-glyph { letter-spacing: 0; }
-.state-label.city-overlap, .state-label.state-label--number { z-index: 4; }
+.state-label.city-overlap { z-index: 4; }
 
 .map-scale-bar {
   z-index: 5;

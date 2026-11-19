@@ -46,16 +46,87 @@ function indexEdges(cells, rings, vertices, step) {
     }
   }
   const rows = new Map();
+  const segments = [];
   for (const key of edges) {
     const a = vertices[Math.floor(key / vertices.length)], b = vertices[key % vertices.length];
     if (!a || !b) continue;
     const segment = {a, b, left: Math.min(a[0], b[0]), right: Math.max(a[0], b[0]), top: Math.min(a[1], b[1]), bottom: Math.max(a[1], b[1])};
+    segments.push(segment);
     for (let i = Math.floor(segment.top / step); i <= Math.floor(segment.bottom / step); i++) {
       if (!rows.has(i)) rows.set(i, []);
       rows.get(i).push(segment);
     }
   }
-  return rows.size ? {rows, step} : null;
+  return rows.size ? {rows, step, segments} : null;
+}
+
+// Sample inland spans along the country's long axis. Split at bays, holes
+// and enclaves, using both the homeland and the visible grid shoreline.
+export function homelandLabelSites(outline, x, y, rotation) {
+  if (!outline) return [];
+  const cached = outline.labelSites;
+  if (cached && cached.x === x && cached.y === y && cached.rotation === rotation) return cached.sites;
+  const angle = rotation * Math.PI / 180;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const project = ({a, b}) => [
+    a[0] * cos + a[1] * sin, a[1] * cos - a[0] * sin,
+    b[0] * cos + b[1] * sin, b[1] * cos - b[0] * sin
+  ];
+  const pack = outline.segments.map(project);
+  const grid = outline.grid?.segments.map(project);
+  let low = Infinity, high = -Infinity;
+  for (const [, firstY, , lastY] of pack) {
+    low = Math.min(low, firstY, lastY);
+    high = Math.max(high, firstY, lastY);
+  }
+  const candidates = [];
+  const scanRows = 15;
+  for (let row = 0; row < scanRows; row++) {
+    const across = low + (row + 0.5) / scanRows * (high - low);
+    const packCuts = scanCrossings(pack, across);
+    const gridCuts = grid ? scanCrossings(grid, across) : packCuts;
+    for (let i = 0, j = 0; i + 1 < packCuts.length && j + 1 < gridCuts.length;) {
+      const start = Math.max(packCuts[i], gridCuts[j]);
+      const packEnd = packCuts[i + 1], gridEnd = gridCuts[j + 1];
+      const end = Math.min(packEnd, gridEnd);
+      if (end > start) {
+        const along = (start + end) / 2;
+        const px = along * cos - across * sin, py = along * sin + across * cos;
+        const halfSpan = (end - start) / 2;
+        const room = inlandClearance(outline, px, py, halfSpan);
+        const score = Math.min(halfSpan, room * 2.5) - 0.18 * Math.hypot(px - x, py - y);
+        if (room > 0) candidates.push({x: px, y: py, room, score});
+      }
+      if (packEnd <= gridEnd) i += 2;
+      if (gridEnd <= packEnd) j += 2;
+    }
+  }
+  const sites = homelandContainsBox(outline, x, y, x, y) ? [{x, y}] : [];
+  for (const candidate of candidates.sort((a, b) => b.score - a.score)) {
+    const separation = Math.max(candidate.room, (high - low) / 12);
+    if (sites.every(site => Math.hypot(site.x - candidate.x, site.y - candidate.y) > separation)) sites.push(candidate);
+    if (sites.length === 5) break;
+  }
+  outline.labelSites = {x, y, rotation, sites};
+  return sites;
+}
+
+function inlandClearance(outline, x, y, limit) {
+  let room = 0;
+  for (let step = 0; step < 6; step++) {
+    const r = (room + limit) / 2;
+    if (homelandContainsBox(outline, x - r, y - r, x + r, y + r)) room = r;
+    else limit = r;
+  }
+  return room;
+}
+
+function scanCrossings(edges, across) {
+  const cuts = [];
+  for (const [x0, y0, x1, y1] of edges) {
+    if ((y0 > across) !== (y1 > across)) cuts.push(x0 + (across - y0) * (x1 - x0) / (y1 - y0));
+  }
+  return cuts.sort((a, b) => a - b);
 }
 
 export function homelandContainsBox(outline, left, top, right, bottom) {
