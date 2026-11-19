@@ -6808,19 +6808,25 @@ function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, p
   const fits = (box, margin) => homelandContainsBox(outline,
     item.x + (box.left - margin) / sx, item.y + (box.top - margin) / sy,
     item.x + (box.right + margin) / sx, item.y + (box.bottom + margin) / sy);
-  return placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding});
+  const mapIdentity = renderer.map.metadata.mapIdentity ?? renderer.map;
+  if (renderer.stateLegendMap !== mapIdentity) {
+    renderer.stateLegendMap = mapIdentity;
+    renderer.stateLegendNumbers = new Map();
+  }
+  return placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding, legendNumbers: renderer.stateLegendNumbers});
 }
 
 function updateStateNumberLegend(renderer, states) {
   const legend = renderer.stage?.ownerDocument?.getElementById("state-number-legend");
   if (!legend) return;
-  const entries = states.sort((a, b) => a.targetId - b.targetId).map(item => [String(item.targetId), item.text]);
+  const entries = states.map(item => [item.displayText, item.text, item.targetId]).sort((a, b) => Number(a[0]) - Number(b[0]));
   const signature = JSON.stringify(entries);
   if (legend.dataset.entries === signature) return;
   legend.dataset.entries = signature;
   legend.hidden = !entries.length;
-  legend.replaceChildren(...entries.map(([number, name]) => {
+  legend.replaceChildren(...entries.map(([number, name, id]) => {
     const row = legend.ownerDocument.createElement("div");
+    row.dataset.stateId = String(id);
     const mark = legend.ownerDocument.createElement("span");
     const text = legend.ownerDocument.createElement("span");
     mark.className = "state-legend-number";

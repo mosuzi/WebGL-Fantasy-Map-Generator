@@ -137,7 +137,7 @@ assert.equal(homelandContainsBox(outline,3,3,57,57),false,"四角在境内仍不
 assert.equal(homelandContainsBox(outline,3,3,60,18),false,"不能贴边");
 const label = {text:"燕王国", state:{name:"燕"}, targetId:71, resolvedStyle:{fontSize:20}, rotation:90, x:0, y:0};
 const place = (overrides={}) => placeHomelandLabel({item:{...label}, screen:{x:0,y:0}, sx:1,sy:1, scale:1,
-  fits:()=>true, obstacles:[],peers:[],padding:0,...overrides});
+  fits:()=>true, obstacles:[],peers:[],padding:0,legendNumbers:new Map(),...overrides});
 const linear = place();
 assert.ok(linear.glyphs.every(g => g.angle === 0 && Math.abs(g.x) < 0.01));
 assert.equal(linear.glyphs.map(g=>g.character).join(""),label.text);
@@ -155,11 +155,17 @@ assert.ok(overlap.cityCollides && !overlap.number);
 const short = place({scale:0.8});
 assert.equal(short.glyphs.map(g=>g.character).join(""),"燕");
 assert.ok(short.fontSize < linear.fontSize);
-const badge = place({fits:()=>false});
-assert.equal(badge.number,"71");
+const legendNumbers = new Map();
+const fallback = id => place({item:{...label, targetId:id}, fits:()=>false, legendNumbers});
+assert.equal(fallback(4009).number,"1");
+assert.equal(fallback(2545).number,"2");
+assert.equal(fallback(4009).rootSize.width,13);
+for (let index = 3; index <= 10; index++) assert.equal(fallback(5000 + index).number, String(index));
+assert.equal(fallback(5010).rootSize.width,16);
+assert.equal(fallback(4009).number,"1");
 const offsetShadow = place({item:{...label,text:"田",state:{name:"田"},resolvedStyle:{fontSize:20,shadowOffsetX:20}},
   fits:(box,gap)=>box.left-gap > -24 && box.right+gap < 24});
-assert.equal(offsetShadow.number,"71","向右的字影不能越过右侧国界");
+assert.equal(offsetShadow.number,"1","向右的字影不能越过右侧国界");
 assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".state-label.visible"), "PNG 语义标签契约没有继续包含国家标签节点");
 assert.match(mapIoSource, /selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG 导出没有消费共享语义标签契约");
 

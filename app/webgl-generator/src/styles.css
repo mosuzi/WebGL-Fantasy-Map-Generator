@@ -1184,36 +1184,56 @@ select:disabled {
 }
 
 .state-number-legend {
+  display: grid;
+  gap: 1px 12px;
   left: auto;
-  right: 18px;
+  right: 12px;
   top: 64px;
   bottom: auto;
   width: max-content;
-  max-width: min(40%, 240px);
-  max-height: 32%;
-  overflow: auto;
-  pointer-events: auto;
-  font-size: 13px;
-}
-.state-number-legend > div { display: flex; align-items: center; gap: 6px; margin-block: 2px; }
-.state-legend-number, .state-label--number .political-label-glyph {
-  display: inline-grid;
-  place-items: center;
   box-sizing: border-box;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  letter-spacing: 0;
+  max-width: min(45%, 256px);
+  max-height: min(18%, 124px);
+  padding: 4px 7px;
+  border: 1px solid rgba(91, 74, 48, 0.32);
+  border-radius: 3px;
+  background: rgba(251, 246, 228, 0.94);
+  color: #3d3429;
+  box-shadow: none;
+  overflow: auto;
+  scrollbar-width: thin;
+  pointer-events: auto;
+  font: 12px/16px system-ui, sans-serif;
 }
-.state-legend-number { min-width: 1.5em; aspect-ratio: 1; flex-shrink: 0; }
+.state-number-legend > div { display: flex; gap: 4px; align-items: baseline; }
+.state-number-legend > div > :last-child { overflow-wrap: anywhere; }
+.state-legend-number {
+  min-width: 1.5ch;
+  text-align: right;
+  color: #635644;
+  font: 600 10px/1 Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 640px) {
+  .state-number-legend:has(> :nth-child(7)) { grid-template-columns: repeat(2, minmax(0, auto)); }
+}
 .state-label--number .map-label-content {
-  color: var(--theme-legend-text, #dfe9ed);
+  color: #342d23;
+  font: 600 10px/1 Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
   text-shadow: none;
   -webkit-text-stroke: 0;
 }
 .state-label--number .political-label-glyph {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 1px solid #766956;
+  border-radius: 50%;
   width: var(--label-box-width);
   height: var(--label-box-height);
-  background: var(--theme-legend-bg, rgba(12, 18, 22, 0.78));
+  background: rgba(255, 250, 232, 0.9);
 }
 .state-label .political-label-glyph { letter-spacing: 0; }
 .state-label.city-overlap, .state-label.state-label--number { z-index: 4; }

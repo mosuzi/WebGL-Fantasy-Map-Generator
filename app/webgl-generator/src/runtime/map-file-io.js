@@ -2833,8 +2833,7 @@ function drawFixedMapUiElements(documentRef, context, canvasRect, scale, options
       drawStyledPanel(context, panel, element.ownerDocument.defaultView.getComputedStyle(element), scale);
       for (const row of element.children) {
         const [number, name] = row.children;
-        drawNumberRing(context, number, canvasRect, scale);
-        drawSimpleTextElement(context, number, canvasRect, scale, {align: "center"});
+        drawSimpleTextElement(context, number, canvasRect, scale, {align: "right"});
         drawSimpleTextElement(context, name, canvasRect, scale, {align: "left"});
       }
       context.restore();
@@ -2853,11 +2852,15 @@ function drawFullStateNumberLegend(context, element, panel, scale) {
   context.save();
   context.font = cssCanvasFont(style, scale.y);
   const font = cssPixelValue(style.fontSize, scale.y);
-  const rowHeight = Math.ceil(font * 1.8);
-  const inset = font * 0.65;
-  const diameter = Math.max(font * 1.35, ...entries.map(([number]) => context.measureText(number).width + font * 0.3));
-  const colWidth = diameter + font + Math.max(...entries.map(([, name]) => context.measureText(name).width));
-  let rows = Math.max(1, Math.floor((context.canvas.height * 0.48 - 2 * inset) / rowHeight));
+  const rowHeight = Math.ceil(font * 1.4);
+  const inset = font * 0.5;
+  const nameWidth = Math.max(...entries.map(([, name]) => context.measureText(name).width));
+  const numberStyle = element.ownerDocument.defaultView.getComputedStyle(element.firstElementChild.firstElementChild);
+  const numberFont = cssCanvasFont(numberStyle, scale.y);
+  context.font = numberFont;
+  const numberWidth = Math.max(...entries.map(([number]) => context.measureText(number).width));
+  const colWidth = numberWidth + font + nameWidth;
+  let rows = Math.max(1, Math.floor((Math.max(panel.height, rowHeight + 2 * inset) - 2 * inset) / rowHeight));
   if (Math.ceil(entries.length / rows) * colWidth + 2 * inset > context.canvas.width) {
     rows = Math.max(rows, Math.floor((context.canvas.height - 2 * inset) / rowHeight));
   }
@@ -2871,18 +2874,18 @@ function drawFullStateNumberLegend(context, element, panel, scale) {
   context.scale(factor, factor);
   drawStyledPanel(context, {x:0, y:0, width, height}, style, scale);
   context.textBaseline = "middle";
-  context.fillStyle = context.strokeStyle = style.color;
-  context.lineWidth = Math.min(scale.x, scale.y);
+  const columns = Math.ceil(entries.length / rows);
   entries.forEach(([number, name], index) => {
-    const x = inset + Math.floor(index / rows) * colWidth + diameter / 2;
-    const y = inset + (index % rows + 0.5) * rowHeight;
-    context.beginPath();
-    context.arc(x, y, diameter / 2, 0, 2 * Math.PI);
-    context.stroke();
-    context.textAlign = "center";
+    const x = inset + index % columns * colWidth + numberWidth;
+    const y = inset + (Math.floor(index / columns) + 0.5) * rowHeight;
+    context.font = numberFont;
+    context.fillStyle = numberStyle.color;
+    context.textAlign = "right";
     context.fillText(number, x, y);
+    context.font = cssCanvasFont(style, scale.y);
+    context.fillStyle = style.color;
     context.textAlign = "left";
-    context.fillText(name, x + diameter / 2 + font * 0.35, y);
+    context.fillText(name, x + font * 0.35, y);
   });
   context.restore();
 }
@@ -3013,7 +3016,7 @@ function drawSimpleTextElement(context, element, canvasRect, scale, options = {}
   context.font = cssCanvasFont(style, scale.y);
   context.textBaseline = "middle";
   context.textAlign = options.align || "left";
-  const x = context.textAlign === "center" ? box.x + box.width / 2 : box.x;
+  const x = box.x + (context.textAlign === "center" ? box.width / 2 : context.textAlign === "right" ? box.width : 0);
   context.fillText(text, x, box.y + box.height / 2, box.width);
   context.restore();
 }
@@ -3083,10 +3086,10 @@ function drawNumberRing(context, element, canvasRect, scale) {
   if (!box) return;
   context.save();
   const style = element.ownerDocument.defaultView.getComputedStyle(element);
-  context.strokeStyle = style.color;
+  context.strokeStyle = style.borderColor;
   context.lineWidth = Math.min(scale.x, scale.y);
   context.beginPath();
-  context.ellipse(box.x + box.width / 2, box.y + box.height / 2, box.width / 2, box.height / 2, 0, 0, 2 * Math.PI);
+  context.ellipse(box.x + box.width / 2, box.y + box.height / 2, (box.width - context.lineWidth) / 2, (box.height - context.lineWidth) / 2, 0, 0, 2 * Math.PI);
   context.fillStyle = style.backgroundColor;
   context.fill();
   context.stroke();

@@ -65,7 +65,7 @@ function uprightInkBox(x, y, fontSize, style) {
 
 // All automatic state candidates share one homeland anchor. Cache the
 // territory tests across pans. Visible city obstacles are tested afresh.
-export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding}) {
+export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles, peers, padding, legendNumbers}) {
   const baseSize = positive(item.resolvedStyle.fontSize, 30);
   const short = item.state?.name?.trim() || item.text;
   const names = scale < 1 ? [short] : [...new Set([item.text, short])];
@@ -111,9 +111,11 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, fits, obstacles
     }
     if (fallback) return fallback;
   }
-  const number = String(item.targetId);
-  const fontSize = Math.min(baseSize, 13);
-  const diameter = Math.max(18, fontSize * (0.68 * number.length + 0.6));
+  // Allocate only for countries that actually need a key. Keep it across camera changes.
+  if (!legendNumbers.has(item.targetId)) legendNumbers.set(item.targetId, legendNumbers.size + 1);
+  const number = String(legendNumbers.get(item.targetId));
+  const fontSize = 10;
+  const diameter = Math.max(13, number.length * 6 + 4);
   const box = {left: -diameter / 2, right: diameter / 2, top: -diameter / 2, bottom: diameter / 2};
   return {anchor: screen, box: translateBox(box, screen.x, screen.y), rootSize: {width: diameter, height: diameter}, fontSize,
     glyphs: [{character: number, x: 0, y: 0, angle: 0}], number, candidateIndex: index, bend: 0, collides: false, cityCollides: false};

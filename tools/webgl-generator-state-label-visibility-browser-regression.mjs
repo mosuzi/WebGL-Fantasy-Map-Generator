@@ -10,8 +10,9 @@ const {chromium} = createRequire(join(root, "source/Fantasy-Map-Generator/packag
 const server = await preview({configFile: join(root, "vite.config.mjs"), preview: {host: "127.0.0.1", port: 5605, strictPort: true}, logLevel: "error"});
 const browser = await chromium.launch({channel: "chrome", headless: true});
 const reports = [];
+const archive = process.env.FMG_REAL_ARCHIVE;
 try {
-  for (const cellsTarget of process.argv.includes("--large") ? [100000] : [10000, 100000]) {
+  for (const cellsTarget of archive || process.argv.includes("--large") ? [100000] : [10000, 100000]) {
     const page = await browser.newPage({viewport: {width: 1440, height: 900}});
     page.setDefaultTimeout(180000);
     const errors = [];
@@ -27,8 +28,15 @@ try {
     });
     await page.goto("http://127.0.0.1:5605/?healthClear=1&debug=1", {waitUntil: "domcontentloaded"});
     await waitForApiReady(page, 45000);
-    const generated = await page.evaluate(target => window.webglGeneratorApi.generate.newMap({confirm: true, seed: `state-label-visibility-${target}`, cellsTarget: target}), cellsTarget);
-    assert.equal(generated.ok, true, JSON.stringify(generated.error));
+    if (archive) {
+      await page.evaluate(() => {window.__previousMap = window.__webglGeneratorApp.map;});
+      await page.locator("#import-map-file").setInputFiles(archive);
+      await page.waitForFunction(() => window.__webglGeneratorApp.map !== window.__previousMap
+        && window.__webglGeneratorApp.map?.grid.cells.i.length === 100000);
+    } else {
+      const generated = await page.evaluate(target => window.webglGeneratorApi.generate.newMap({confirm: true, seed: `state-label-visibility-${target}`, cellsTarget: target}), cellsTarget);
+      assert.equal(generated.ok, true, JSON.stringify(generated.error));
+    }
     await waitForApiReady(page, 180000);
     await page.locator("#open-generation-panel").click();
     await page.locator('[data-control-tab="themes"]').click();
@@ -41,8 +49,33 @@ try {
     if (cellsTarget === 100000) {
       const legend = page.locator("#state-number-legend");
       await legend.waitFor({state:"visible"});
+      const readKey = () => legend.evaluate(el => {
+        const items = window.__webglGeneratorApp.renderer.labelItems.filter(item => item.visible && item.numbered);
+        const rows = [...el.children].map(row => {
+          const id = Number(row.dataset.stateId);
+          const item = items.find(item => item.targetId === id);
+          const glyph = item?.glyphNodes[0];
+          const box = glyph?.getBoundingClientRect();
+          const number = Number(row.firstElementChild.textContent);
+          if (!box || glyph.textContent !== String(number) || row.lastElementChild.textContent !== item.text
+            || Math.abs(box.width - box.height) > 0.5 || Math.abs(box.width - Math.max(13, String(number).length * 6 + 4)) > 0.6) {
+            throw Error("图上圈号、直径与国名图例不符：" + JSON.stringify({id, number, width:box?.width}));
+          }
+          return {id, number, diameter:Math.round(box.width)};
+        });
+        if (rows.length !== items.length || new Set(rows.map(row => row.number)).size !== rows.length) throw Error("圈号遗漏或重复");
+        const box = el.getBoundingClientRect();
+        return {rows, height:box.height, width:box.width, columns:getComputedStyle(el).gridTemplateColumns.split(" ").length};
+      });
+      const before = await readKey();
+      assert.ok(before.height <= 125 && before.rows.every(row => row.number > 0 && row.number < 100));
+      if (archive) assert.ok(before.rows.some(row => row.id >= 1000));
+      if (process.env.FMG_LABEL_SCREENSHOT) {
+        await page.mouse.move(1,1);
+        await page.screenshot({path:process.env.FMG_LABEL_SCREENSHOT, animations:"disabled"});
+      }
       const initial = await legend.locator(":scope > div").first().innerText();
-      const id = Number(await legend.locator(".state-legend-number").first().innerText());
+      const id = before.rows[0].id;
       const renamed = await page.evaluate(id => window.webglGeneratorApi.edit.states.rename(id, "东岚"), id);
       assert.ok(renamed.ok, JSON.stringify(renamed.error));
       await page.waitForFunction(() => document.querySelector("#state-number-legend")?.textContent.includes("东岚"));
@@ -104,11 +137,38 @@ try {
       await page.mouse.wheel(0,-230);
       await page.waitForFunction(s => Math.abs(window.__webglGeneratorApp.renderer.camera.scale-s)<0.002, scaleBefore);
       await page.waitForTimeout(300);
-      if (process.env.FMG_LABEL_SCREENSHOT) {
-        await page.mouse.move(1,1);
-        await page.screenshot({path:process.env.FMG_LABEL_SCREENSHOT});
+      await page.mouse.move(880,400);
+      await page.mouse.down({button:"middle"});
+      await page.mouse.move(950,415,{steps:4});
+      await page.mouse.up({button:"middle"});
+      await page.waitForTimeout(300);
+      const after = await readKey();
+      const shared = before.rows.filter(row => after.rows.some(other => other.id === row.id));
+      assert.ok(shared.length && shared.every(row => after.rows.find(other => other.id === row.id).number === row.number));
+      console.log(JSON.stringify({legendState:id, exportDiff, before, shared:shared.length}));
+      if (archive) {
+        await page.mouse.move(720,450);
+        await page.mouse.wheel(0,650);
+        await page.waitForFunction(s => window.__webglGeneratorApp.renderer.camera.scale < s * 0.65, scaleBefore);
+        await page.waitForTimeout(350);
+        const overview = await readKey();
+        assert.ok(overview.rows.length >= 7 && overview.columns === 2 && overview.height <= 125, JSON.stringify(overview));
+        if (process.env.FMG_LEGEND_OVERVIEW) {
+          await page.locator("#open-generation-panel").hover();
+          await page.screenshot({path:process.env.FMG_LEGEND_OVERVIEW, animations:"disabled"});
+        }
+        await page.mouse.move(720,450);
+        await page.mouse.wheel(0,-650);
+        await page.waitForFunction(s => Math.abs(window.__webglGeneratorApp.renderer.camera.scale-s)<0.002, scaleBefore);
+        await page.setViewportSize({width:390, height:700});
+        await page.waitForTimeout(400);
+        const narrow = await readKey();
+        assert.ok(narrow.rows.length && narrow.columns === 1 && narrow.height <= 125 && narrow.width < 176);
+        assert.deepEqual(errors, []);
+        reports.push({cellsTarget, archive:true, overview, narrow});
+        await page.close();
+        continue;
       }
-      console.log(JSON.stringify({legendState:id, exportDiff}));
     }
     const result = await page.evaluate(() => {
       const {map, renderer} = window.__webglGeneratorApp;
