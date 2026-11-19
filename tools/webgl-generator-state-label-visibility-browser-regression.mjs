@@ -49,6 +49,19 @@ try {
     if (cellsTarget === 100000) {
       const legend = page.locator("#state-number-legend");
       await legend.waitFor({state:"visible"});
+      const checkPalette = () => legend.evaluate(el => {
+        const common = getComputedStyle(document.querySelector("#map-legend"));
+        const panel = getComputedStyle(el);
+        const number = getComputedStyle(el.querySelector(".state-legend-number"));
+        const name = getComputedStyle(el.firstElementChild.lastElementChild);
+        if (["backgroundColor", "borderTopColor", "color"].some(key => common[key] !== panel[key])
+          || name.color !== common.color || number.color !== common.color || number.borderTopColor !== common.color
+          || number.backgroundColor !== "rgba(0, 0, 0, 0)") {
+          throw Error(`国家图例与主题图例配色不一致：${panel.backgroundColor} / ${common.backgroundColor}`);
+        }
+        return panel.backgroundColor;
+      });
+      const background = await checkPalette();
       const readKey = () => legend.evaluate(el => {
         const items = window.__webglGeneratorApp.renderer.labelItems.filter(item => item.visible && item.numbered);
         const rows = [...el.children].map((row, index) => {
@@ -117,10 +130,18 @@ try {
           const rect = document.querySelector("#state-number-legend").getBoundingClientRect();
           const stage = document.querySelector("#map-canvas").getBoundingClientRect();
           const sx = image.width/stage.width, sy = image.height/stage.height;
-          return ctx.getImageData((rect.left-stage.left)*sx,(rect.top-stage.top)*sy,rect.width*sx,rect.height*sy).data;
+          // The lower-left padding contains only the translucent panel over the map.
+          const x = Math.floor((rect.left-stage.left+4)*sx), y = Math.floor((rect.bottom-stage.top-3)*sy);
+          if (!enabled) {
+            ctx.fillStyle = getComputedStyle(document.querySelector("#map-legend")).backgroundColor;
+            ctx.fillRect(x,y,1,1);
+          }
+          return {pixel:ctx.getImageData(x,y,1,1).data,
+            region:ctx.getImageData((rect.left-stage.left)*sx,(rect.top-stage.top)*sy,rect.width*sx,rect.height*sy).data};
         };
         const a = await sample(true), b = await sample(false);
-        return a.reduce((n,value,i)=>n+Number(value!==b[i]),0);
+        if (a.pixel.some((value,i) => Math.abs(value-b.pixel[i]) > 2)) throw Error(`PNG 图例底色不符：${a.pixel} / ${b.pixel}`);
+        return a.region.reduce((n,value,i)=>n+Number(value!==b.region[i]),0);
       });
       assert.ok(exportDiff > 100, "导出开关没有改变编号图例像素");
       await page.evaluate(async () => {
@@ -201,8 +222,19 @@ try {
         await page.waitForTimeout(400);
         const narrow = await readKey();
         assert.ok(narrow.rows.length && narrow.columns === 1 && narrow.height <= 125 && narrow.width < 176);
+        const originalTheme = await page.evaluate(() => window.__webglGeneratorApp.renderer.visualTheme.id);
+        const switchTheme = async id => {
+          const result = await page.evaluate(theme => window.webglGeneratorApi.layers.setTheme(theme), id);
+          assert.ok(result.ok, JSON.stringify(result.error));
+          await page.waitForFunction(theme => window.__webglGeneratorApp.renderer.visualTheme.id === theme, id);
+        };
+        await switchTheme(originalTheme === "ancient" ? "default" : "ancient");
+        const alternateBackground = await checkPalette();
+        assert.notEqual(alternateBackground, background);
+        await switchTheme(originalTheme);
+        assert.equal(await checkPalette(), background);
         assert.deepEqual(errors, []);
-        reports.push({cellsTarget, archive:true, subset, overview, narrow});
+        reports.push({cellsTarget, archive:true, subset, overview, narrow, background, alternateBackground});
         await page.close();
         continue;
       }
