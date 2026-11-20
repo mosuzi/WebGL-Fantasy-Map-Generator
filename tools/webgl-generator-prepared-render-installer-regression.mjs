@@ -1450,6 +1450,8 @@ async function testConservativeTopologyRetainedIntegration() {
     adoptOverlayLabelResourceBinding(renderer, owner);
   };
   renderer.refreshHeightCells = (cells, options) => PlaceholderMapRenderer.prototype.refreshHeightCells.call(renderer, cells, options);
+  renderer.canPresentGpuResidentColorMode = PlaceholderMapRenderer.prototype.canPresentGpuResidentColorMode;
+  renderer.refreshCellAttributeCells = PlaceholderMapRenderer.prototype.refreshCellAttributeCells;
 
   const tracker = new MapRevisionTracker({identityFactory: () => "old-map"});
   tracker.replaceMap("old-map");

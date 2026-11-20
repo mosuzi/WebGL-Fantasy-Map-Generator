@@ -139,10 +139,10 @@ import {
   DIPLOMACY_RULE_ACTION,
   inspectDiplomacyRuleTransaction
 } from "./diplomacy-edit-commands.js";
-import {applyHeightBrushPreview, createApplyHeightBrushCommand, prewarmHeightEditorPackCellsByGrid} from "./height-edit-commands.js";
+import {applyHeightBrushPreview, createApplyHeightBrushCommand, prewarmHeightEditorPackCellsByGrid, restoreHeightBrushPreview} from "./height-edit-commands.js";
 import {createHeightBrushCommitTrace, finishHeightBrushCommitTrace, measureHeightBrushCommitStage, recordHeightBrushCommitStage} from "./height-brush-performance.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
-import {acceptHeightBrushSample} from "./height-brush-cadence.js";
+import {sampleHeightBrushSegment} from "./height-brush-cadence.js";
 import {prewarmHeightCellSpatialIndex, queryBrushCellsInRadius} from "./height-cell-spatial-index.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
@@ -613,7 +613,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       fillPreview: null,
       strokeSeed: 0,
       brushFrame: 0,
-      pendingBrushPointer: null,
+      summaryPending: false,
       globalToolSeed: 0,
       terrainTemplateSeed: 0,
       seafloorResetSeed: 0,
@@ -17212,14 +17212,18 @@ function rollbackCanvasToolStroke(state, kind) {
     state.panels.biome?.updateSuitability({preview: null});
     return true;
   }
+  if (kind === "height") {
+    restoreHeightBrushPreview(state.map, stroke);
+    state.editRefreshScheduler?.run({
+      ...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW,
+      deferTerrainRefresh: false,
+      changedGridCells: [...stroke.originals.keys()]
+    });
+    return true;
+  }
   const restored = restoreCanvasToolStrokePreview(state.map, kind, stroke);
   if (!restored.restoredGridCells) return false;
-  if (kind === "height") state.editRefreshScheduler?.run({
-    ...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW,
-    deferTerrainRefresh: false,
-    changedGridCells: [...stroke.originals.keys()]
-  });
-  else if (kind === "state") state.editRefreshScheduler?.run({...STATE_BRUSH_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
+  if (kind === "state") state.editRefreshScheduler?.run({...STATE_BRUSH_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
   else if (kind === "province") state.editRefreshScheduler?.run(PROVINCE_BRUSH_PREVIEW_EFFECTS);
   else if (kind === "biome") {
     state.editRefreshScheduler?.run(BIOME_ASSIGNMENT_PREVIEW_EFFECTS);
@@ -18020,6 +18024,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (state.heightEdit.activeStroke) return;
     if (state.heightEdit.terrainSelectionBox) {
       handleHeightSelectionBoxClick(state, event, documentRef);
       return;
@@ -18043,12 +18048,14 @@ function bindHeightEditing(canvas, state, documentRef) {
     }
     state.heightEdit.activeStroke = {
       pointerId: event.pointerId,
+      pointers: [],
+      originalPackHeights: new Map(),
       originals: new Map(),
       seed: ++state.heightEdit.strokeSeed,
       iteration: 0
     };
     capturePointer(canvas, event.pointerId);
-    applyHeightBrushAtEvent(state, event, documentRef);
+    scheduleHeightBrushAtEvent(state, event, documentRef);
   }, true);
 
   canvas.addEventListener("pointermove", event => {
@@ -18093,11 +18100,13 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    flushScheduledHeightBrush(state, documentRef, event, {draw: false});
+    const finalPreviewChanged = flushScheduledHeightBrush(state, documentRef, event, {draw: false});
     const commitTrace = finishHeightStroke(state, documentRef);
     try {
+      if (finalPreviewChanged && !commitTrace?.changedCells) state.renderer.draw({updateOverlay: false, checkGlError: false});
       releasePointer(canvas, event.pointerId);
-      updateHeightPanel(state);
+      updateHeightPanel(state, {includeMapSummary: false});
+      scheduleHeightPanelSummary(state, documentRef);
     } finally {
       if (commitTrace) {
         state.heightEdit.lastCommitPerformance = finishHeightBrushCommitTrace(commitTrace, {
@@ -19509,68 +19518,68 @@ function labelObjectFromCustomLabel(label) {
 }
 
 function scheduleHeightBrushAtEvent(state, event, documentRef) {
-  state.heightEdit.pendingBrushPointer = {pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, timeStamp: event.timeStamp};
+  const stroke = state.heightEdit.activeStroke;
+  if (!stroke || stroke.pointerId !== event.pointerId) return;
+  const samples = event.getCoalescedEvents?.();
+  if (samples?.length) stroke.pointers.push(...samples);
+  stroke.pointers.push(event);
   if (state.heightEdit.brushFrame) return;
-  const view = documentRef.defaultView;
-  const run = () => {
+  state.heightEdit.brushFrame = documentRef.defaultView.requestAnimationFrame(() => {
     state.heightEdit.brushFrame = 0;
-    const pointer = state.heightEdit.pendingBrushPointer;
-    state.heightEdit.pendingBrushPointer = null;
-    if (!pointer || state.heightEdit.activeStroke?.pointerId !== pointer.pointerId) return;
-    applyHeightBrushAtEvent(state, pointer, documentRef);
-  };
-  state.heightEdit.brushFrame = typeof view?.requestAnimationFrame === "function" ? view.requestAnimationFrame(run) : view?.setTimeout?.(run, 0) || 0;
+    if (state.heightEdit.activeStroke === stroke) applyPendingHeightBrush(state, documentRef, false, true);
+  });
 }
 
-function flushScheduledHeightBrush(state, documentRef, finalPointer = null, {draw = true} = {}) {
-  const pointer = state.heightEdit.pendingBrushPointer;
+function flushScheduledHeightBrush(state, documentRef, finalPointer, {draw = true} = {}) {
   cancelScheduledHeightBrush(state, documentRef);
-  const resolvedPointer = finalPointer && state.heightEdit.activeStroke?.pointerId === finalPointer.pointerId ? finalPointer : pointer;
-  if (resolvedPointer && state.heightEdit.activeStroke?.pointerId === resolvedPointer.pointerId) applyHeightBrushAtEvent(state, resolvedPointer, documentRef, {force: true, draw});
+  state.heightEdit.activeStroke.pointers.push(finalPointer);
+  return applyPendingHeightBrush(state, documentRef, true, draw);
 }
 
 function cancelScheduledHeightBrush(state, documentRef) {
   const frame = state.heightEdit.brushFrame;
-  const view = documentRef?.defaultView;
-  if (frame && typeof view?.cancelAnimationFrame === "function") view.cancelAnimationFrame(frame);
-  else if (frame) view?.clearTimeout?.(frame);
+  if (frame) documentRef?.defaultView?.cancelAnimationFrame(frame);
   state.heightEdit.brushFrame = 0;
-  state.heightEdit.pendingBrushPointer = null;
 }
 
-function applyHeightBrushAtEvent(state, event, documentRef, {force = false, draw = true} = {}) {
-  const brush = state.panels.height.getBrush();
+function applyPendingHeightBrush(state, documentRef, final, draw) {
   const stroke = state.heightEdit.activeStroke;
-  if (!brush.active || !stroke) return;
+  const brush = state.panels.height.getBrush();
+  const pointers = stroke.pointers.splice(0);
+  if (!brush.active || !pointers.length) return;
 
-  if (!acceptHeightBrushSample(stroke, event, {force})) return;
-
-  state.pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
-  const point = state.renderer.screenToWorld(event.clientX, event.clientY);
-  const changes = getHeightBrushChanges(state.map, point, brush, stroke);
-  if (!changes.length) {
-    if (brush.action === "fill" && !stroke.originals.size) {
-      state.heightEdit.lastAffected = 0;
-      state.heightEdit.lastHeight = "none";
-      state.heightEdit.lastDelta = "none";
-      state.heightEdit.lastNotice = stroke.notice || "未找到可填充的连通区域。";
-      updateHeightPanel(state);
+  const changedCells = new Set();
+  for (let index = 0; index < pointers.length; index++) {
+    const pointer = pointers[index];
+    const end = state.renderer.screenToWorld(pointer.clientX, pointer.clientY);
+    for (const point of sampleHeightBrushSegment(stroke, end, brush.radius, final && index === pointers.length - 1)) {
+      const changes = getHeightBrushChanges(state.map, point, brush, stroke);
+      if (!changes.length) continue;
+      applyHeightBrushPreview(state.map, changes, stroke.originalPackHeights);
+      for (const change of changes) changedCells.add(change.gridCell);
     }
-    updatePickPanel(documentRef, state);
-    return;
   }
 
-  applyHeightBrushPreview(state.map, changes);
-  state.heightEdit.lastAffected = changes.length;
-  state.heightEdit.lastHeight = summarizeChangedHeights(changes);
-  state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
-  state.heightEdit.lastNotice = stroke.notice || "";
-  state.editRefreshScheduler.run({
-    ...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW,
-    render: draw ? "draw" : "none",
-    changedGridCells: changes.map(change => change.gridCell)
-  });
-  updatePickPanel(documentRef, state);
+  const pointer = pointers[pointers.length - 1];
+  state.pick = state.renderer.pickClientPoint(pointer.clientX, pointer.clientY);
+  if (changedCells.size) {
+    state.heightEdit.lastAffected = changedCells.size;
+    state.heightEdit.lastNotice = stroke.notice || "";
+    state.editRefreshScheduler.run({
+      ...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW,
+      render: "none",
+      changedGridCells: [...changedCells]
+    });
+    if (draw) state.renderer.draw({updateOverlay: false, checkGlError: false});
+  } else if (brush.action === "fill" && !stroke.originals.size) {
+    state.heightEdit.lastAffected = 0;
+    state.heightEdit.lastHeight = "none";
+    state.heightEdit.lastDelta = "none";
+    state.heightEdit.lastNotice = stroke.notice || "未找到可填充的连通区域。";
+    updateHeightPanel(state, {includeMapSummary: false});
+  }
+  if (!final) updatePickPanel(documentRef, state);
+  return changedCells.size > 0;
 }
 
 function applyStateBrushAtEvent(state, event) {
@@ -19892,7 +19901,7 @@ function finishHeightStroke(state, documentRef) {
     return next;
   });
   trace.changedCells = changes.length;
-  const command = measureHeightBrushCommitStage(trace, "createCommand", () => createApplyHeightBrushCommand(changes));
+  const command = measureHeightBrushCommitStage(trace, "createCommand", () => createApplyHeightBrushCommand(changes, {originalPackHeights: stroke.originalPackHeights}));
   if (command.isNoop({map: state.map})) {
     state.heightEdit.lastCommitPerformance = finishHeightBrushCommitTrace(trace, {changedCells: 0, noop: true});
     state.heightEdit.activeCommitTrace = null;
@@ -19907,7 +19916,6 @@ function finishHeightStroke(state, documentRef) {
     refreshPanels: false,
     performanceTrace: trace
   });
-  updateHeightPanel(state, {includeMapSummary: false});
   return trace;
 }
 
@@ -20035,6 +20043,18 @@ function provinceChange(cells, originals, gridCell, nextValue) {
     before: originals.get(gridCell),
     after: nextValue
   };
+}
+
+function scheduleHeightPanelSummary(state, documentRef) {
+  if (state.heightEdit.summaryPending) return;
+  const view = documentRef.defaultView;
+  state.heightEdit.summaryPending = true;
+  const refresh = () => {
+    state.heightEdit.summaryPending = false;
+    if (!state.heightEdit.activeStroke) updateHeightPanel(state);
+  };
+  if (view.requestIdleCallback) view.requestIdleCallback(refresh);
+  else view.requestAnimationFrame(refresh);
 }
 
 function updateHeightPanel(state, {includeMapSummary = true} = {}) {

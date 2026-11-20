@@ -26,6 +26,7 @@ export const EDIT_REFRESH_PRESETS = Object.freeze({
   }),
   HEIGHT_BRUSH_PREVIEW: Object.freeze({
     render: "draw",
+    reuseResourceBinding: true,
     selection: "none",
     runtimeStats: false,
     pickPanel: false,
@@ -129,7 +130,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
           recordHeightBrushCommitStage(trace, "refreshHeightCells", startedAt, result || {});
           if (effects.render === "draw") {
             const drawStartedAt = globalThis.performance?.now?.() ?? Date.now();
-            state.renderer.draw();
+            state.renderer.draw({updateOverlay: false, checkGlError: false});
             recordHeightBrushCommitStage(trace, "heightBrushDraw", drawStartedAt);
           }
         } else {

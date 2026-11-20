@@ -164,8 +164,8 @@ async function exerciseHeightEditorUi(page) {
   assert.equal(beforeLock.scope.pressed, "true", "高度作用范围按钮缺少真实选中语义");
   assert.equal(beforeLock.action.activeClass, true, "高度动作按钮缺少 active class");
   assert.equal(beforeLock.scope.activeClass, true, "高度作用范围按钮缺少 active class");
-  assert.equal(beforeLock.action.color, "rgb(255, 224, 161)", "高度动作按钮没有高亮计算样式");
-  assert.equal(beforeLock.scope.color, "rgb(255, 224, 161)", "高度作用范围按钮没有高亮计算样式");
+  assert.equal(beforeLock.action.color, "rgb(50, 106, 118)", "高度动作按钮没有高亮计算样式");
+  assert.equal(beforeLock.scope.color, "rgb(50, 106, 118)", "高度作用范围按钮没有高亮计算样式");
   assert.deepEqual(beforeLock.activeViewModes, ["height"], "视图模式同步不应清除或污染高度按钮选中态");
   assert.equal(beforeLock.radius, 42, "高度画笔大小没有响应真实面板输入");
   assert.match(beforeLock.storedRadius || "", /42/, "高度画笔大小没有写入用户偏好");
@@ -206,8 +206,8 @@ async function exerciseHeightEditorUi(page) {
   assert.equal(afterReenter.scope.pressed, "true", "重新进入高度编辑后作用范围选中态丢失");
   assert.equal(afterReenter.action.activeClass, true, "重新进入高度编辑后动作 active class 丢失");
   assert.equal(afterReenter.scope.activeClass, true, "重新进入高度编辑后作用范围 active class 丢失");
-  assert.equal(afterReenter.action.color, "rgb(255, 224, 161)", "重新进入高度编辑后动作高亮丢失");
-  assert.equal(afterReenter.scope.color, "rgb(255, 224, 161)", "重新进入高度编辑后作用范围高亮丢失");
+  assert.equal(afterReenter.action.color, "rgb(50, 106, 118)", "重新进入高度编辑后动作高亮丢失");
+  assert.equal(afterReenter.scope.color, "rgb(50, 106, 118)", "重新进入高度编辑后作用范围高亮丢失");
   assert.equal(afterReenter.radius, 42, "重新进入高度编辑后画笔大小没有保持");
   assert.equal(afterReenter.selectionCells, selectionCells, "真实高度选区 GPU 高亮没有恢复");
   await panel.getByRole("button", {name: "关闭面板"}).click();

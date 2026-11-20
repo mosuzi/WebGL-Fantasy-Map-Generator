@@ -1,27 +1,23 @@
-export const HEIGHT_BRUSH_MIN_SAMPLE_INTERVAL_MS = 160;
-export const HEIGHT_BRUSH_MIN_SAMPLE_DISTANCE_PX = 6;
-
-export function acceptHeightBrushSample(stroke, sample, {force = false} = {}) {
-  if (!stroke || !Number.isFinite(sample?.clientX) || !Number.isFinite(sample?.clientY)) return false;
-  const time = Number.isFinite(sample.timeStamp) ? sample.timeStamp : 0;
-  if (!Number.isFinite(stroke.lastAppliedClientX) || !Number.isFinite(stroke.lastAppliedClientY)) {
-    recordHeightBrushSample(stroke, sample, time);
-    return true;
+// 以世界坐标的半径控制笔印间距，在同一动画帧收到多个拐点时也沿原轨迹补齐。
+export function sampleHeightBrushSegment(stroke, point, radius, final = false) {
+  const previous = stroke.lastBrushPoint;
+  if (!previous) {
+    stroke.lastBrushPoint = point;
+    return [point];
   }
 
-  const distance = Math.hypot(
-    sample.clientX - stroke.lastAppliedClientX,
-    sample.clientY - stroke.lastAppliedClientY
-  );
-  if (distance < HEIGHT_BRUSH_MIN_SAMPLE_DISTANCE_PX) return false;
-  if (!force && time - (Number(stroke.lastAppliedAt) || 0) < HEIGHT_BRUSH_MIN_SAMPLE_INTERVAL_MS) return false;
-
-  recordHeightBrushSample(stroke, sample, time);
-  return true;
-}
-
-function recordHeightBrushSample(stroke, sample, time) {
-  stroke.lastAppliedClientX = sample.clientX;
-  stroke.lastAppliedClientY = sample.clientY;
-  stroke.lastAppliedAt = time;
+  const dx = point.x - previous.x;
+  const dy = point.y - previous.y;
+  const distance = Math.hypot(dx, dy);
+  const spacing = radius / 2;
+  if (!(spacing > 0) || distance === 0) return [];
+  const count = Math.floor(distance / spacing);
+  const samples = [];
+  for (let index = 1; index <= count; index++) {
+    const portion = index * spacing / distance;
+    samples.push({x: previous.x + dx * portion, y: previous.y + dy * portion});
+  }
+  if (final && distance - count * spacing > 1e-6) samples.push(point);
+  if (samples.length) stroke.lastBrushPoint = samples[samples.length - 1];
+  return samples;
 }

@@ -17,7 +17,7 @@ const HEIGHT_DEPENDENT_DERIVED_SYSTEMS = Object.freeze([
   "diplomacy"
 ]);
 
-export function createApplyHeightBrushCommand(changes, {label = "高度笔刷"} = {}) {
+export function createApplyHeightBrushCommand(changes, {label = "高度笔刷", originalPackHeights} = {}) {
   const normalized = normalizeChanges(changes);
   return {
     label: `${label} ${normalized.length} cells`,
@@ -32,11 +32,11 @@ export function createApplyHeightBrushCommand(changes, {label = "高度笔刷"} 
       affected: systemAffected("height-brush", [{kind: "grid-cells", id: normalized.length}])
     },
     apply(context) {
-      applyHeights(context.map, normalized, "after");
+      applyHeights(context.map, normalized, "after", originalPackHeights);
       if (normalized.length) markHeightDependentDerivedStale(context.map);
     },
     revert(context) {
-      applyHeights(context.map, normalized, "before");
+      applyHeights(context.map, normalized, "before", originalPackHeights);
       if (normalized.length) markHeightDependentDerivedStale(context.map);
     },
     isNoop() {
@@ -48,8 +48,14 @@ export function createApplyHeightBrushCommand(changes, {label = "高度笔刷"} 
   };
 }
 
-export function applyHeightBrushPreview(map, changes) {
-  applyHeights(map, normalizeChanges(changes), "after");
+export function applyHeightBrushPreview(map, changes, originalPackHeights) {
+  // 中途回到整笔起始高度也是有效预览，最终入历史时才过滤整笔净变化。
+  applyHeights(map, changes, "after", originalPackHeights);
+}
+
+export function restoreHeightBrushPreview(map, stroke) {
+  const changes = Array.from(stroke.originals, ([gridCell, before]) => ({gridCell, before}));
+  applyHeights(map, changes, "before", stroke.originalPackHeights);
 }
 
 export function prewarmHeightEditorPackCellsByGrid(map) {
@@ -77,21 +83,28 @@ function normalizeChanges(changes) {
   return [...byCell.values()];
 }
 
-function applyHeights(map, changes, key) {
+function applyHeights(map, changes, key, originalPackHeights) {
   if (!map?.grid?.cells?.h) return;
+  const packHeights = map.pack?.cells?.h;
+  const writePack = (packCell, change) => {
+    if (key === "after" && originalPackHeights && !originalPackHeights.has(packCell)) {
+      originalPackHeights.set(packCell, packHeights[packCell]);
+    }
+    const value = change[key];
+    packHeights[packCell] = value === change.before ? (originalPackHeights?.get(packCell) ?? value) : value;
+  };
   const cachedPackCellsByGrid = map.__heightEditorPackCellsByGrid;
   if (!(cachedPackCellsByGrid instanceof Map) && !Object.hasOwn(map, "__heightEditorPackCellsByGrid")) {
-    const valuesByGridCell = new Map();
+    const changesByGridCell = new Map();
     for (const change of changes) {
       const value = clampHeight(change[key]);
       map.grid.cells.h[change.gridCell] = value;
-      valuesByGridCell.set(change.gridCell, value);
+      changesByGridCell.set(change.gridCell, change);
     }
     const packGridCells = map.pack?.cells?.g;
-    const packHeights = map.pack?.cells?.h;
     for (let packCell = 0; packCell < (packGridCells?.length || 0); packCell++) {
-      const value = valuesByGridCell.get(packGridCells[packCell]);
-      if (value !== undefined && packHeights) packHeights[packCell] = value;
+      const change = changesByGridCell.get(packGridCells[packCell]);
+      if (change && packHeights) writePack(packCell, change);
     }
     return;
   }
@@ -100,7 +113,7 @@ function applyHeights(map, changes, key) {
     const value = clampHeight(change[key]);
     map.grid.cells.h[change.gridCell] = value;
     for (const packCell of packCellsByGrid?.get(change.gridCell) || []) {
-      map.pack.cells.h[packCell] = value;
+      writePack(packCell, change);
     }
   }
 }
@@ -122,7 +135,7 @@ function markHeightDependentDerivedStale(map) {
 function clampHeight(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.min(100, Math.round(numeric)));
+  return Math.max(0, Math.min(100, numeric));
 }
 
 function ensurePackCellsByGrid(map) {

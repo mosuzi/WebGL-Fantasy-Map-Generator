@@ -70,7 +70,8 @@ assert.match(flushSource, previewDrawPattern, "flushViewportPreview 没有把直
 const disabledPreviewMutation = flushSource.replace("viewportPreview: true", "viewportPreview: false");
 assert.notEqual(disabledPreviewMutation, flushSource, "viewportPreview true→false mutation 未命中");
 assert.doesNotMatch(disabledPreviewMutation, previewDrawPattern, "viewportPreview 被关闭后仍通过专项契约");
-assert.match(rendererSource, /const glErrorChecked = !viewportPreview;\s+const glError = glErrorChecked \? gl\.getError\(\) : Number\(this\.lastDraw\?\.glError \|\| 0\);/, "viewport preview 仍逐帧同步读取 GL error");
+assert.match(rendererSource, /const glErrorChecked = checkGlError;\s+const glError = glErrorChecked \? gl\.getError\(\) : Number\(this\.lastDraw\?\.glError \|\| 0\);/, "viewport preview 仍逐帧同步读取 GL error");
+assert.match(rendererSource, /checkGlError = !viewportPreview/, "视口预览应默认跳过同步 GL 读取");
 assert.match(rendererSource, /this\.lastDraw = \{\s+sequence: event\.sequence,\s+drawMs,\s+glError,\s+glErrorChecked,/u, "draw stats 没有区分 GL error 是否本帧检查");
 assert.match(rendererSource, /matrix\(\$\{preview\.scale\}, 0, 0, \$\{preview\.scale\}, \$\{preview\.translateX\}, \$\{preview\.translateY\}\)/, "实际 overlay 矩阵没有消费设备像素对齐后的平移值");
 assert.match(rendererSource, /const VIEWPORT_LINE_OVERSCAN_RATIO = 0\.5;/, "道路与河流没有使用半个视口的自适应预取范围");

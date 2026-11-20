@@ -143,6 +143,7 @@ import {
   applyCellAttributePatch,
   createCellAttributeStore,
   deleteCellAttributeStore,
+  encodeHeight,
   ensureCellAttributePaletteEntry,
   prepareCellAttributePatch,
   refreshCellAttributePalette,
@@ -2290,6 +2291,11 @@ export class PlaceholderMapRenderer {
   refreshHeightCells(gridCells, {draw = true, deferTopology = false, binding = null} = {}) {
     const normalizedCells = [...new Set((gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))].sort((a, b) => a - b);
     if (!this.map || !normalizedCells.length) return {incremental: false, cells: 0, spans: 0};
+    // 底图着色从地形纹理取高度。首次预览、取消和历史回放共用这份数据。
+    const terrain = this.cellAttributeStore?.snapshot.terrain;
+    const heights = this.map.grid.cells.h;
+    const textureChanges = terrain ? normalizedCells.filter(cell => terrain[cell * 4] !== encodeHeight(heights[cell])) : [];
+    if (textureChanges.length) this.refreshCellAttributeCells(textureChanges);
     if (this.colorMode !== "height" || !(this.surfaceVertices instanceof Float32Array)) {
       this.refreshCellSurface({draw, binding});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
@@ -2315,11 +2321,15 @@ export class PlaceholderMapRenderer {
       this.refreshCellSurface({draw, binding});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
     }
+    // 旧档的常驻底图只保留紧凑顶点：第三个字的最低位记录水陆。
+    const compact = this.surfaceCompactGeometry;
+    const compactWords = !this.surfaceVertices.length && compact?.length
+      ? new Uint32Array(compact.buffer, compact.byteOffset, compact.length) : null;
     const requiresShoreRebuild = !deferTopology && normalizedCells.some(gridCell => {
       const range = this.surfaceCellRanges.get(gridCell);
-      const storedSide = range ? this.surfaceVertices[range.start + 5] : null;
-      const currentSide = Number(this.map.grid.cells.h[gridCell]) >= 20 ? 0.25 : 0.75;
-      return storedSide !== currentSide;
+      if (!range) return true;
+      const wasWater = compactWords ? Boolean(compactWords[range.start / 2 + 2] & 1) : this.surfaceVertices[range.start + 5] >= 0.5;
+      return wasWater !== (heights[gridCell] < 20);
     });
     if (requiresShoreRebuild) {
       const localMesh = refreshCellVisualMeshCells(this.map, this.cellVisualMesh, normalizedCells);
@@ -2354,6 +2364,13 @@ export class PlaceholderMapRenderer {
       this.rebuildShoreVisualCache();
       this.refreshCellSurface({draw, binding});
       return {incremental: false, cells: normalizedCells.length, spans: 1, reason: "shore-or-land-water-change"};
+    }
+
+    if (terrain && this.canPresentGpuResidentColorMode("height")) {
+      const shoreSpans = refreshShoreSurfaceCellColors(this, textureChanges);
+      if (binding) rebindEditedRendererResources(this, binding, null, this.surfaceResourceOwner);
+      if (draw) this.draw();
+      return {incremental: true, cells: normalizedCells.length, spans: 0, shoreSpans};
     }
 
     const spans = [];
@@ -3467,7 +3484,7 @@ export class PlaceholderMapRenderer {
     }
   }
 
-  draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true, viewportPreview = false, trackPerformance = true} = {}) {
+  draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true, viewportPreview = false, checkGlError = !viewportPreview, trackPerformance = true} = {}) {
     if (this.webGlContextLost || this.webGlContextResourceState !== "ready") return;
     if (this.retainedResourcePublishSuspended > 0) {
       this.retainedResourcePublishPendingDraw = true;
@@ -3711,7 +3728,7 @@ export class PlaceholderMapRenderer {
 
     const oceanCurrentProjection = createLineWidthProjection({map: this.map, camera: this.camera, canvas: this.canvas, canvasSize: this.canvasSize});
     const drawMs = roundMs(performance.now() - startedAt);
-    const glErrorChecked = !viewportPreview;
+    const glErrorChecked = checkGlError;
     const glError = glErrorChecked ? gl.getError() : Number(this.lastDraw?.glError || 0);
     this.lastDraw = {
       sequence: event.sequence,
@@ -5803,10 +5820,12 @@ function refreshShoreSurfaceCellColors(renderer, gridCells) {
     waterCovers: []
   };
   for (const gridCell of gridCells) {
-    const color = colorForCell(gridCell, renderer.map, renderer.colorMode, renderer.viewOptions);
+    let color;
     for (const key of Object.keys(verticesByKey)) {
       const vertices = verticesByKey[key];
-      const cellRanges = ranges[key]?.get(gridCell) || [];
+      const cellRanges = ranges[key]?.get(gridCell);
+      if (!cellRanges?.length) continue;
+      color ??= colorForCell(gridCell, renderer.map, renderer.colorMode, renderer.viewOptions);
       for (const range of cellRanges) {
         for (let offset = range.start; offset < range.end; offset += 6) {
           vertices[offset + 2] = color[0];
@@ -7212,11 +7231,11 @@ function createRendererSurfaceResourceOwner(renderer, map, bundle, binding = nul
   });
 }
 
-function adoptRendererSurfaceResourceOwner(renderer, owner) {
+function adoptRendererSurfaceResourceOwner(renderer, owner, retainedGeometryOwner = null) {
   const surfaceFloatLength = rendererSurfaceFloatLength(renderer);
   if (!owner || owner.surfaceFloatLength !== surfaceFloatLength
     || owner.correctionWordLength !== renderer.cellVisualCorrectionGeometry?.length
-    || owner.rangeFingerprint !== fingerprintSurfaceCellRanges(renderer.surfaceCellRanges, surfaceFloatLength)
+    || owner.rangeFingerprint !== (retainedGeometryOwner?.rangeFingerprint ?? fingerprintSurfaceCellRanges(renderer.surfaceCellRanges, surfaceFloatLength))
     || renderer.surfaceBaseBufferSet?.owner !== owner || renderer.cellVisualCorrectionBufferSet?.owner !== owner) {
     throw new Error("surface resource owner 无法接纳当前资源组");
   }
@@ -7240,10 +7259,14 @@ function adoptRendererSurfaceResourceOwner(renderer, owner) {
   return owner;
 }
 
-function rebindEditedRendererResources(renderer, binding, previousBinding = null) {
+function rebindEditedRendererResources(renderer, binding, previousBinding = null, retainedGeometryOwner = null) {
   const normalized = normalizeRenderResourceBinding(binding, "renderer.editedSurface.binding");
   const current = renderer.surfaceResourceOwner ? renderResourceBindingFromOwner(renderer.surfaceResourceOwner) : null;
   assertEditedRendererResourcePreflight(renderer, normalized, previousBinding);
+  // 仅纹理着色时沿用已验证几何的指纹，避免松手时两次遍历全图范围。
+  if (retainedGeometryOwner && (renderer.surfaceResourceOwner !== retainedGeometryOwner || surfaceResourceOwnerMismatch(renderer))) {
+    throw new Error("高度着色的底图资源已更换");
+  }
   const fields = [
     "surfaceBaseBufferSet", "vertexBuffer", "cellVisualCorrectionBufferSet",
     "surfaceVerticesOwner", "surfaceCellRangesOwner", "cellVisualCorrectionGeometryOwner", "cellAttributeStoreOwner",
@@ -7257,7 +7280,7 @@ function rebindEditedRendererResources(renderer, binding, previousBinding = null
   const before = new Map(fields.map(field => [field, renderer[field]]));
   try {
     if (!current || !sameRenderResourceBinding(current, normalized)) {
-      const owner = createSurfaceResourceOwner(normalized, {
+      const owner = retainedGeometryOwner ? Object.freeze({...retainedGeometryOwner, ...normalized}) : createSurfaceResourceOwner(normalized, {
         surfaceFloatLength: rendererSurfaceFloatLength(renderer),
         correctionWordLength: renderer.cellVisualCorrectionGeometry?.length || 0,
         surfaceCellRanges: renderer.surfaceCellRanges
@@ -7265,7 +7288,7 @@ function rebindEditedRendererResources(renderer, binding, previousBinding = null
       renderer.surfaceBaseBufferSet = rebindSurfaceBaseBufferSetOwner(renderer.surfaceBaseBufferSet, owner);
       renderer.vertexBuffer = renderer.surfaceBaseBufferSet.segments[0]?.buffer || null;
       renderer.cellVisualCorrectionBufferSet = rebindCellVisualCorrectionBufferSetOwner(renderer.cellVisualCorrectionBufferSet, owner);
-      adoptRendererSurfaceResourceOwner(renderer, owner);
+      adoptRendererSurfaceResourceOwner(renderer, owner, retainedGeometryOwner);
     }
     adoptRendererRetainedResourceBindings(renderer, normalized);
     for (const family of RENDER_CACHE_RESOURCE_FAMILIES) adoptRenderCacheResourceBinding(renderer, family, normalized);

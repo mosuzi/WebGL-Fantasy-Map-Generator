@@ -46,14 +46,16 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
   if (brush.action === "level") {
     if (!Number.isFinite(stroke.targetHeight)) stroke.targetHeight = cells.h[nearest.gridCell];
     if (!(stroke.levelFactors instanceof Map)) stroke.levelFactors = new Map();
-    const targetHeight = clampHeight(stroke.targetHeight);
+    const targetHeight = stroke.targetHeight;
     const perturbation = Math.max(0, Number(brush.strength) || 0);
     const seed = Number.isFinite(stroke.seed) ? Math.trunc(stroke.seed) : 0;
     return affected.map(({gridCell, factor}) => {
       if (!stroke.levelFactors.has(gridCell)) stroke.levelFactors.set(gridCell, factor);
       const stableFactor = stroke.levelFactors.get(gridCell);
       const offset = perturbation ? stableSignedNoise(gridCell, seed, 0) * perturbation * stableFactor : 0;
-      return heightChange(cells, originals, gridCell, targetHeight + offset);
+      if (!perturbation) return heightChange(cells, originals, gridCell, targetHeight, {exact: true});
+      const next = targetHeight + offset;
+      return heightChange(cells, originals, gridCell, brush.preserveSurface ? clampHeightToScope(next, scope) : next);
     }).filter(Boolean);
   }
   if (brush.action === "disrupt") {
@@ -473,8 +475,8 @@ function stableSignedNoise(gridCell, seed, iteration) {
   return value / 0xffffffff * 2 - 1;
 }
 
-function heightChange(cells, originals, gridCell, nextValue) {
-  const after = clampHeight(nextValue);
+function heightChange(cells, originals, gridCell, nextValue, {exact = false} = {}) {
+  const after = exact ? nextValue : clampHeight(nextValue);
   if (after === cells.h[gridCell]) return null;
   if (!originals.has(gridCell)) originals.set(gridCell, cells.h[gridCell]);
   return {

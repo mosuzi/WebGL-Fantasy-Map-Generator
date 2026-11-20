@@ -363,7 +363,7 @@ function toUint(value) {
   return Number.isFinite(number) && number > 0 ? Math.round(number) >>> 0 : 0;
 }
 
-function encodeHeight(value) {
+export function encodeHeight(value) {
   const height = Number(value);
   if (!Number.isFinite(height) || height <= 0) return 0;
   const encoded = Math.round(height);
