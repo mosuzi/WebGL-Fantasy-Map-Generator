@@ -174,11 +174,13 @@ assert.equal(gapLabel.collides, false, "上一国家国名的字间水面应允�
 // A single-cell country still has a two-dimensional interior. Its principal
 // direction and the shortlist near the shore cannot justify dropping its name.
 const singleCell = {metadata: {graphHeight: 60}, pack: {
-  cells: {p: [[40, 15]], v: [[0, 1, 2, 3]]}, vertices: {p: [[0,0], [80,0], [80,30], [0,30]]}
+  cells: {i:[0], state:[1], h:[30], p: [[40, 15]], v: [[0, 1, 2, 3]]}, vertices: {p: [[0,0], [80,0], [80,30], [0,30]]}
 }};
 const singleOutline = homelandOutline(singleCell, new Set([0]));
+const singleAxis = resolveStateLabelPlacement(singleCell, {i:1}).rotation;
+assert.equal(singleAxis, 0);
 const inlandName = placeHomelandLabel({
-  item: {...ringLabel, x: 3, y: 3, rotation: 90, resolvedStyle: {fontSize: 18}}, screen: {x: 3, y: 3},
+  item: {...ringLabel, x: 3, y: 3, rotation: singleAxis, resolvedStyle: {fontSize: 18}}, screen: {x: 3, y: 3},
   outline: singleOutline, sites: [{x: 3, y: 3}], sx: 1, sy: 1, scale: 1, obstacles: [], peers: [], padding: 0,
   fits: (box, margin, {x, y}) => homelandContainsBox(singleOutline, x + box.left - margin, y + box.top - margin,
     x + box.right + margin, y + box.bottom + margin)
@@ -195,26 +197,33 @@ for (const axis of [-72, 108]) {
   const {glyphs} = place({item:{...label, rotation:axis}});
   assert.ok(glyphs[0].y < glyphs.at(-1).y && glyphs[0].x > glyphs.at(-1).x, "倾斜竖排应从上往下读");
 }
-const wide = place({item:{...label,text:"燕国",rotation:0}, obstacles:[{left:-3,right:3,top:-3,bottom:3}]});
-assert.ok(wide.spacing > linear.spacing && wide.bend === 0 && !wide.collides);
-const arced = place({obstacles:[{left:-1,right:1,top:-2,bottom:2}]});
-assert.ok(arced.bend && arced.glyphs.every(g => g.angle === 0), "中心障碍应先尝试曲线");
-assert.deepEqual(arced.anchor,linear.anchor);
 const overlap = place({obstacles:[{left:-500,right:500,top:-500,bottom:500}]});
-assert.ok(overlap.cityCollides && overlap.glyphs.length);
+assert.ok(overlap.cityCollides);
+assert.deepEqual(overlap.glyphs, linear.glyphs, "城市出现只能改变国名显示强度");
+assert.deepEqual(overlap.anchor, linear.anchor);
 const overview = place({scale:0.8});
-assert.equal(overview.glyphs.map(g=>g.character).join(""),label.text);
+for (const [i, glyph] of overview.glyphs.entries()) {
+  assert.ok(Math.abs(glyph.y / 0.8 - linear.glyphs[i].y) < 0.01);
+}
 const within = halfWidth => (box, margin) => box.left-margin >= -halfWidth && box.right+margin <= halfWidth;
 const snug = place({item:{...label,rotation:0},fits:within(34)});
 assert.equal(snug.glyphs.map(g=>g.character).join(""),label.text);
-assert.equal(snug.fontSize,linear.fontSize);
-assert.equal(snug.spacing,1);
+assert.ok(snug.fontSize <= linear.fontSize);
 const reduced = place({item:{...label,rotation:0},scale:0.8,fits:within(27)});
 assert.equal(reduced.glyphs.map(g=>g.character).join(""),label.text);
-assert.ok(reduced.fontSize < overview.fontSize, "稍微缩小全称即可容纳时应保留政体");
+assert.equal(reduced.lines, 2, "窄地先按国名与政体分行");
 const short = place({item:{...label,rotation:0},scale:0.8,fits:within(13)});
 assert.equal(short.glyphs.map(g=>g.character).join(""),"燕");
 assert.ok(short.fontSize < linear.fontSize);
+const wrap = (text, shortName) => place({item:{...label, text, state:{name:shortName}, rotation:0},
+  fits:within(49)});
+for (const [name, stem, second] of [["滕联邦共和国","滕","共和国"], ["North Realm","North","Realm"]]) {
+  const wrapped = wrap(name, stem);
+  assert.equal(wrapped.lines, 2);
+  const lower = wrapped.glyphs.filter(g => g.y > 0);
+  assert.equal(lower.map(g => g.character).join(""), second);
+  assert.equal(wrapped.glyphs.map(g => g.character).join(""), name);
+}
 assert.equal(place({fits:()=>false}),null, "无可用本土空间时应隐藏");
 const offsetShadow = place({item:{...label,text:"田",state:{name:"田"},resolvedStyle:{fontSize:20,shadowOffsetX:20}},
   fits:(box,gap)=>box.left-gap > -24 && box.right+gap < 24});

@@ -4,6 +4,7 @@ import {createServer} from "vite";
 // Offline audit. Enumerate translations and directions rather than using the
 // renderer's shortlist. Every positive result is an exact, reproducible fit.
 const [archive, measurement, output] = process.argv.slice(2);
+const fixedPositions = process.argv.includes("--fixed-positions");
 const data = JSON.parse(await readFile(measurement));
 const vite = await createServer({configFile: false, root: "app/webgl-generator", server: {middlewareMode: true, hmr: false}, logLevel: "error"});
 try {
@@ -25,7 +26,9 @@ try {
     const mean = [0, 1].map(axis => cells.reduce((sum, i) => sum + map.pack.cells.p[i][axis] * map.pack.cells.area[i], 0) / weight);
     const bounds = [0, 1].map(axis => [Math.min(...points.map(p => p[axis])), Math.max(...points.map(p => p[axis]))]);
     const bias = (x, y) => Math.hypot(...[x, y].map((v, k) => (v - mean[k]) / Math.max(1, bounds[k][1] - bounds[k][0])));
-    for (const row of data.rows.filter(r => r.id === state.id)) {
+    const samples = data.rows.filter(r => r.id === state.id);
+    const reference = samples.find(r => r.scale === 1 && r.glyphs?.length) || samples.find(r => r.glyphs?.length);
+    for (const row of samples) {
       const {scale, sx, sy, style} = row;
       const result = {id: state.id, name: state.name, scale, mode: row.mode, size: row.size};
       results.push(result);
@@ -33,6 +36,16 @@ try {
         if (g.length > 3 && !state.locked && !homelandContainsBox(outline, ...g.slice(3))) {
           throw Error(`${state.name} ${scale} 倍的实际字框越界：${g[2]}`);
         }
+      }
+      if (fixedPositions) {
+        if (scale >= 2.8 && row.glyphs?.length) throw Error(`${state.name} 近景仍显示国名`);
+        if (!reference || !row.glyphs?.length || state.locked) continue;
+        if (row.text !== reference.text) throw Error(`${state.name} 缩放改变了名称`);
+        result.maxErrorPx = Math.max(...row.glyphs.map(([x, y], i) => Math.hypot(
+          (x - reference.glyphs[i][0]) * sx, (y - reference.glyphs[i][1]) * sy
+        )));
+        if (result.maxErrorPx > 0.5) throw Error(`${state.name} 缩放后偏移 ${result.maxErrorPx}px`);
+        continue;
       }
       if (!cells.length || row.mode === "无标签" || scale >= 3.95 || state.locked || scale < row.minScale) {
         result.reason = !cells.length ? "无本土" : scale >= 3.95 ? "近景图层淡出" : "存档显示设置";

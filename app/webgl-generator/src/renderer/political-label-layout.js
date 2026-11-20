@@ -2,7 +2,6 @@ import {homelandAnchorBands} from "./homeland-label-scan.js";
 
 const STATE_MIN_LETTER_SPACING = 2.4;
 const PROVINCE_MIN_LETTER_SPACING = 0.7;
-const BANK_INSETS = [0.25, 0.8, 1.35, 1.9];
 const NO_BANKS = [];
 
 export const PROVINCE_COLLISION_OPACITY = 0.76;
@@ -69,166 +68,132 @@ function uprightInkBox(x, y, fontSize, style) {
   };
 }
 
-// Cache geometric fits across pans. Visible city obstacles are tested afresh.
-export function placeHomelandLabel(options) {
-  const preferred = placeAtHomelandSites(options);
-  return options.outline?.frame ? searchHomelandInterior(options, preferred) : preferred;
+// Lay out the name once at the overview projection. A camera gesture changes
+// only the projection of those glyphs, never the chosen site or line breaks.
+export function placeHomelandLabel({item, screen, scale, sx, sy, sites, banks = NO_BANKS, outline, fits, obstacles, peers, padding}) {
+  const short = item.state?.name?.trim() || item.text;
+  const key = [sx, sy, item.x, item.y, item.rotation, item.text, short].join("|");
+  let cached = item.homelandLayout;
+  if (!cached || cached.key !== key || cached.style !== item.resolvedStyle || cached.outline !== outline || cached.sites !== sites || cached.banks !== banks) {
+    const result = fitHomelandName({item, short, sx, sy, sites: sites ?? [item], banks, outline, fits});
+    cached = item.homelandLayout = {key, style: item.resolvedStyle, outline, sites, banks, result};
+  }
+  if (!cached.result) return null;
+  const {layout, site, fontSize, candidateIndex} = cached.result;
+  const size = fontSize * scale;
+  if (size < 6) return null;
+  const anchor = {x: screen.x + (site.x - item.x) * sx * scale, y: screen.y + (site.y - item.y) * sy * scale};
+  if (cached.projection?.scale !== scale) {
+    const box = scaleBox(layout.box, scale);
+    const glyphs = layout.glyphs.map(g => ({
+      ...g, x: g.x * scale, y: g.y * scale, width: g.width * scale, height: g.height * scale, box: scaleBox(g.box, scale)
+    }));
+    cached.projection = {scale, box, glyphs, rootSize: symmetricRootSize(box, size)};
+  }
+  const projected = cached.projection;
+  const box = translateBox(projected.box, anchor.x, anchor.y);
+  const glyphs = projected.glyphs.map(g => ({...g, box: translateBox(g.box, anchor.x, anchor.y)}));
+  const cityCollides = overlapSummary(glyphs, box, obstacles, padding).count > 0;
+  const peerCollides = overlapSummary(glyphs, box, peers, padding).count > 0;
+  return {...layout, anchor, box, glyphs, fontSize: size, mapScale: scale, candidateIndex, rootSize: projected.rootSize,
+    cityCollides, peerCollides, collides: cityCollides || peerCollides};
 }
 
-function placeAtHomelandSites({item, screen, scale, sx, sy, fits, sites, banks = NO_BANKS, obstacles, peers, padding}) {
-  const anchors = sites ?? [item];
-  const baseSize = positive(item.resolvedStyle.fontSize, 30);
-  const short = item.state?.name?.trim() || item.text;
-  const names = item.text === short ? [item.text] : [item.text, short];
-  const size = baseSize * Math.min(1, Math.max(0.5, Math.sqrt(scale)));
-  const sizes = [size];
-  const floor = Math.min(size, Math.max(11, baseSize * 0.48));
-  while (sizes.at(-1) > floor) sizes.push(Math.max(floor, sizes.at(-1) * 0.84));
+function scaleBox(box, scale) {
+  return {left: box.left * scale, right: box.right * scale, top: box.top * scale, bottom: box.bottom * scale};
+}
+
+function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
   const radians = item.rotation * Math.PI / 180;
   const dx = sx * Math.cos(radians), dy = sy * Math.sin(radians);
-  // A principal axis has no reading direction. Read mostly vertical names
-  // top to bottom, and mostly horizontal names left to right on screen.
-  const direction = (Math.abs(dy) > Math.abs(dx) ? dy : dx) < 0 ? -1 : 1;
-  const rotation = Math.atan2(direction * dy, direction * dx) * 180 / Math.PI;
-  const key = [sx, sy, item.x, item.y, item.rotation, item.text, short, scale].join("|");
-  const cached = item.homelandCandidates;
-  if (cached?.key !== key || cached.style !== item.resolvedStyle || cached.sites !== sites || cached.banks !== banks) {
-    item.homelandCandidates = {key, style: item.resolvedStyle, sites, banks, layouts: new Map(), bankLayouts: new Map(), strips: new Map(), scans: new Map()};
-  }
-  if (!anchors.length && !banks.length) return null;
-  let index = 0;
-  let fallback = null;
-  const snugSpacing = 1 - Math.max(STATE_MIN_LETTER_SPACING, finite(item.resolvedStyle.letterSpacing));
-  for (const name of names) {
-    for (const fontSize of sizes) {
-      let overlapping = null;
-      const consider = (layout, site, candidateIndex) => {
-        const anchor = {x: screen.x + (site.x - item.x) * sx, y: screen.y + (site.y - item.y) * sy};
-        const candidate = positionedHomelandLabel(layout, anchor, fontSize, candidateIndex, obstacles, peers, padding);
-        if (!candidate.collides) return candidate;
-        if (!overlapping || (candidate.peerCollides !== overlapping.peerCollides ? !candidate.peerCollides : candidate.cost < overlapping.cost)) {
-          overlapping = candidate;
-        }
-        return null;
-      };
-      if (banks.length && Array.from(name).length >= 2) {
-        const cache = item.homelandCandidates.bankLayouts;
-        if (!cache.has(index)) cache.set(index, bankLabelLayouts({name, short, fontSize, item, sx, sy, rotation, banks, fits, axisScale: Math.hypot(dx, dy)}));
-        for (const {layout, site, bankIndex} of cache.get(index)) {
-          const result = consider(layout, site, -(1 + index * banks.length * BANK_INSETS.length ** 2 + bankIndex));
-          if (result) return result;
+  const frame = outline?.frame;
+  const base = positive(item.resolvedStyle.fontSize, 22);
+  const width = frame ? frame.width * sx : Infinity, height = frame ? frame.height * sy : Infinity;
+  const size = frame ? base * Math.min(1.15, Math.max(0.55, Math.sqrt(width * height) / 180)) : base;
+  const axisScale = Math.hypot(dx, dy);
+  const span = frame ? (Math.abs(dx) * width + Math.abs(dy) * height) / axisScale : Infinity;
+  let candidateIndex = 0;
+  for (const name of new Set([item.text, short])) {
+    const rows = splitHomelandName(name, short);
+    const upright = /\p{Script=Han}/u.test(name);
+    const direction = (upright && Math.abs(dy) > Math.abs(dx) ? dy : dx) < 0 ? -1 : 1;
+    const rotation = Math.atan2(direction * dy, direction * dx) * 180 / Math.PI;
+    // Compact countries have room across the axis. An elongated country
+    // naturally reads as a single line unless that line will crowd its ends.
+    const preferRows = rows && Array.from(name).length >= 4 && (Array.from(name).length * size > span * 0.54
+      || (frame && Math.max(width, height) < 1.8 * Math.min(width, height)));
+    const variants = !rows ? [[name]] : preferRows ? [rows, [name]] : [[name], rows];
+    const factors = name === short ? [1, 0.82, 0.66, 0.51, 0.38] : [1, 0.82, 0.66];
+    for (const factor of factors) {
+      const fontSize = size * factor;
+      const margin = Math.max(2, fontSize * 0.12);
+      const inside = (layout, site) => fits(emptyBox(), 0, site) && layout.glyphs.every(glyph => fits(glyph.box, margin, site));
+      // Keep a compact two-bank name when the channel is at a word boundary.
+      if (upright && banks.length && name !== short) {
+        // A small reduction can keep both words on their banks without
+        // moving the whole name into a less representative coastal strip.
+        for (const bankSize of [fontSize, fontSize * 0.94]) {
+          const bank = bankLabelLayout({name, short, fontSize: bankSize, item, sx, sy, rotation, banks, fits, axisScale});
+          if (bank) return {...bank, fontSize: bankSize, candidateIndex: -1 - bank.bankIndex};
         }
       }
-      for (const [extraSpacing, curve] of [[0, 0], [snugSpacing, 0], [0.22 * fontSize, 0], [0.5 * fontSize, 0], [0.85 * fontSize, 0],
-        [0, -0.7], [0, 0.7], [0.35 * fontSize, -1.15], [0.35 * fontSize, 1.15]]) {
-        const shapeIndex = index++;
-        const layouts = item.homelandCandidates.layouts;
-        if (!layouts.has(shapeIndex)) {
-          const layout = createPoliticalLabelGlyphLayout(name, {...item.resolvedStyle, fontSize}, {
-            targetKind: "state", upright: true, rotation, bend: curve * fontSize, extraSpacing
-          });
-          layouts.set(shapeIndex, {layout, valid: []});
-        }
-        const {layout, valid} = layouts.get(shapeIndex);
-        for (const [siteIndex, site] of anchors.entries()) {
-          valid[siteIndex] ??= layout.glyphs.every(glyph => fits(glyph.box, Math.max(2, fontSize * 0.12), site));
-          if (!valid[siteIndex]) continue;
-          const result = consider(layout, site, shapeIndex * anchors.length + siteIndex);
-          if (result) return result;
+      for (const lines of variants) {
+        const layout = homelandLineLayout(lines, item.resolvedStyle, fontSize, rotation, upright);
+        candidateIndex++;
+        const site = sites.find(site => inside(layout, site));
+        if (site) return {layout, site, fontSize, candidateIndex};
+        if (!frame) continue;
+        for (const {left, right, y} of homelandAnchorBands(outline, layout, fontSize, sx, sy)) {
+          const inland = {x: Math.max(left, Math.min(right, frame.cx)), y};
+          if (inside(layout, inland)) return {layout, site: inland, fontSize, candidateIndex};
+          inland.x = (left + right) / 2;
+          if (inside(layout, inland)) return {layout, site: inland, fontSize, candidateIndex};
         }
       }
-      if (overlapping && (!fallback || (fallback.peerCollides && !overlapping.peerCollides))) fallback = overlapping;
     }
   }
-  return fallback;
+  return null;
 }
 
-function positionedHomelandLabel(layout, anchor, fontSize, candidateIndex, obstacles, peers, padding) {
-  const box = translateBox(layout.box, anchor.x, anchor.y);
-  const glyphs = layout.glyphs.map(g => ({...g, box: translateBox(g.box, anchor.x, anchor.y)}));
-  const city = overlapSummary(glyphs, box, obstacles, padding);
-  const peer = overlapSummary(glyphs, box, peers, padding);
-  return {...layout, anchor, box, glyphs, fontSize, candidateIndex, rootSize: symmetricRootSize(layout.box, fontSize),
-    cityCollides: city.count > 0, peerCollides: peer.count > 0, collides: city.count + peer.count > 0, cost: peer.area * 10 + city.area};
-}
-
-function searchHomelandInterior({item, outline, sx, sy, scale, screen, fits, obstacles, peers, padding}, preferred) {
-  const f = outline.frame, cache = item.homelandCandidates;
-  const bias = (x, y) => Math.hypot((x - f.cx) / f.width, (y - f.cy) / f.height);
-  const originalName = preferred?.glyphs.map(g => g.character).join("");
-  const mean = (axis, factor) => item[axis] + (preferred.anchor[axis] - screen[axis]
-    + preferred.glyphs.reduce((s, g) => s + g[axis], 0) / preferred.glyphs.length) / factor;
-  const oldBias = preferred ? bias(mean("x", sx), mean("y", sy)) : Infinity;
-  const full = item.text;
-  if (originalName === full && oldBias < 0.14 && !preferred.peerCollides) return preferred;
-  const base = item.resolvedStyle.fontSize || 30, normal = base * Math.min(1, Math.max(0.5, Math.sqrt(scale)));
-  const floor = Math.min(normal, Math.max(11, base * 0.48));
-  const rad = item.rotation * Math.PI / 180;
-  const axis = Math.atan2(sy * Math.sin(rad), sx * Math.cos(rad)) * 180 / Math.PI;
-  const angles = [...new Set([axis, 0, axis - 20, axis + 20, 90, 45, -45].map(a => {
-    a = (a % 180 + 180) % 180;
-    return a >= 135 ? a - 180 : a;
-  }))];
-  // A long name in a narrow inlet can fit at an intermediate angle only.
-  // Pay for the finer sweep only at the last readable size, before dropping it.
-  const fineAngles = [...new Set([...angles, ...Array.from({length: 36}, (_, i) => i * 5 - 45)])];
-  const nativeSpacing = Math.max(STATE_MIN_LETTER_SPACING, finite(item.resolvedStyle.letterSpacing));
-  for (const name of new Set([full, item.state?.name?.trim() || full])) {
-    const same = originalName === name;
-    if (same && oldBias < 0.14 && !preferred.peerCollides) return preferred;
-    const sizes = same ? [preferred.fontSize] : [...new Set([normal, (normal + floor) / 2, floor])];
-    const trials = sizes.map(fontSize => ({fontSize, fine: false}));
-    if (!same) trials.push({fontSize: floor, fine: true});
-    let overlapFallback = null;
-    for (const {fontSize, fine} of trials) {
-      if (fine && overlapFallback) break;
-      let best = null;
-      const single = Array.from(name).length === 1;
-      const shapes = fine || single ? [[1, 0, 0]] : [[nativeSpacing, 0, 0], [1, 0, 0], [1, -0.65, 0], [1, 0.65, 0], [nativeSpacing, 0, 1.5], [1, 0, 2.4]];
-      for (const rotation of single ? [0] : fine ? fineAngles : angles) {
-        for (const [spacing, bend, gap] of shapes) {
-          const key = [name, fontSize, rotation, spacing, bend, gap, fine].join("|");
-          if (!cache.scans.has(key)) {
-            const layout = createPoliticalLabelGlyphLayout(name, {...item.resolvedStyle, fontSize}, {upright: true, targetKind: "state", rotation,
-              extraSpacing: spacing - nativeSpacing, bend: bend * fontSize, splitAt: gap ? Math.ceil(Array.from(name).length / 2) : 0, extraGap: gap * fontSize});
-            cache.scans.set(key, {layout, index: cache.scans.size, ...homelandAnchorBands(outline, layout, fontSize, sx, sy, cache.strips, fine)});
-          }
-          const {layout, index, bands, meanX, meanY} = cache.scans.get(key);
-          for (const {left, right, y} of bands) {
-            const center = Math.max(left, Math.min(right, f.cx - meanX));
-            for (const x of [center, (left + right) / 2, left + (right - left) * 0.15, right - (right - left) * 0.15]) {
-              const distance = bias(x + meanX, y + meanY);
-              if (distance >= (same && !preferred.peerCollides ? oldBias - 0.025 : Infinity) || (best && distance >= best.distance)) continue;
-              if (!layout.glyphs.every(g => fits(g.box, Math.max(2, fontSize * 0.12), {x, y}))) continue;
-              const anchor = {x: screen.x + (x - item.x) * sx, y: screen.y + (y - item.y) * sy};
-              const candidate = positionedHomelandLabel(layout, anchor, fontSize, -10000000 - index, obstacles, peers, padding);
-              if (candidate.peerCollides) continue;
-              candidate.distance = distance;
-              if (candidate.cityCollides) {
-                if (!overlapFallback || candidate.cost < overlapFallback.cost) overlapFallback = candidate;
-                // In crowded homelands the city label's buffer can be wider
-                // than the bay. Keep actual ink clear and trade that buffer
-                // only for a substantial improvement in centring.
-                const improvesCenter = distance < 0.12 || (same && oldBias >= 0.23 && distance < oldBias - 0.085);
-                if (!improvesCenter || overlapSummary(candidate.glyphs, candidate.box, obstacles, 1).count) continue;
-                candidate.distance += 0.025;
-              }
-              if (!best || candidate.distance < best.distance) best = candidate;
-              if (best.distance < 0.075) return best;
-            }
-          }
-          if (best && best.distance < 0.13) return best;
-        }
-      }
-      if (best) return best;
-    }
-    if (same && !preferred.peerCollides) return preferred;
-    if (overlapFallback) return overlapFallback;
+function splitHomelandName(name, short) {
+  const chars = Array.from(name);
+  const han = /\p{Script=Han}/u.test(name);
+  if (chars.length < (han ? 3 : 6)) return null;
+  const breaks = [];
+  for (let i = 1; i < chars.length; i++) {
+    const left = chars.slice(0, i).join(""), right = chars.slice(i).join("");
+    if (!left.trim() || !right.trim()) continue;
+    const wordBreak = /[\s-]$/u.test(left);
+    if (!wordBreak && !(han && /\p{Script=Han}/u.test(chars[i - 1]) && /\p{Script=Han}/u.test(chars[i]))) continue;
+    const shorter = Math.min(i, chars.length - i);
+    const polity = /^(联邦共和国|共和国|联合王国|王国|帝国|部盟|邦联|联邦|公国|汗国)$/.test(right);
+    if (han && shorter < 2 && !(left === short && polity)) continue;
+    const semantic = wordBreak || left === short || right === short || polity;
+    breaks.push({lines: [left, right], score: Math.abs(2 * i - chars.length) + (semantic ? 0 : chars.length)});
   }
-  return preferred;
+  return breaks.sort((a, b) => a.score - b.score)[0]?.lines;
 }
 
-function bankLabelLayouts({name, short, fontSize, item, sx, sy, rotation, banks, fits, axisScale}) {
+function homelandLineLayout(lines, style, fontSize, rotation, upright) {
+  const angle = rotation * Math.PI / 180;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const diagonal = upright ? 1 / Math.max(Math.abs(cos), Math.abs(sin)) : 1;
+  const options = {targetKind: "state", upright, rotation, extraSpacing: fontSize * (diagonal - 1)};
+  const glyphs = [];
+  let box = null;
+  for (const [row, line] of lines.entries()) {
+    const offset = (row - (lines.length - 1) / 2) * fontSize * 1.28 * diagonal;
+    const lineLayout = createPoliticalLabelGlyphLayout(line, {...style, fontSize}, options);
+    for (const glyph of lineLayout.glyphs) {
+      const bounds = translateBox(glyph.box, -sin * offset, cos * offset);
+      glyphs.push({...glyph, x: glyph.x - sin * offset, y: glyph.y + cos * offset, box: bounds});
+      box = unionBoxes(box, bounds);
+    }
+  }
+  return {glyphs, box, lines: lines.length, bend: 0, rotation, spacing: Math.max(STATE_MIN_LETTER_SPACING, finite(style.letterSpacing)) + options.extraSpacing};
+}
+
+function bankLabelLayout({name, short, fontSize, item, sx, sy, rotation, banks, fits, axisScale}) {
   const count = Array.from(name).length;
   const stemLength = Array.from(short).length;
   let splitAt = Math.ceil(count / 2);
@@ -239,24 +204,39 @@ function bankLabelLayouts({name, short, fontSize, item, sx, sy, rotation, banks,
   // Centre the word break over the channel, even if the two groups differ in length.
   const groupOffset = (count / 2 - splitAt) * (fontSize + spacing);
   const maxGap = (Math.min(splitAt, count - splitAt) === 1 ? 2 : 4) * fontSize;
-  const valid = [];
-  for (const [i, bank] of banks.entries()) {
-    for (const [j, leftInset] of BANK_INSETS.entries()) {
-      for (const [k, rightInset] of BANK_INSETS.entries()) {
-        const gap = bank.gap * axisScale + (leftInset + rightInset) * fontSize;
-        if (gap > maxGap) break;
-        const shift = groupOffset + (rightInset - leftInset) * fontSize / 2;
-        const site = {x: bank.x + shift * Math.cos(radians) / sx, y: bank.y + shift * Math.sin(radians) / sy};
-        const layout = createPoliticalLabelGlyphLayout(name, {...item.resolvedStyle, fontSize}, {
-          targetKind: "state", upright: true, rotation, splitAt, extraGap: Math.max(0, gap - spacing)
-        });
-        if (layout.glyphs.every(glyph => fits(glyph.box, Math.max(2, fontSize * 0.12), site))) {
-          valid.push({layout, site, bankIndex: (i * BANK_INSETS.length + j) * BANK_INSETS.length + k});
-        }
+  const cos = Math.cos(radians), sin = Math.sin(radians);
+  const style = {...item.resolvedStyle, fontSize};
+  const options = {targetKind: "state", upright: true, rotation};
+  const chars = Array.from(name);
+  const groups = [chars.slice(0, splitAt), chars.slice(splitAt)].map(part => ({
+    halfWidth: (part.length * fontSize + (part.length - 1) * spacing) / 2,
+    glyphs: createPoliticalLabelGlyphLayout(part.join(""), style, options).glyphs
+  }));
+  const margin = Math.max(2, fontSize * 0.12);
+  for (const [bankIndex, bank] of banks.entries()) {
+    const channel = bank.gap * axisScale;
+    if (channel >= maxGap) continue;
+    const offsetSite = along => ({x: bank.x + along * cos / sx, y: bank.y + along * sin / sy});
+    // Each bank constrains only its own word. Find its first inland fit
+    // independently; four preset pairs of insets can miss a narrow strip.
+    const firstFit = (group, direction) => {
+      const limit = Math.min(2 * fontSize, maxGap - channel);
+      for (let inset = margin; inset <= limit; inset += 1) {
+        const site = offsetSite(direction * (channel / 2 + group.halfWidth + inset));
+        if (group.glyphs.every(g => fits(g.box, margin, site))) return inset;
       }
-    }
+      return Infinity;
+    };
+    const left = firstFit(groups[0], -1);
+    if (!Number.isFinite(left)) continue;
+    const right = firstFit(groups[1], 1);
+    const gap = channel + left + right;
+    if (gap > maxGap) continue;
+    const site = offsetSite(groupOffset + (right - left) / 2);
+    const layout = createPoliticalLabelGlyphLayout(name, style, {...options, splitAt, extraGap: Math.max(0, gap - spacing)});
+    if (layout.glyphs.every(g => fits(g.box, margin, site))) return {layout, site, bankIndex};
   }
-  return valid;
+  return null;
 }
 
 export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], peers = [], viewport, padding = 0, locked = false, anchorAllowed = null, preferredCandidateIndex = null, retainPreferred = false} = {}) {

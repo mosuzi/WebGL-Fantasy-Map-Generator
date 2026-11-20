@@ -122,7 +122,7 @@ assert.match(rendererSource, /priorityLayout \? this\.labelItems : automaticPoli
 assert.match(rendererSource, /preservePoliticalCandidate = this\.viewportInteractionKind === "pan"/, "纯平移没有保留稳定的政治标签候选");
 assert.match(
   rendererSource,
-  /preservePoliticalCandidate && unchangedObstacles && \(item\.visible \|\| item\.buffered\)\s*\? restorePoliticalLabelPlacementSnapshot\(item, baseScreen\)/,
+  /!autoState && preservePoliticalCandidate && sameLabelPrefix[^\n]+\n\s*const politicalSnapshot = unchangedObstacles && \(item\.visible \|\| item\.buffered\)\s*\? restorePoliticalLabelPlacementSnapshot\(item, baseScreen\)/,
   "政治标签平移快照没有按当前可见障碍核对复用"
 );
 assert.match(rendererSource, /sameLabelPrefix\(visibleObstacleItems, item\.politicalObstacleSource, item\.politicalObstacleLength\)/);

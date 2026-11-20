@@ -56,7 +56,7 @@ assert.match(storeSource, /maxCityLabels: DEFAULT_MAX_CITY_LABELS/, "持久化�
 
 assert.match(LABEL_FONT_FAMILIES.historical, /Noto Serif SC/, "宋体栈缺少 Windows Noto Serif SC family");
 assert.match(LABEL_FONT_FAMILIES.historicalDisplay, /Noto Sans SC/, "黑体栈缺少 Windows Noto Sans SC family");
-assert.deepEqual(pickStyle("state"), {fontSize: 22, fontWeight: 650, letterSpacing: 2.4, opacity: 0.9});
+assert.deepEqual(pickStyle("state"), {fontSize: 22, fontWeight: 500, letterSpacing: 2.4, opacity: 0.9});
 assert.deepEqual(pickStyle("province"), {fontSize: 12, fontWeight: 500, letterSpacing: 0.7, opacity: 0.82});
 assert.deepEqual(pickStyle("capital"), {fontSize: 13, fontWeight: 650, letterSpacing: 0.1, opacity: 0.96});
 assert.deepEqual(pickStyle("city"), {fontSize: 11, fontWeight: 600, letterSpacing: 0.05, opacity: 0.9});

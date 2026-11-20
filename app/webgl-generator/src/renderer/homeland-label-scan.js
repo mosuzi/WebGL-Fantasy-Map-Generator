@@ -73,47 +73,26 @@ function exactLandBetween(outline, top, bottom) {
   return land;
 }
 
-export function homelandAnchorBands(outline, layout, fontSize, sx, sy, cache, fine = false) {
-  const f = outline.frame, margin = Math.max(2, fontSize * 0.12);
-  const quantum = Math.max(0.25, 1 / sy);
-  const pitch = fine ? quantum / 2 : quantum * 2;
-  const first = layout.glyphs[0];
-  const above = (first.box.top - first.y - margin) / sy;
-  const below = (first.box.bottom - first.y + margin) / sy;
-  let strips = cache.get(fontSize);
-  if (!strips) cache.set(fontSize, strips = new Map());
-  const bands = [];
-  const meanX = layout.glyphs.reduce((s, g) => s + g.x, 0) / layout.glyphs.length / sx;
-  const meanY = layout.glyphs.reduce((s, g) => s + g.y, 0) / layout.glyphs.length / sy;
-  const steps = Math.ceil(f.height / pitch) + 1;
+export function* homelandAnchorBands(outline, layout, fontSize, sx, sy) {
+  const {frame} = outline;
+  const margin = Math.max(2, fontSize * 0.12);
+  const pitch = Math.max(0.25, 1 / sy);
+  const steps = Math.ceil(frame.height / pitch);
+  const ink = layout.glyphs.map(({box}) => ({
+    left: (box.left - margin) / sx, right: (box.right + margin) / sx,
+    top: (box.top - margin) / sy, bottom: (box.bottom + margin) / sy
+  }));
+  // Visit rows from the homeland centre out. Stop scanning as soon as
+  // the caller accepts a position shared by every glyph of both lines.
   for (let k = 0; k <= 2 * steps; k++) {
-    const y = f.cy - meanY + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * pitch;
-    if (y < f.y0 || y > f.y1) continue;
-    let ranges = [[f.x0, f.x1]];
-    for (const glyph of layout.glyphs) {
-      const row = Math.round((y + glyph.y / sy) / quantum);
-      if (!strips.has(row)) {
-        // Round only the broad-phase slice. The caller checks exact glyph ink.
-        const top = row * quantum + above + quantum / 2, bottom = row * quantum + below - quantum / 2;
-        strips.set(row, landBetween(outline, top, bottom));
-      }
-      const local = [];
-      for (const [a,b] of strips.get(row)) {
-        const left = a - (glyph.box.left - margin) / sx, right = b - (glyph.box.right + margin) / sx;
-        if (left < right) local.push([left, right]);
-      }
-      ranges = intersect(ranges, local);
+    const y = frame.cy + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * pitch;
+    if (y < frame.y0 || y > frame.y1) continue;
+    let ranges = [[frame.x0, frame.x1]];
+    for (const box of ink) {
+      const spans = exactLandBetween(outline, y + box.top, y + box.bottom);
+      ranges = intersect(ranges, spans.map(([a, b]) => [a - box.left, b - box.right]));
       if (!ranges.length) break;
     }
-    if (fine && ranges.length) {
-      for (const {box} of layout.glyphs) {
-        const top = y + (box.top - margin) / sy, bottom = y + (box.bottom + margin) / sy;
-        const land = exactLandBetween(outline, top, bottom);
-        ranges = intersect(ranges, land.map(([a,b]) => [a - (box.left - margin) / sx, b - (box.right + margin) / sx]));
-        if (!ranges.length) break;
-      }
-    }
-    for (const [left, right] of ranges) bands.push({y, left, right});
+    for (const [left, right] of ranges) yield {y, left, right};
   }
-  return {bands, meanX, meanY};
 }

@@ -1193,7 +1193,7 @@ select:disabled {
 }
 
 .state-label .political-label-glyph { letter-spacing: 0; }
-.state-label.city-overlap { z-index: 4; }
+.state-label.city-overlap { --state-ink-opacity: 0.50; }
 
 .map-scale-bar {
   z-index: 5;
@@ -1742,6 +1742,10 @@ select:disabled {
   transform-origin: 0 0;
 }
 
+.state-label:not(.position-locked) .map-label-content {
+  transform: translate(var(--label-offset-x, 0px), var(--label-offset-y, 0px)) translate(-50%, -50%);
+}
+
 .city-label,
 .custom-label,
 .zone-label {
@@ -1798,7 +1802,7 @@ select:disabled {
 
 .state-label.buffered,
 .state-label.viewport-entering {
-  opacity: calc(var(--label-opacity, 1) * var(--state-label-preview-opacity, var(--state-label-opacity, 1)));
+  opacity: calc(var(--label-opacity, 1) * var(--state-ink-opacity, 1) * var(--state-label-preview-opacity, var(--state-label-opacity, 1)));
 }
 
 .province-label.buffered.collision-fallback,
@@ -1904,7 +1908,7 @@ select:disabled {
 }
 
 .state-label.visible {
-  opacity: calc(var(--label-opacity, 1) * var(--state-label-preview-opacity, var(--state-label-opacity, 1)));
+  opacity: calc(var(--label-opacity, 1) * var(--state-ink-opacity, 1) * var(--state-label-preview-opacity, var(--state-label-opacity, 1)));
   transition-delay: 0s;
   visibility: visible;
 }

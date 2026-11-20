@@ -63,7 +63,7 @@ for (const styleType of LABEL_STYLE_TYPES) {
     [0, 0, 0],
     `${styleType} 默认阴影参数没有归零`
   );
-  const expectedFont = ["state", "capital", "custom", "zone"].includes(styleType) ? "historicalDisplay" : "historical";
+  const expectedFont = ["capital", "custom", "zone"].includes(styleType) ? "historicalDisplay" : "historical";
   assert.equal(style.fontFamilyId, expectedFont, `${styleType} 默认字体没有使用现代历史图册分级字体`);
   if (["province", "capital", "city"].includes(styleType)) assert.equal(style.strokeWidth, 0, `${styleType} 默认标签仍有描边`);
   else assert.ok(style.strokeWidth > 0 && style.strokeWidth <= 0.8, `${styleType} 默认净空边超出现代历史图册范围`);

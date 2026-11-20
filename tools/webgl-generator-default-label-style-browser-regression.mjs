@@ -39,7 +39,7 @@ try {
   await page.evaluate(async () => {
     const generated = await window.webglGeneratorApi.generate.newMap({confirm: true, seed: "stage-2-1", cellsTarget: 10000});
     if (!generated?.ok) throw new Error(generated?.error?.message || "默认地图生成失败");
-    const provinces = window.webglGeneratorApi.layers.setVisible("provinceLabels", true);
+    const provinces = await window.webglGeneratorApi.layers.setVisible("provinceLabels", true);
     if (!provinces?.ok) throw new Error(provinces?.error?.message || "省份标签图层开启失败");
     const map = window.__webglGeneratorApp.map;
     const custom = await window.webglGeneratorApi.edit.labels.addCustom({
@@ -97,7 +97,7 @@ try {
 
   const {styles} = evidence;
   for (const [type, style] of Object.entries(styles)) {
-    const expectedFamily = ["state", "capital", "custom"].includes(type)
+    const expectedFamily = ["capital", "custom"].includes(type)
       ? /Source Han Sans SC|Noto Sans SC|Noto Sans CJK SC|Microsoft YaHei|PingFang SC|Heiti SC/
       : /Source Han Serif SC|Noto Serif SC|Noto Serif CJK SC|Songti SC|STSong|SimSun/;
     assert.match(style.fontFamily, expectedFamily, `${type} 没有使用现代历史图册分级字体栈`);
@@ -116,7 +116,7 @@ try {
   assert.equal(styles.city.color, "rgb(32, 37, 42)", "城市标签不是深色中性墨色");
   assert.deepEqual(
     Object.fromEntries(Object.entries(styles).map(([type, style]) => [type, style.fontWeight])),
-    {state: 650, province: 500, capital: 650, city: 600, custom: 600},
+    {state: 500, province: 500, capital: 650, city: 600, custom: 600},
     "五类标签没有形成现代图册字重层级"
   );
   assert.ok(styles.state.fontSize > styles.province.fontSize && styles.province.fontSize > styles.city.fontSize, "区域到城市的字号层级不清");

@@ -5200,11 +5200,11 @@ export class PlaceholderMapRenderer {
       }
       const baseScreen = this.worldToScreen(item.x, item.y, rect);
       const politicalPrewarm = provinceLabel ? Math.min(labelPrewarm, PROVINCE_LABEL_PREWARM_MAX_CSS_PX) : labelPrewarm;
-      const unchangedObstacles = politicalLabel && sameLabelPrefix(visibleObstacleItems, item.politicalObstacleSource, item.politicalObstacleLength);
-      const politicalSnapshot = politicalLabel && preservePoliticalCandidate && unchangedObstacles && (item.visible || item.buffered)
+      const autoState = stateLabel && !item.layout?.locked;
+      const unchangedObstacles = politicalLabel && !autoState && preservePoliticalCandidate && sameLabelPrefix(visibleObstacleItems, item.politicalObstacleSource, item.politicalObstacleLength);
+      const politicalSnapshot = unchangedObstacles && (item.visible || item.buffered)
         ? restorePoliticalLabelPlacementSnapshot(item, baseScreen)
         : null;
-      const autoState = stateLabel && !item.layout?.locked;
       const politicalPlacement = politicalSnapshot || (autoState
         ? layoutStateInHomeland(this, item, baseScreen, rect, occupied, occupiedStates, padding)
         : politicalLabel ? resolvePoliticalLabelPlacement({
@@ -6236,6 +6236,7 @@ function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.an
     }
     item.displayText = text;
     setStylePropertyIfChanged(item.contentNode, "font-size", `${placement.fontSize ?? item.resolvedStyle.fontSize}px`);
+    if (placement.mapScale) applyLabelEffectDimensions(item.node, item.resolvedStyle, placement.mapScale);
   }
   for (let index = 0; index < item.glyphNodes.length; index++) {
     const glyph = item.glyphNodes[index];
@@ -6800,8 +6801,8 @@ function provinceLabelPlacement(map, province) {
 
 function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding) {
   const scale = renderer.camera.scale;
-  const sx = rect.width * scale / renderer.map.metadata.graphWidth;
-  const sy = rect.height * scale / renderer.map.metadata.graphHeight;
+  const sx = rect.width / renderer.map.metadata.graphWidth;
+  const sy = rect.height / renderer.map.metadata.graphHeight;
   const outline = homelandOutline(renderer.map, item.componentCellSet);
   const {sites, banks} = homelandLabelSites(outline, item.x, item.y, item.rotation);
   const fits = (box, margin, site) => homelandContainsBox(outline,
@@ -8637,8 +8638,7 @@ function labelPaddingForScale(scale) {
 }
 
 function stateLabelScaleBehavior(scale) {
-  const rawOpacity = 1 - smootherStep(1.55, 3.95, scale);
-  const opacity = rawOpacity < 0.004 ? 0 : clamp(rawOpacity, 0, 1);
+  const opacity = 1 - smootherStep(1.2, 2.8, scale);
   return {
     blocksCities: scale < 1.55,
     visible: opacity > 0,
@@ -8689,11 +8689,15 @@ function applyResolvedLabelStyle(node, style) {
   node.style.setProperty("--label-color", style.color);
   node.style.setProperty("--label-opacity", String(style.opacity));
   node.style.setProperty("--label-stroke-color", style.strokeColor);
-  node.style.setProperty("--label-stroke-width", `${style.strokeWidth}px`);
   node.style.setProperty("--label-shadow-color", hasVisibleLabelShadow(style) ? style.shadowColor : "transparent");
-  node.style.setProperty("--label-shadow-offset-x", `${style.shadowOffsetX}px`);
-  node.style.setProperty("--label-shadow-offset-y", `${style.shadowOffsetY}px`);
-  node.style.setProperty("--label-shadow-blur", `${style.shadowBlur}px`);
+  applyLabelEffectDimensions(node, style, 1);
+}
+
+function applyLabelEffectDimensions(node, style, scale) {
+  setStylePropertyIfChanged(node, "--label-stroke-width", `${style.strokeWidth * scale}px`);
+  setStylePropertyIfChanged(node, "--label-shadow-offset-x", `${style.shadowOffsetX * scale}px`);
+  setStylePropertyIfChanged(node, "--label-shadow-offset-y", `${style.shadowOffsetY * scale}px`);
+  setStylePropertyIfChanged(node, "--label-shadow-blur", `${style.shadowBlur * scale}px`);
 }
 
 function normalizeMaxCityLabels(value, fallback) {

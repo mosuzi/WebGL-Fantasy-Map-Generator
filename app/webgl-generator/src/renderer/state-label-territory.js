@@ -17,7 +17,7 @@ export function resolveStateLabelPlacement(map, state, text = "") {
         componentCells: component.cells,
         componentCellSet: component.cellSet,
         source: component.cellSet.has(capitalCell) ? "capital-component" : "largest-component",
-        rotation: stateLabelRotation(cells, component.cells, centroid)
+        rotation: stateLabelRotation(map.pack, component.cells, centroid)
       };
     }
   }
@@ -243,21 +243,24 @@ function centralInteriorCell(cells, component, centroid) {
   return best;
 }
 
-function stateLabelRotation(cells, componentCells, centroid) {
-  let weightSum = 0;
+function stateLabelRotation(pack, componentCells, centroid) {
+  const {cells, vertices} = pack;
+  // A one-cell state still has a direction, encoded in its polygon.
+  const ids = componentCells.length === 1 ? cells.v?.[componentCells[0]] : null;
+  const ring = ids?.length >= 3 && ids.every(i => isWorldPoint(vertices?.p?.[i])) ? ids : null;
+  const points = ring ? vertices.p : cells.p;
+  if (ring) centroid = weightedCentroid(vertices, ring);
   let xx = 0;
   let yy = 0;
   let xy = 0;
-  for (const cell of componentCells) {
-    const weight = positiveArea(cells.area?.[cell]);
-    const dx = cells.p[cell][0] - centroid.x;
-    const dy = cells.p[cell][1] - centroid.y;
-    weightSum += weight;
+  for (const index of ring || componentCells) {
+    const weight = ring ? 1 : positiveArea(cells.area?.[index]);
+    const dx = points[index][0] - centroid.x;
+    const dy = points[index][1] - centroid.y;
     xx += dx * dx * weight;
     yy += dy * dy * weight;
     xy += dx * dy * weight;
   }
-  if (!weightSum) return 0;
   const spread = Math.hypot(xx - yy, 2 * xy);
   // The eigenvalue ratio is the squared aspect ratio of the fitted ellipse.
   if (xx + yy + spread <= 1.4 ** 2 * (xx + yy - spread)) return 0;

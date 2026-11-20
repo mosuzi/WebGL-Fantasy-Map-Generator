@@ -55,6 +55,12 @@ try {
     }
     if (archive) {
       const focus = process.env.FMG_LABEL_FOCUS || "雁门部盟";
+      await page.evaluate(name => {
+        const r = window.__webglGeneratorApp.renderer;
+        const item = r.labelItems.find(i => i.targetKind === "state" && i.text === name);
+        r.locateBounds({minX:item.x, maxX:item.x, minY:item.y, maxY:item.y}, {minScale:1, maxScale:1});
+      }, focus);
+      await page.waitForFunction(() => !window.__webglGeneratorApp.renderer.viewportInteractionKind);
       const sample = () => page.evaluate(name => {
         const {map, renderer} = window.__webglGeneratorApp;
         const item = renderer.labelItems.find(item => item.targetKind === "state" && item.text === name);
@@ -99,14 +105,31 @@ try {
             return hit?.targetKind === "state" && hit.targetId === item.targetId;
           }).length,
           origin: {x: rect.left + origin.x, y: rect.top + origin.y}, shown: shown.map(label => label.targetId),
+          sx: rect.width * renderer.camera.scale / map.metadata.graphWidth, sy: rect.height * renderer.camera.scale / map.metadata.graphHeight,
           modes: {full, short: shown.length - full, hidden: states.length - shown.length}
         };
       }, focus);
       const initial = await sample();
       const zoomStarted = await page.evaluate(() => performance.now());
-      const zoom = async delta => {
+      let previewError = 0;
+      const zoom = async (delta, checkPreview = false) => {
         const start = (await sample()).scale;
         await page.mouse.wheel(0, delta);
+        if (checkPreview) {
+          const reading = await page.waitForFunction(({id, centers, start}) => {
+            const r = window.__webglGeneratorApp.renderer;
+            if (!r.overlayInteractionSuspended || r.camera.scale === start || r.overlayPreviewTransform.scale === 1) return false;
+            const item = r.labelItems.find(i => i.targetKind === "state" && i.targetId === id);
+            const rect = r.canvas.getBoundingClientRect();
+            return {errors: item.glyphNodes.map((node, i) => {
+              const p = r.worldToScreen(centers[i].x, centers[i].y, rect);
+              const b = node.getBoundingClientRect();
+              return Math.hypot(b.x + b.width / 2 - rect.left - p.x, b.y + b.height / 2 - rect.top - p.y);
+            })};
+          }, {id: initial.id, centers: initial.centers, start}, {timeout: 2500});
+          previewError = Math.max(...(await reading.jsonValue()).errors);
+          assert.ok(previewError < 1, `滚轮手势期间国名字位误差 ${previewError}px`);
+        }
         await page.waitForFunction(previous => {
           const renderer = window.__webglGeneratorApp.renderer;
           return renderer.camera.scale !== previous && renderer.overlayCommittedCamera?.scale === renderer.camera.scale
@@ -115,7 +138,7 @@ try {
         return sample();
       };
       await page.mouse.move(initial.origin.x, initial.origin.y);
-      const detail = await zoom(-500);
+      const detail = await zoom(-500, true);
       if (process.env.FMG_LABEL_SCREENSHOT) {
         const clip = {x:Math.max(0,Math.round(detail.origin.x)-415),y:Math.max(0,Math.round(detail.origin.y)-140),width:840,height:370};
         await page.screenshot({path:process.env.FMG_LABEL_SCREENSHOT,clip,animations:"disabled"});
@@ -130,25 +153,37 @@ try {
       }
       assert.equal(initial.text, focus);
       assert.equal(detail.text, focus);
-      if (focus === "雁门部盟" && initial.capital === "安邑") {
-        const pan = async (x, y) => {
-          const before = await page.evaluate(() => window.__webglGeneratorApp.renderer.camera.offsetX);
-          await page.mouse.down({button: "middle"});
-          await page.mouse.move(x, y, {steps: 4});
-          await page.mouse.up({button: "middle"});
-          await page.waitForFunction(start => {
-            const r = window.__webglGeneratorApp.renderer;
-            return r.camera.offsetX !== start && r.overlayCommittedCamera?.offsetX === r.camera.offsetX && !r.viewportInteractionKind;
-          }, before);
-          return sample();
-        };
-        const moved = await pan(initial.origin.x + 45, initial.origin.y + 25);
-        const back = await pan(initial.origin.x, initial.origin.y);
-        for (const view of [initial, detail, restored, moved, back]) {
-          assert.ok(view.visible && view.inkInside && view.waterInWordBreak && !view.pickedWater && view.hitGlyphs === 4, JSON.stringify(view));
-          assert.ok(view.centers[1].x < 354 && view.centers[2].x > 375, JSON.stringify(view.centers));
+      const pan = async (x, y) => {
+        const before = await page.evaluate(() => window.__webglGeneratorApp.renderer.camera.offsetX);
+        await page.mouse.down({button: "middle"});
+        await page.mouse.move(x, y, {steps: 4});
+        await page.mouse.up({button: "middle"});
+        await page.waitForFunction(start => {
+          const r = window.__webglGeneratorApp.renderer;
+          return r.camera.offsetX !== start && r.overlayCommittedCamera?.offsetX === r.camera.offsetX && !r.viewportInteractionKind;
+        }, before);
+        return sample();
+      };
+      const moved = await pan(initial.origin.x + 45, initial.origin.y + 25);
+      const back = await pan(initial.origin.x, initial.origin.y);
+      let settledError = 0;
+      for (const view of [initial, detail, far, restored, moved, back]) {
+        assert.ok(view.visible && view.inkInside && view.hitGlyphs === initial.centers.length, JSON.stringify(view));
+        assert.equal(view.centers.length, initial.centers.length);
+        for (const [i, point] of view.centers.entries()) {
+          const expected = initial.centers[i];
+          const cssError = Math.hypot((point.x - expected.x) * view.sx, (point.y - expected.y) * view.sy);
+          settledError = Math.max(settledError, cssError);
+          assert.ok(cssError < 0.5, JSON.stringify({cssError, view, expected, point}));
+        }
+        if (focus === "雁门部盟" && initial.capital === "安邑") {
+          assert.ok(view.waterInWordBreak && !view.pickedWater && view.centers[1].x < 354 && view.centers[2].x > 375, JSON.stringify(view));
         }
       }
+      const near = await zoom(-1200);
+      assert.ok(near.scale >= 2.8 && !near.visible);
+      await zoom(1200);
+      assert.equal((await sample()).text, initial.text);
       if (focus === "雁门部盟" && initial.capital === "安邑") assert.equal(far.text, focus, "远景仍可容纳完整国名");
       assert.equal(restored.text, initial.text);
       assert.deepEqual(restored.shown, initial.shown);
@@ -203,7 +238,7 @@ try {
       assert.equal((await sample()).text, initial.text);
       await page.locator('[data-panel-id="generation-panel"] .floating-panel-close').click();
       assert.deepEqual(errors, []);
-      reports.push({cellsTarget, archive: true, initial, detail, far, zoomLongTasks});
+      reports.push({cellsTarget, archive: true, initial, detail, far, nearScale: near.scale, previewError, settledError, zoomLongTasks});
       await page.close();
       continue;
     }
@@ -284,7 +319,7 @@ try {
       renderer.labelItems = [city, state];
       renderer.updateLabels();
       const obstacleVisible = sample();
-      ensure(obstacleVisible.cityVisible && obstacleVisible.stateVisible && (obstacleVisible.candidate !== clearCandidate || state.node.classList.contains("city-overlap")) && obstacleVisible.inside, "显示城市标签时国家未正确避让或中点越界");
+      ensure(obstacleVisible.cityVisible && obstacleVisible.stateVisible && obstacleVisible.candidate === clearCandidate && obstacleVisible.inside, "城市显示时国名应保持固定");
 
       renderer.layerVisibility.labels = false;
       renderer.updateLabels();
@@ -335,8 +370,8 @@ try {
       renderer.viewportInteractionKind = "pan";
       renderer.updateLabels();
       const panEntry = sample();
-      ensure(panEntry.cityVisible && panEntry.stateVisible && panEntry.candidate !== buffered.candidate && panEntry.inside,
-        "平移入场的城市标签未触发国家重新避让");
+      ensure(panEntry.cityVisible && panEntry.stateVisible && panEntry.candidate === buffered.candidate && panEntry.inside,
+        "城市进入视野时国名发生漂移");
       renderer.camera.offsetX -= 240 / rect.width;
       renderer.updateLabels();
       const panExit = sample();
@@ -365,8 +400,8 @@ try {
       renderer.viewportInteractionKind = "zoom";
       renderer.updateLabels();
       const zoomApproach = sample();
-      ensure(zoomApproach.cityVisible && (zoomApproach.candidate !== clearCandidate || state.node.classList.contains("city-overlap")) && zoomApproach.inside,
-        "缩放后同一可见城市靠近国家标签却未重新避让");
+      ensure(zoomApproach.cityVisible && zoomApproach.candidate === clearCandidate && state.node.classList.contains("city-overlap") && zoomApproach.inside,
+        "城市与国名重叠时应保留字位并减淡国名");
       renderer.viewportInteractionKind = null;
       renderer.labelItems = [state];
       renderer.updateLabels();
