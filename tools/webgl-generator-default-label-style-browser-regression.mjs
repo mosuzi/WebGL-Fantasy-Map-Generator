@@ -127,6 +127,7 @@ try {
   assert.equal(evidence.glError, 0, "默认标签样式验收出现 WebGL 错误");
   assert.equal(evidence.healthErrors, 0, "默认标签样式验收出现 health error");
   const legibility = await verifyLabelLegibility(page);
+  await verifyStyleEditPanelState(page);
   assert.deepEqual(consoleErrors, []);
   assert.deepEqual(pageErrors, []);
   assert.ok(existsSync(screenshotPath) && statSync(screenshotPath).size > 0, "默认标签样式验收截图没有生成");
@@ -226,6 +227,62 @@ async function verifyLabelLegibility(page) {
   assert.ok(exportedStrokes.length >= states.length && exportedStrokes.every(s => Math.abs(s.stroke / s.font - 3 / 33) < 0.0001),
     JSON.stringify(exportedStrokes));
   return {overview, far, close, plainInk, outlinedInk, coveredInk, states, exportedStrokes};
+}
+
+async function verifyStyleEditPanelState(page) {
+  const details = page.locator('.floating-panel[data-panel-id="object-details"]');
+  const panel = page.locator('.floating-panel[data-panel-id="generation-panel"]');
+  const size = panel.locator('label:has(#label-style-font-size) .ui-slider-number input');
+  const id = await page.evaluate(() => window.__webglGeneratorApp.renderer.labelItems.find(item => item.targetKind === "state" && item.visible).targetId);
+  const selectState = () => page.evaluate(id => {
+    const result = window.webglGeneratorApi.selection.select({kind: "state", id});
+    if (!result.ok) throw Error(result.error.message);
+  }, id);
+  const check = async (fontSize, selectedId, open) => {
+    assert.equal(await details.isVisible(), open, `字号 ${fontSize}，已选国家 ${selectedId} 的详情开关状态有误`);
+    assert.ok(await size.isVisible(), "标签样式编辑页被其它面板替换");
+    assert.equal(Number(await size.inputValue()), fontSize);
+    const selection = await page.evaluate(() => window.webglGeneratorApi.selection.get().data.selection?.object);
+    if (selectedId == null) assert.ok(!selection);
+    else assert.deepEqual([selection?.kind, selection?.id], ["state", selectedId]);
+  };
+  const setSize = async value => {
+    await size.fill(String(value));
+    await size.press("Enter");
+    await page.waitForFunction(value => window.__webglGeneratorApp.map.labels.styles.overrides.state?.fontSize === value, value);
+  };
+  await page.locator("#open-generation-panel").click();
+  await panel.locator('[data-control-tab="styles"]').click();
+  await setSize(31);
+  await check(31, null, false);
+
+  await selectState();
+  await details.locator(".floating-panel-close").click();
+  await check(31, id, false);
+  const historySize = () => page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo);
+  const before = await historySize();
+  await setSize(34);
+  await check(34, id, false);
+  assert.equal(await historySize(), before + 1, "一次字号修改应只有一步历史");
+  for (const [action, expected] of [["undo", 31], ["redo", 34]]) {
+    const result = await page.evaluate(action => window.webglGeneratorApi.history[action](), action);
+    assert.ok(result.ok);
+    await check(expected, id, false);
+  }
+  await panel.locator("#reset-current-label-style").click();
+  await check(22, id, false);
+  await setSize(32);
+  await panel.locator("#reset-all-label-styles").click();
+  await check(22, id, false);
+
+  await selectState();
+  await details.waitFor({state: "visible"});
+  await setSize(35);
+  await check(35, id, true);
+  await details.locator(".floating-panel-close").click();
+  await page.setViewportSize({width: 640, height: 800});
+  await setSize(36);
+  await check(36, id, false);
 }
 
 async function startStaticServer() {

@@ -3,13 +3,14 @@ import {
   ensureLabelStyleStore,
   LABEL_STYLE_TYPES,
   patchLabelStyle,
+  readLabelStyleOverride,
   resetAllLabelStyles,
   resetLabelStyle
 } from "./label-style-registry.js";
 
 const LABEL_STYLE_EFFECTS = Object.freeze({
   render: "draw",
-  selection: "refresh",
+  selection: "none",
   runtimeStats: true,
   pickPanel: false,
   derived: Object.freeze(["labels"])
@@ -29,8 +30,10 @@ export function createPatchLabelStyleCommand(styleType, patch) {
     revert(context) {
       context.map.labels.styles = cloneStyleStore(previous);
     },
-    isNoop() {
-      return !patch || typeof patch !== "object" || !Object.keys(patch).length;
+    isNoop(context) {
+      if (!patch || typeof patch !== "object" || !Object.keys(patch).length) return true;
+      const override = readLabelStyleOverride(context.map, styleType);
+      return Object.entries(patch).every(([field, value]) => Object.hasOwn(override, field) && override[field] === value);
     }
   };
 }
