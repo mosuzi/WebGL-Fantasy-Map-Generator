@@ -221,16 +221,19 @@ function refreshPickingIndexStats(index) {
   }
 }
 
-export function refreshNonRoutePickingIndexPreservingRoutes(index, map) {
+export function refreshNonRoutePickingIndexPreservingRoutes(index, map, {preserveRivers = false} = {}) {
   if (!index || !map) return false;
-  const replacement = buildObjectPickingIndex(map);
+  const components = ["cities", "markers", "military"];
+  if (!preserveRivers) components.push("riverSegments");
+  const replacement = buildObjectPickingIndex(map, {components});
   if (replacement.bucketSize !== index.bucketSize || replacement.columns !== index.columns || replacement.rows !== index.rows) return false;
   const keys = new Set([...index.buckets.keys(), ...replacement.buckets.keys()]);
   for (const key of keys) {
     const current = index.buckets.get(key);
     const next = replacement.buckets.get(key);
     const routeSegments = current?.routeSegments || [];
-    if (!next && !routeSegments.length) {
+    const riverSegments = (preserveRivers ? current : next)?.riverSegments || [];
+    if (!next && !routeSegments.length && !riverSegments.length) {
       index.buckets.delete(key);
       continue;
     }
@@ -238,14 +241,14 @@ export function refreshNonRoutePickingIndexPreservingRoutes(index, map) {
     target.cities = next?.cities || [];
     target.markers = next?.markers || [];
     target.military = next?.military || [];
-    target.riverSegments = next?.riverSegments || [];
+    target.riverSegments = riverSegments;
     target.routeSegments = routeSegments;
   }
   index.bucketCount = index.buckets.size;
   index.cityCount = replacement.cityCount;
   index.markerCount = replacement.markerCount;
   index.militaryCount = replacement.militaryCount;
-  index.riverSegmentCount = replacement.riverSegmentCount;
+  if (!preserveRivers) index.riverSegmentCount = replacement.riverSegmentCount;
   index.maxBucketItems = 0;
   for (const bucket of index.buckets.values()) {
     index.maxBucketItems = Math.max(index.maxBucketItems, bucket.cities.length + bucket.markers.length + bucket.military.length + bucket.routeSegments.length + bucket.riverSegments.length);

@@ -5,8 +5,10 @@ import {provinceFormForState, provinceFormsForState} from "../generator/province
 import {createRandom} from "../generator/random.js";
 import {createCityScaleContext, defaultCityVisual, deriveCityScale, refreshCityScaleVisuals} from "./city-visuals.js";
 import {namebaseRenameAffected, newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
+import {findLandlessStates, retireLandlessStates} from "./landless-states.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
+  pointsOnlyPicking: true,
   render: "draw",
   cellAttributePatch: true,
   deferLabels: "after-paint",
@@ -120,12 +122,17 @@ const STATE_COLLECTION_EFFECTS = Object.freeze({
   ])
 });
 
-export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} = {}) {
+export function createApplyStateBrushCommand(changes, {label = "国家笔刷", originalPackStates} = {}) {
   const normalized = normalizeChanges(changes);
   const affectedStates = [...new Set(normalized.flatMap(change => [change.before, change.after]).filter(stateId => stateId > 0))];
   let settlementSnapshot = null;
   let politicalSnapshot = null;
   let lastApplyPerformance = null;
+  let retirement = [];
+  const restoreRetirement = () => {
+    for (const {table, key, before} of retirement.reverse()) table[key] = before;
+    retirement = [];
+  };
   return {
     label: `${label} ${normalized.length} cells`,
     domain: "state",
@@ -138,7 +145,7 @@ export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} =
       const startedAt = performance.now();
       const detail = {};
       settlementSnapshot ??= captureSettlementSnapshot(context.map, normalized);
-      politicalSnapshot ??= capturePoliticalDerivativeSnapshot(context.map, normalized, settlementSnapshot);
+      politicalSnapshot ??= capturePoliticalDerivativeSnapshot(context.map, normalized, settlementSnapshot, originalPackStates);
       const capturedAt = performance.now();
       settlementSnapshot.createdCapitalCells = [];
       let transferredAt;
@@ -149,7 +156,10 @@ export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} =
         applySettlementTransfers(context.map, settlementSnapshot);
         transferredAt = performance.now();
         const affectedProvinces = measureStateAddStage(detail, "provinceRepairMs", () => repairPoliticalDerivativesForStateBrush(context.map, normalized, settlementSnapshot));
-        const createdCapitals = measureStateAddStage(detail, "capitalMs", () => reconcileStateCapitals(context.map, affectedStates, settlementSnapshot));
+        const withoutPackLand = [];
+        const createdCapitals = measureStateAddStage(detail, "capitalMs", () => reconcileStateCapitals(context.map, affectedStates, settlementSnapshot, withoutPackLand));
+        if (withoutPackLand.length) retireLandlessStates(context.map, findLandlessStates(context.map, withoutPackLand), retirement);
+        if (retirement.length) markDerivedStale(context.map, ["economy", "diplomacy"]);
         assertAffectedStateCapitals(context.map, affectedStates);
         measureStateAddStage(detail, "politicalSummaryMs", () => refreshPoliticalSummaries(context.map));
         measureStateAddStage(detail, "provincePoleMs", () => refreshProvincePoles(context.map, affectedProvinces));
@@ -162,12 +172,14 @@ export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} =
         });
         const extraDerived = [
           ...(capitalVisualsChanged ? ["point-layers"] : []),
-          ...(createdCapitals ? ["object-index"] : []),
+          ...(createdCapitals || retirement.length ? ["object-index"] : []),
+          ...(retirement.length ? ["defer:economy", "defer:diplomacy"] : []),
           ...(recoloredStates.length ? ["state-color"] : [])
         ];
         this.effects.derived = extraDerived.length ? [...STATE_CELL_SURFACE_EFFECTS.derived, ...extraDerived] : STATE_CELL_SURFACE_EFFECTS.derived;
         summarizedAt = performance.now();
       } catch (error) {
+        restoreRetirement();
         applyStateChanges(context.map, normalized, "before");
         restoreSettlementSnapshot(context.map, settlementSnapshot);
         restorePoliticalDerivativeSnapshot(context.map, politicalSnapshot);
@@ -182,6 +194,7 @@ export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} =
       };
     },
     revert(context) {
+      restoreRetirement();
       applyStateChanges(context.map, normalized, "before");
       restoreSettlementSnapshot(context.map, settlementSnapshot);
       restorePoliticalDerivativeSnapshot(context.map, politicalSnapshot);
@@ -462,8 +475,8 @@ export function createDeleteStateCommand(stateId, {label = "删除国家"} = {})
   };
 }
 
-export function applyStateBrushPreview(map, changes) {
-  applyStateChanges(map, normalizeChanges(changes), "after");
+export function applyStateBrushPreview(map, changes, originalPackStates) {
+  applyStateChanges(map, normalizeChanges(changes), "after", originalPackStates);
 }
 
 function buildStateRenameChanges(map, stateIds) {
@@ -678,10 +691,8 @@ function addStateAtGridCell(map, gridCell, inspection = inspectStateCreation(map
   for (const cityId of measureStateAddStage(profile, "provinceRepairMs", () => repairProvincesAfterStateCreation(map, affectedProvinces))) changedCityIds.add(cityId);
   refreshCityScaleVisuals(map, capital.cityId >= previousCityCount ? {} : {cityIds: changedCityIds});
   measureStateAddStage(profile, "provincePoleMs", () => refreshProvincePoles(map, new Set([provinceId, ...affectedProvinces])));
-  for (const oldStateId of statesNeedingCapital) {
-    const oldState = map?.politics?.states?.[oldStateId];
-    if (oldState && !oldState.cells && !oldState.burgs) removePoliticalItem(map, "states", oldStateId);
-  }
+  const formerOwners = changes.map(c => c.before).filter(id => id && !map.politics.states[id]?.cells);
+  if (formerOwners.length) retireLandlessStates(map, findLandlessStates(map, formerOwners));
   state.neighbors = [...new Set([...state.neighbors, ...findNewStateGridNeighbors(map, changes, stateId)])];
   state.color = chooseNewStateColor(state, map.politics.states);
   const validStates = map.politics.states.filter(item => item && !item.removed && normalizeStateId(item.i ?? item.id) > 0);
@@ -726,7 +737,7 @@ function assertCreatedStateCoherent(map, {stateId, provinceId, capital, changes,
   }
   for (const oldStateId of statesNeedingCapital) {
     const oldState = map?.politics?.states?.[oldStateId];
-    if (!oldState) continue;
+    if (!oldState || oldState.removed) continue;
     const city = findCityByBurgId(map, oldState.capital);
     if (!city || city.state !== oldStateId) throw new Error("旧国家首都未能补齐");
   }
@@ -849,13 +860,14 @@ function normalizeChanges(changes) {
   return [...byCell.values()];
 }
 
-function applyStateChanges(map, changes, key) {
+function applyStateChanges(map, changes, key, originalPackStates) {
   if (!map?.grid?.cells?.state) return;
   for (const change of changes) {
     const stateId = normalizeStateId(change[key]);
     map.grid.cells.state[change.gridCell] = stateId;
     for (const packCell of getPackCellsForGrid(map, change.gridCell)) {
       if (!isPackLandCell(map, packCell)) continue;
+      if (originalPackStates && !originalPackStates.has(packCell)) originalPackStates.set(packCell, map.pack.cells.state[packCell]);
       map.pack.cells.state[packCell] = stateId;
     }
   }
@@ -922,11 +934,11 @@ function captureSettlementSnapshot(map, changes) {
   };
 }
 
-function capturePoliticalDerivativeSnapshot(map, changes, settlementSnapshot) {
+function capturePoliticalDerivativeSnapshot(map, changes, settlementSnapshot, originalPackStates) {
   const packCells = uniquePackCellsForChanges(map, changes);
   return {
     gridProvinces: changes.map(change => [change.gridCell, map?.grid?.cells?.province?.[change.gridCell] ?? 0]),
-    packStates: packCells.map(packCell => [packCell, map?.pack?.cells?.state?.[packCell] ?? 0]),
+    packStates: packCells.map(packCell => [packCell, originalPackStates?.get(packCell) ?? map?.pack?.cells?.state?.[packCell] ?? 0]),
     packProvinces: packCells.map(packCell => [packCell, map?.pack?.cells?.province?.[packCell] ?? 0]),
     cities: (settlementSnapshot?.movedCities || []).map(item => {
       const city = map?.settlements?.cities?.[item.cityId];
@@ -962,7 +974,7 @@ function applySettlementTransfers(map, snapshot) {
   }
 }
 
-function reconcileStateCapitals(map, stateIds, snapshot) {
+function reconcileStateCapitals(map, stateIds, snapshot, withoutPackLand) {
   let created = 0;
   for (const stateId of stateIds) {
     const state = map?.politics?.states?.[stateId];
@@ -980,6 +992,7 @@ function reconcileStateCapitals(map, stateIds, snapshot) {
       if (burg && normalizeStateId(burg.state) === stateId) burg.capital = 0;
     }
     if (!anchor) {
+      withoutPackLand.push(stateId);
       assignStateCapitalAnchor(map, stateId, {capital: 0, capitalName: "", center: 0, gridCenter: 0});
       continue;
     }
@@ -1099,6 +1112,9 @@ function syncMovedCityProvinces(map, settlementSnapshot) {
     const packProvince = Number.isInteger(city.packCell) ? map?.pack?.cells?.province?.[city.packCell] : null;
     if (packProvince !== null && packProvince !== undefined) city.province = normalizeProvinceId(packProvince);
     else if (Number.isInteger(city.cell)) city.province = normalizeProvinceId(map?.grid?.cells?.province?.[city.cell]);
+    const burg = findBurgForCity(map, city);
+    if (burg) burg.province = city.province;
+    if (item.city.province !== city.province) city.provincial = Boolean(city.province && map.politics.provinces?.[city.province]?.burg === city.burgId);
   }
 }
 
@@ -1133,7 +1149,10 @@ function restoreSettlementSnapshot(map, snapshot) {
     const city = map?.settlements?.cities?.[item.cityId];
     const burg = map?.pack?.burgs?.[item.burgId];
     if (city) Object.assign(city, item.city);
-    if (burg && item.burg) Object.assign(burg, item.burg);
+    if (burg && item.burg) {
+      Object.assign(burg, item.burg);
+      if (!Object.hasOwn(item.burg, "province")) delete burg.province;
+    }
   }
 }
 
@@ -1434,8 +1453,8 @@ function refreshPoliticalSummaries(map) {
     refreshStateSummaries(map);
     return;
   }
-  const provinceNeighbors = provinces.map(() => new Set());
-  const stateNeighbors = states.map(() => new Set());
+  const provinceNeighbors = provinces.map(province => province && new Set());
+  const stateNeighbors = states.map(state => state && new Set());
   for (const province of provinces) {
     if (!province) continue;
     province.cells = 0;
@@ -1912,6 +1931,7 @@ function snapshotCity(city) {
 function snapshotBurg(burg) {
   return burg ? {
     state: burg.state,
+    ...(Object.hasOwn(burg, "province") ? {province: burg.province} : {}),
     capital: burg.capital,
     group: burg.group
   } : null;

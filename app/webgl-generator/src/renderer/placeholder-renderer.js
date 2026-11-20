@@ -2780,10 +2780,12 @@ export class PlaceholderMapRenderer {
     this.refreshLineLayers({draw});
   }
 
-  refreshObjectPickingIndex(binding = null) {
+  refreshObjectPickingIndex(binding = null, {pointsOnly = false} = {}) {
     if (!this.map) return;
     const resourceBinding = binding || this.objectPickingResourceOwner || this.activeRenderResourceBinding || this.surfaceResourceOwner;
-    this.objectPickingIndex = buildObjectPickingIndex(this.map);
+    if (!pointsOnly || !refreshNonRoutePickingIndexPreservingRoutes(this.objectPickingIndex, this.map, {preserveRivers: true})) {
+      this.objectPickingIndex = buildObjectPickingIndex(this.map);
+    }
     if (resourceBinding) adoptObjectPickingResourceBinding(this, resourceBinding);
   }
 

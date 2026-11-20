@@ -106,7 +106,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.derived.includes("object-index") && typeof state.renderer.refreshObjectPickingIndex === "function") {
-        state.renderer.refreshObjectPickingIndex(retainedBinding);
+        state.renderer.refreshObjectPickingIndex(retainedBinding, {pointsOnly: sourceEffects?.pointsOnlyPicking === true});
       }
       if (effects.derived.includes("river-picking") && typeof state.renderer.refreshRiverPickingIndex === "function") {
         state.renderer.refreshRiverPickingIndex(retainedBinding);
@@ -267,7 +267,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         await runStep(() => state.renderer.refreshPointLayers({draw: false, binding: retainedBinding}));
       }
       if (effects.derived.includes("object-index") && typeof state.renderer.refreshObjectPickingIndex === "function") {
-        await runStep(() => state.renderer.refreshObjectPickingIndex(retainedBinding));
+        await runStep(() => state.renderer.refreshObjectPickingIndex(retainedBinding, {pointsOnly: sourceEffects?.pointsOnlyPicking === true}));
       }
       if (effects.derived.includes("river-picking") && typeof state.renderer.refreshRiverPickingIndex === "function") {
         await runStep(() => state.renderer.refreshRiverPickingIndex(retainedBinding));

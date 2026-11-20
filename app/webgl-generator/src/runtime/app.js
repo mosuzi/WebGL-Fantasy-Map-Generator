@@ -18571,6 +18571,7 @@ function bindStateEditing(canvas, state, documentRef) {
     state.stateEdit.activeStroke = {
       pointerId: event.pointerId,
       originals: new Map(),
+      originalPackStates: new Map(),
       sourceStateId
     };
     state.stateEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
@@ -19589,7 +19590,7 @@ function applyStateBrushAtEvent(state, event) {
   }
 
   const sampledAt = performance.now();
-  applyStateBrushPreview(state.map, changes);
+  applyStateBrushPreview(state.map, changes, stroke.originalPackStates);
   const appliedAt = performance.now();
   state.stateEdit.lastAffected = changes.length;
   state.stateEdit.sourceStateId = stroke.sourceStateId;
@@ -19921,7 +19922,7 @@ function finishStateStroke(state, documentRef) {
     const after = state.map.grid.cells.state[gridCell];
     if (before !== after) changes.push({gridCell, before, after});
   }
-  const command = createApplyStateBrushCommand(changes);
+  const command = createApplyStateBrushCommand(changes, {originalPackStates: stroke.originalPackStates});
   if (command.isNoop({map: state.map})) return;
   state.stateEdit.lastAffected = changes.length;
   state.stateEdit.sourceStateId = stroke.sourceStateId;
