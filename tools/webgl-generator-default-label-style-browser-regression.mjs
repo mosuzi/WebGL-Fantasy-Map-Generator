@@ -126,14 +126,106 @@ try {
   assert.ok(evidence.visible.states + evidence.visible.provinces + evidence.visible.cities > 0, "默认视口没有显示任何地图标签");
   assert.equal(evidence.glError, 0, "默认标签样式验收出现 WebGL 错误");
   assert.equal(evidence.healthErrors, 0, "默认标签样式验收出现 health error");
+  const legibility = await verifyLabelLegibility(page);
   assert.deepEqual(consoleErrors, []);
   assert.deepEqual(pageErrors, []);
   assert.ok(existsSync(screenshotPath) && statSync(screenshotPath).size > 0, "默认标签样式验收截图没有生成");
 
-  console.log(JSON.stringify({ok: true, evidence, screenshotPath, consoleErrors, performanceConsoleErrors, pageErrors}, null, 2));
+  console.log(JSON.stringify({ok: true, evidence, legibility, screenshotPath, consoleErrors, performanceConsoleErrors, pageErrors}, null, 2));
 } finally {
   if (browser) await Promise.race([browser.close(), delay(5000)]);
   await new Promise(done => server.close(done));
+}
+
+async function verifyLabelLegibility(page) {
+  const capital = page.locator('.city-label.capital.visible .map-label-content').first();
+  const capitalSize = () => capital.evaluate(node => parseFloat(getComputedStyle(node).fontSize));
+  const wheelTo = async (delta, target) => {
+    await page.mouse.move(720, 450);
+    await page.mouse.wheel(0, delta);
+    await page.waitForFunction(scale => {
+      const r = window.__webglGeneratorApp.renderer;
+      return Math.abs(r.overlayCommittedCamera?.scale - scale) < 0.00001 && !r.viewportInteractionKind;
+    }, target);
+  };
+  const overview = await capitalSize();
+  assert.equal(overview, 11);
+  await wheelTo(2000, 0.5);
+  const far = await capitalSize();
+  assert.equal(far, 9);
+  await wheelTo(-1100, 0.5 * Math.exp(1.1));
+  const close = await capitalSize();
+  assert.equal(close, 13);
+  await wheelTo(1100, 0.5);
+  assert.equal(await capitalSize(), far);
+  const edit = await page.evaluate(() => window.webglGeneratorApi.edit.labels.setStyle("capital", {fontSize: 17}));
+  assert.ok(edit.ok);
+  assert.equal(await capitalSize(), 17);
+  const undo = await page.evaluate(() => window.webglGeneratorApi.history.undo());
+  assert.ok(undo.ok);
+  assert.equal(await capitalSize(), far);
+
+  await page.locator("#open-generation-panel").click();
+  await page.locator('[data-control-tab="styles"]').click();
+  const setNumber = async (id, value) => {
+    const number = page.locator(`label:has(#${id}) .ui-slider-number input`);
+    await number.fill(String(value));
+    await number.press("Enter");
+    await page.waitForFunction(({id, value}) => Number(document.getElementById(id)?.value) === value, {id, value});
+  };
+  await setNumber("label-style-font-size", 33);
+  await setNumber("label-style-stroke-width", 0);
+  const preview = page.locator(".label-style-preview");
+  const countInk = async () => {
+    const png = (await preview.screenshot()).toString("base64");
+    return page.evaluate(async data => {
+      const image = await createImageBitmap(await (await fetch("data:image/png;base64," + data)).blob());
+      const ctx = new OffscreenCanvas(image.width, image.height).getContext("2d");
+      ctx.drawImage(image, 0, 0);
+      const rgba = ctx.getImageData(2, 2, image.width - 4, image.height - 4).data;
+      let dark = 0;
+      for (let i = 0; i < rgba.length; i += 4) if (Math.max(rgba[i], rgba[i + 1], rgba[i + 2]) < 130) dark++;
+      return dark;
+    }, png);
+  };
+  const plainInk = await countInk();
+  await setNumber("label-style-stroke-width", 3);
+  const outlinedInk = await countInk();
+  assert.deepEqual(await preview.evaluate(node => {
+    const css = getComputedStyle(node);
+    return [css.fontSize, css.webkitTextStrokeWidth, css.paintOrder.split(" ")[0]];
+  }), ["33px", "3px", "stroke"]);
+  // Use the old paint order as the control on this same font and rasterizer.
+  await preview.evaluate(node => { node.style.paintOrder = "normal"; });
+  const coveredInk = await countInk();
+  await preview.evaluate(node => node.style.removeProperty("paint-order"));
+  assert.ok(plainInk > 100 && outlinedInk > coveredInk && plainInk - outlinedInk < (plainInk - coveredInk) / 2,
+    JSON.stringify({plainInk, outlinedInk, coveredInk}));
+  await page.locator('[data-panel-id="generation-panel"] .floating-panel-close').click();
+  const states = await page.locator(".state-label.visible").evaluateAll(nodes => nodes.map(node => {
+    const style = getComputedStyle(node.querySelector(".political-label-glyph"));
+    return {font: parseFloat(style.fontSize), stroke: parseFloat(style.webkitTextStrokeWidth),
+      order: style.paintOrder, opacity: Number(getComputedStyle(node).opacity)};
+  }));
+  assert.ok(states.length > 1 && states.every(s => s.font < 33 && Math.abs(s.stroke / s.font - 3 / 33) < 0.0001 && s.order.startsWith("stroke")));
+  const exportedStrokes = await page.evaluate(async () => {
+    const style = getComputedStyle(document.querySelector(".state-label.visible"));
+    const color = style.getPropertyValue("--label-stroke-color").trim().toLowerCase();
+    const samples = [];
+    const original = CanvasRenderingContext2D.prototype.strokeText;
+    try {
+      CanvasRenderingContext2D.prototype.strokeText = function(...args) {
+        if (this.strokeStyle === color) samples.push({font: Number(this.font.match(/([\d.]+)px/)[1]), stroke: this.lineWidth});
+        return original.apply(this, args);
+      };
+      const png = await window.webglGeneratorApi.data.exportPNG({download: false, includeMapOverlays: true, crop: {mode: "viewport"}});
+      if (!png.ok) throw Error(JSON.stringify(png.error));
+    } finally { CanvasRenderingContext2D.prototype.strokeText = original; }
+    return samples;
+  });
+  assert.ok(exportedStrokes.length >= states.length && exportedStrokes.every(s => Math.abs(s.stroke / s.font - 3 / 33) < 0.0001),
+    JSON.stringify(exportedStrokes));
+  return {overview, far, close, plainInk, outlinedInk, coveredInk, states, exportedStrokes};
 }
 
 async function startStaticServer() {

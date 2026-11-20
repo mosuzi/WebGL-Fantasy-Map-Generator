@@ -5173,6 +5173,8 @@ export class PlaceholderMapRenderer {
     const padding = labelPaddingForScale(scale);
     const labelPrewarm = overlayLabelPrewarmCssPx(rect);
     const stateLabelScale = stateLabelScaleBehavior(scale);
+    const capitalFontScale = this.map.labels?.styles?.overrides?.capital?.fontSize != null
+      ? 1 : (9 + 4 * smoothStep(0.5, 1.5, scale)) / 13;
     const priorityLayout = hasManualLabelPriorities(this.map);
     const labelItems = priorityLayout ? this.labelItems : automaticPoliticalLabelOrder(this.labelItems);
 
@@ -5220,7 +5222,15 @@ export class PlaceholderMapRenderer {
       }) : null);
       const screen = politicalPlacement?.anchor || baseScreen;
       const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
-      const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
+      const textScale = item.styleType === "capital" ? capitalFontScale : 1;
+      if (item.styleType === "capital" && (item.capitalTextScale !== textScale || item.capitalTextStyle !== item.resolvedStyle)) {
+        setStylePropertyIfChanged(item.node, "--label-font-size", `${item.resolvedStyle.fontSize * textScale}px`);
+        setStylePropertyIfChanged(item.node, "--label-letter-spacing", `${item.resolvedStyle.letterSpacing * textScale}px`);
+        applyLabelEffectDimensions(item.node, item.resolvedStyle, textScale);
+        item.capitalTextScale = textScale;
+        item.capitalTextStyle = item.resolvedStyle;
+      }
+      const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor, textScale);
       if (stateLabel && politicalPlacement) box.parts = politicalPlacement.glyphs.map(glyph => glyph.box);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const prewarm = politicalLabel ? politicalPrewarm : labelPrewarm;
@@ -6235,8 +6245,9 @@ function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.an
       item.glyphNodes = appendPoliticalGlyphs(item.contentNode, placement.glyphs.map(glyph => glyph.character), "state");
     }
     item.displayText = text;
-    setStylePropertyIfChanged(item.contentNode, "font-size", `${placement.fontSize ?? item.resolvedStyle.fontSize}px`);
-    if (placement.mapScale) applyLabelEffectDimensions(item.node, item.resolvedStyle, placement.mapScale);
+    const fontSize = placement.fontSize ?? item.resolvedStyle.fontSize;
+    setStylePropertyIfChanged(item.contentNode, "font-size", `${fontSize}px`);
+    applyLabelEffectDimensions(item.node, item.resolvedStyle, placement.mapScale ?? 1, fontSize / item.resolvedStyle.fontSize);
   }
   for (let index = 0; index < item.glyphNodes.length; index++) {
     const glyph = item.glyphNodes[index];
@@ -8646,7 +8657,7 @@ function stateLabelScaleBehavior(scale) {
   };
 }
 
-function labelBoxForItem(item, screen, anchor = null) {
+function labelBoxForItem(item, screen, anchor = null, textScale = 1) {
   const metrics = item.metrics || estimateLabelTextBox(item.text, item.resolvedStyle);
   if (item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE) {
     const estimatedWidth = metrics.width;
@@ -8661,8 +8672,8 @@ function labelBoxForItem(item, screen, anchor = null) {
       bottom: screen.y + boxHeight / 2
     };
   }
-  const estimatedWidth = metrics.width;
-  const estimatedHeight = metrics.height;
+  const estimatedWidth = metrics.width * textScale;
+  const estimatedHeight = metrics.height * textScale;
   if (item.targetKind === LABEL_TARGET_KIND.CITY) {
     const anchorY = anchor?.y ?? screen.y - 6;
     return {
@@ -8693,8 +8704,8 @@ function applyResolvedLabelStyle(node, style) {
   applyLabelEffectDimensions(node, style, 1);
 }
 
-function applyLabelEffectDimensions(node, style, scale) {
-  setStylePropertyIfChanged(node, "--label-stroke-width", `${style.strokeWidth * scale}px`);
+function applyLabelEffectDimensions(node, style, scale, strokeScale = scale) {
+  setStylePropertyIfChanged(node, "--label-stroke-width", `${style.strokeWidth * strokeScale}px`);
   setStylePropertyIfChanged(node, "--label-shadow-offset-x", `${style.shadowOffsetX * scale}px`);
   setStylePropertyIfChanged(node, "--label-shadow-offset-y", `${style.shadowOffsetY * scale}px`);
   setStylePropertyIfChanged(node, "--label-shadow-blur", `${style.shadowBlur * scale}px`);

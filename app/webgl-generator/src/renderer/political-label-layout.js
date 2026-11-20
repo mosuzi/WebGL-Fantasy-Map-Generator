@@ -181,9 +181,10 @@ function homelandLineLayout(lines, style, fontSize, rotation, upright) {
   const options = {targetKind: "state", upright, rotation, extraSpacing: fontSize * (diagonal - 1)};
   const glyphs = [];
   let box = null;
+  const fittedStyle = homelandStyleAtSize(style, fontSize);
   for (const [row, line] of lines.entries()) {
     const offset = (row - (lines.length - 1) / 2) * fontSize * 1.28 * diagonal;
-    const lineLayout = createPoliticalLabelGlyphLayout(line, {...style, fontSize}, options);
+    const lineLayout = createPoliticalLabelGlyphLayout(line, fittedStyle, options);
     for (const glyph of lineLayout.glyphs) {
       const bounds = translateBox(glyph.box, -sin * offset, cos * offset);
       glyphs.push({...glyph, x: glyph.x - sin * offset, y: glyph.y + cos * offset, box: bounds});
@@ -191,6 +192,11 @@ function homelandLineLayout(lines, style, fontSize, rotation, upright) {
     }
   }
   return {glyphs, box, lines: lines.length, bend: 0, rotation, spacing: Math.max(STATE_MIN_LETTER_SPACING, finite(style.letterSpacing)) + options.extraSpacing};
+}
+
+function homelandStyleAtSize(style, fontSize) {
+  const ratio = fontSize / positive(style.fontSize, 22);
+  return {...style, fontSize, strokeWidth: finite(style.strokeWidth) * ratio};
 }
 
 function bankLabelLayout({name, short, fontSize, item, sx, sy, rotation, banks, fits, axisScale}) {
@@ -205,7 +211,7 @@ function bankLabelLayout({name, short, fontSize, item, sx, sy, rotation, banks, 
   const groupOffset = (count / 2 - splitAt) * (fontSize + spacing);
   const maxGap = (Math.min(splitAt, count - splitAt) === 1 ? 2 : 4) * fontSize;
   const cos = Math.cos(radians), sin = Math.sin(radians);
-  const style = {...item.resolvedStyle, fontSize};
+  const style = homelandStyleAtSize(item.resolvedStyle, fontSize);
   const options = {targetKind: "state", upright: true, rotation};
   const chars = Array.from(name);
   const groups = [chars.slice(0, splitAt), chars.slice(splitAt)].map(part => ({

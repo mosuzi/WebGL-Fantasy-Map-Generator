@@ -2991,7 +2991,7 @@ function drawTextOverlayElement(context, element, canvasRect, scale) {
   if (!isStateLabel && !isProvinceLabel && isPaintedColor(background)) {
     drawPanel(context, box, cssPixelValue(style.borderRadius, scale.x), background, isPaintedColor(borderColor) ? borderColor : "transparent");
   }
-  context.font = cssCanvasFont(style, scale.y);
+  context.font = cssCanvasFont(style, scale.y, 0);
   if ("letterSpacing" in context) context.letterSpacing = `${cssPixelValue(style.letterSpacing, scale.x)}px`;
   context.fillStyle = style.color || "#111";
   context.textBaseline = "middle";
@@ -3147,8 +3147,8 @@ function loadImage(documentRef, src) {
   });
 }
 
-function cssCanvasFont(style, scaleY) {
-  const fontSize = Math.max(8, cssPixelValue(style.fontSize, scaleY));
+function cssCanvasFont(style, scaleY, minimumSize = 8) {
+  const fontSize = Math.max(minimumSize, cssPixelValue(style.fontSize, scaleY));
   const weight = style.fontWeight || "400";
   const family = style.fontFamily || "system-ui, sans-serif";
   const fontStyle = style.fontStyle && style.fontStyle !== "normal" ? `${style.fontStyle} ` : "";
@@ -3163,7 +3163,7 @@ function drawTextWithResolvedStyle(context, element, text, x, y, maxWidth, scale
   context.shadowOffsetX = cssPixelValue(style.getPropertyValue("--label-shadow-offset-x"), scale.x);
   context.shadowOffsetY = cssPixelValue(style.getPropertyValue("--label-shadow-offset-y"), scale.y);
   if (strokeWidth > 0) {
-    context.lineWidth = strokeWidth * 2;
+    context.lineWidth = strokeWidth;
     context.lineJoin = "round";
     context.strokeStyle = style.getPropertyValue("--label-stroke-color").trim() || style.webkitTextStrokeColor || "transparent";
     context.strokeText(text, x, y, maxWidth);

@@ -401,7 +401,11 @@ try {
       renderer.updateLabels();
       const zoomApproach = sample();
       ensure(zoomApproach.cityVisible && zoomApproach.candidate === clearCandidate && state.node.classList.contains("city-overlap") && zoomApproach.inside,
-        "城市与国名重叠时应保留字位并减淡国名");
+        "城市与国名重叠时应保留字位");
+      for (const animation of state.node.getAnimations()) animation.finish();
+      const ink = getComputedStyle(state.node);
+      ensure(Math.abs(Number(ink.opacity) - Number(ink.getPropertyValue("--label-opacity"))) < 0.001,
+        "1.2 倍重叠处的国名应保持样式指定的不透明度");
       renderer.viewportInteractionKind = null;
       renderer.labelItems = [state];
       renderer.updateLabels();

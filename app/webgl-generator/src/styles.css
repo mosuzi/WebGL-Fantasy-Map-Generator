@@ -395,6 +395,7 @@ select {
 }
 
 .label-style-preview {
+  paint-order: stroke fill;
   display: grid;
   min-height: 76px;
   place-items: center;
@@ -1193,7 +1194,6 @@ select:disabled {
 }
 
 .state-label .political-label-glyph { letter-spacing: 0; }
-.state-label.city-overlap { --state-ink-opacity: 0.50; }
 
 .map-scale-bar {
   z-index: 5;
@@ -1723,6 +1723,7 @@ select:disabled {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-stroke: var(--label-stroke-width) var(--label-stroke-color);
+  paint-order: stroke fill;
   text-shadow: var(--label-shadow-offset-x) var(--label-shadow-offset-y) var(--label-shadow-blur) var(--label-shadow-color);
   white-space: nowrap;
 }
@@ -1802,7 +1803,7 @@ select:disabled {
 
 .state-label.buffered,
 .state-label.viewport-entering {
-  opacity: calc(var(--label-opacity, 1) * var(--state-ink-opacity, 1) * var(--state-label-preview-opacity, var(--state-label-opacity, 1)));
+  opacity: calc(var(--label-opacity, 1) * var(--state-label-preview-opacity, var(--state-label-opacity, 1)));
 }
 
 .province-label.buffered.collision-fallback,
@@ -1908,7 +1909,7 @@ select:disabled {
 }
 
 .state-label.visible {
-  opacity: calc(var(--label-opacity, 1) * var(--state-ink-opacity, 1) * var(--state-label-preview-opacity, var(--state-label-opacity, 1)));
+  opacity: calc(var(--label-opacity, 1) * var(--state-label-preview-opacity, var(--state-label-opacity, 1)));
   transition-delay: 0s;
   visibility: visible;
 }
