@@ -52,6 +52,19 @@ feedback.finish(first);
 assert.equal(feedback.getSnapshot().active, 0, "重叠任务没有完整清理");
 assert.equal(feedback.finish("unknown-token"), false, "未知 token 不应报告清理成功");
 
+const pending = feedback.begin("准备其他操作");
+feedback.setRuntimeOperation(true, "正在保存地图", {id: 9}, true);
+assert.equal(bubble.hidden, false, "保存应在计时器触发之前显示");
+assert.equal(bubble.getAttribute("aria-hidden"), "false");
+assert.equal(bubble.classList.contains("operation-loading-active"), false, "保存首帧应完全可见");
+assert.equal(clock.pendingCount(), 0, "保存应取消尚未触发的延迟显示");
+feedback.setRuntimeOperation(true, "正在整理存档内容", {id: 9});
+assert.equal(text.textContent, "正在整理存档内容，请稍候片刻。");
+feedback.setRuntimeOperation(false, "", {id: 9});
+assert.equal(text.textContent, "准备其他操作");
+feedback.finish(pending);
+assert.equal(bubble.hidden, true);
+
 const destroyPending = feedback.begin("正在等待销毁");
 assert.ok(destroyPending);
 assert.equal(clock.pendingCount(), 1);
@@ -64,7 +77,7 @@ assert.equal(bubble.hidden, true, "销毁后的迟到 timer 重新显示提示")
 console.log(JSON.stringify({
   ok: true,
   delayMs: 24,
-  scenarios: ["fast", "slow", "runtime-stage", "overlap", "destroy"],
+  scenarios: ["fast", "slow", "runtime-stage", "overlap", "immediate-save", "destroy"],
   message: DEFAULT_DELAYED_OPERATION_MESSAGE
 }, null, 2));
 

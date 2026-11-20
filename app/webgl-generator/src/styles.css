@@ -1048,6 +1048,11 @@ select:disabled {
   animation: operation-loading-reveal 140ms ease both;
 }
 
+.operation-loading-bubble.operation-loading-immediate {
+  /* Keep save feedback above panel controls and below the startup screen. */
+  z-index: 9999;
+}
+
 .generation-loading-bubble[hidden],
 .operation-loading-bubble[hidden] {
   display: none;

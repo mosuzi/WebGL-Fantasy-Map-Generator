@@ -43,6 +43,10 @@ export function createRuntimeOperationManager(options = {}) {
     const operation = begin(name, config);
     let transactionSnapshot;
     try {
+      if (operation.loading && config.paintLoadingFirst) {
+        await options.waitForPaint?.();
+        operation.context.throwIfCancelled();
+      }
       transactionSnapshot = await config.snapshot?.(operation.context);
       const result = await task(operation.context);
       const status = config.isNoop?.(result) ? "noop" : "success";
@@ -135,7 +139,7 @@ export function createRuntimeOperationManager(options = {}) {
       ? null
       : options.beginHealthOperation?.(operation.name, {operationId: operation.id}) || null;
     current = operation;
-    if (operation.loading) options.setLoading?.(true, operation.message, snapshotOperation(operation));
+    if (operation.loading) options.setLoading?.(true, operation.message, snapshotOperation(operation), config.paintLoadingFirst === true);
     publish();
     return operation;
   }

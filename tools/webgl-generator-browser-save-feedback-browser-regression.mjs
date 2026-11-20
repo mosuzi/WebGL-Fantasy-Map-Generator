@@ -28,7 +28,7 @@ try {
   const port = vite.httpServer.address().port;
   evidence.mark("browser-start", {active: "browser-save-feedback", complete: "server-start"});
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
-  context = await browser.newContext({viewport: {width: 1280, height: 820}, deviceScaleFactor: 1});
+  context = await browser.newContext({viewport: {width: 390, height: 820}, deviceScaleFactor: 1});
   await context.addInitScript(() => localStorage.clear());
   const page = await context.newPage();
   await prepareTask350LongTaskObserver(page);
@@ -57,10 +57,35 @@ try {
     const status = document.getElementById("file-operation-status");
     status.textContent = "地图已保存到浏览器 IndexedDB 降级存储：原始 53.53MB，压缩后 13.26MB。下次打开会优先恢复此地图。";
     status.dataset.state = "success";
+    document.addEventListener("project-map-save", () => {
+      const bubble = document.getElementById("operation-loading");
+      const snapshot = () => ({
+        visible: !bubble.hidden && bubble.getAttribute("aria-hidden") === "false" && getComputedStyle(bubble).opacity === "1",
+        message: bubble.textContent.trim(),
+        stage: window.__webglGeneratorApp.runtimeOperationSnapshot.current?.stage
+      });
+      window.__browserSavePaint = {click: snapshot()};
+      requestAnimationFrame(() => {
+        window.__browserSavePaint.frame = snapshot();
+        const rect = bubble.getBoundingClientRect();
+        // The production indicator lets pointer events through.
+        bubble.style.pointerEvents = "auto";
+        window.__browserSavePaint.uncovered = bubble.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+        bubble.style.removeProperty("pointer-events");
+      });
+    }, {once: true});
   });
   await triggerBrowserSave(page);
   await page.waitForFunction(() => window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy === false && document.getElementById("map-toast")?.hidden === false && document.getElementById("map-toast")?.textContent === "保存成功");
   const success = await readFeedback(page);
+  const paint = await page.evaluate(() => window.__browserSavePaint);
+  assert.equal(paint.uncovered, true, "窄屏保存提示被地图工具栏或面板遮盖");
+  for (const checkpoint of [paint.click, paint.frame]) {
+    assert.equal(checkpoint.visible, true, "点击当下和首次绘制均应显示保存提示");
+    assert.equal(checkpoint.stage, "start", "应在整理存档前绘制提示");
+    assert.match(checkpoint.message, /正在保存地图到浏览器/);
+  }
+  assert.equal(await page.locator("#operation-loading").isHidden(), true);
   assert.equal(success.status.text, "", "成功保存仍在控制面板留下文本");
   assert.equal(success.status.state, null, "成功保存遗留控制面板状态色");
   assert.equal(success.toast.text, "保存成功", "成功保存没有改用页面下方提示");
@@ -68,14 +93,20 @@ try {
 
   await page.evaluate(() => {
     const app = window.__webglGeneratorApp;
-    window.__browserSaveFeedbackOriginal = app.runtimeActions.data.saveBrowserMap;
-    app.runtimeActions.data.saveBrowserMap = async () => {
-      throw new Error("浏览器存储故障注入");
+    const coordinator = app.workerTaskCoordinator;
+    app.workerTaskCoordinator = {
+      ...coordinator,
+      run(type, payload, options) {
+        if (payload.mode !== "archive-export") return coordinator.run(type, payload, options);
+        app.workerTaskCoordinator = coordinator;
+        throw new Error("浏览器存储故障注入");
+      }
     };
   });
   await triggerBrowserSave(page);
   await page.waitForFunction(() => document.getElementById("map-toast")?.dataset.tone === "error");
   const failure = await readFeedback(page);
+  assert.equal(await page.locator("#operation-loading").isHidden(), true);
   assert.equal(failure.status.text, "", "保存失败仍在控制面板留下文本");
   assert.equal(failure.status.state, null, "保存失败遗留控制面板状态色");
   assert.match(failure.toast.text, /保存到浏览器失败：浏览器存储故障注入/);
@@ -86,18 +117,13 @@ try {
   await page.waitForTimeout(800);
   const failureAt6300 = await readFeedback(page);
   assert.equal(failureAt6300.toast.hidden, true, "失败提示超过约 6 秒仍未关闭");
-  await page.evaluate(() => {
-    const app = window.__webglGeneratorApp;
-    app.runtimeActions.data.saveBrowserMap = window.__browserSaveFeedbackOriginal;
-    delete window.__browserSaveFeedbackOriginal;
-  });
   assert.deepEqual(consoleErrors, [], "浏览器保存反馈产生 application console error");
   assert.deepEqual(pageErrors, [], "浏览器保存反馈产生 page error");
   const longTasks = await collectTask350LongTaskWindow(page, "save-feedback");
   const performance = summarizeTask350LongTasks(longTasks, 200);
   const overBudget = performance.overBudget;
   assert.deepEqual(overBudget, [], `浏览器保存反馈目标窗口出现 >200ms LongTask：${JSON.stringify(overBudget)}`);
-  const finalReport = {ok: true, success, failure, consoleErrors, pageErrors, longTasks, performance};
+  const finalReport = {ok: true, paint, success, failure, consoleErrors, pageErrors, longTasks, performance};
   const compactReport = {...finalReport, failureAt5500, failureAt6300, performance};
   evidence.setResult(finalReport, compactReport);
   evidence.succeed();

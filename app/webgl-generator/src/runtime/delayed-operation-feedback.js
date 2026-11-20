@@ -19,8 +19,11 @@ export function createDelayedOperationFeedback(documentRef, options = {}) {
     const id = String(metadata.id || `operation-feedback-${++sequence}`);
     const wasEmpty = tokens.size === 0;
     tokens.set(id, {id, message: normalizeMessage(message), source: metadata.source || "operation"});
-    if (wasEmpty) prepareReveal();
-    else renderMessage();
+    renderMessage();
+    if (metadata.immediate) {
+      clearRevealTimer();
+      reveal(false);
+    } else if (wasEmpty) prepareReveal();
     return id;
   }
 
@@ -31,13 +34,13 @@ export function createDelayedOperationFeedback(documentRef, options = {}) {
     return true;
   }
 
-  function setRuntimeOperation(visible, message, operation = {}) {
+  function setRuntimeOperation(visible, message, operation = {}, immediate = false) {
     const id = `runtime-operation-${Number(operation?.id) || "active"}`;
     if (visible) {
       if (tokens.has(id)) {
         tokens.get(id).message = normalizeMessage(message);
         renderMessage();
-      } else begin(message, {id, source: "runtime"});
+      } else begin(message, {id, source: "runtime", immediate});
       return;
     }
     finish(id);
@@ -49,16 +52,23 @@ export function createDelayedOperationFeedback(documentRef, options = {}) {
     bubble.hidden = true;
     bubble.setAttribute("aria-hidden", "true");
     bubble.classList.remove("operation-loading-active");
-    renderMessage();
     clearRevealTimer();
     revealTimer = setTimer(() => {
       revealTimer = 0;
-      if (!tokens.size || !bubble) return;
-      shown = true;
-      bubble.hidden = false;
-      bubble.classList.add("operation-loading-active");
-      bubble.setAttribute("aria-hidden", "false");
+      reveal(true);
     }, delayMs);
+  }
+
+  function reveal(animate) {
+    if (!tokens.size || !bubble) return;
+    shown = true;
+    bubble.hidden = false;
+    if (animate) bubble.classList.add("operation-loading-active");
+    else {
+      bubble.classList.remove("operation-loading-active");
+      bubble.classList.add("operation-loading-immediate");
+    }
+    bubble.setAttribute("aria-hidden", "false");
   }
 
   function renderMessage() {
@@ -71,7 +81,7 @@ export function createDelayedOperationFeedback(documentRef, options = {}) {
     shown = false;
     if (!bubble) return;
     bubble.hidden = true;
-    bubble.classList.remove("operation-loading-active");
+    bubble.classList.remove("operation-loading-active", "operation-loading-immediate");
     bubble.setAttribute("aria-hidden", "true");
   }
 

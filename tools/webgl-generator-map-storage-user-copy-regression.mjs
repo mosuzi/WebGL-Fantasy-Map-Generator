@@ -4,7 +4,7 @@ import {readFile} from "node:fs/promises";
 import {browserMapSaveLoadingMessage} from "../app/webgl-generator/src/ui/map-storage-user-copy.js";
 
 const expected = Object.freeze({
-  initial: "正在收拢全图资料",
+  initial: "正在保存地图到浏览器",
   "input-stream-complete": "正在收拢全图资料",
   normalize: "正在收拢全图资料",
   stringify: "正在收拢全图资料",

@@ -2853,7 +2853,8 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   applyControlPreferencesToRenderer(documentRef, renderer);
   state.operationFeedback = createDelayedOperationFeedback(documentRef);
   state.runtimeOperation = createRuntimeOperationManager({
-    setLoading: (visible, message, operation) => state.operationFeedback.setRuntimeOperation(visible, message, operation),
+    setLoading: state.operationFeedback.setRuntimeOperation,
+    waitForPaint: () => yieldToBrowser(documentRef),
     beginHealthOperation: (name, detail) => healthMonitor?.beginOperation?.(name, detail),
     recordHealth: (type, detail, severity) => healthMonitor?.record?.(type, detail, severity),
     onStateChange: snapshot => {
@@ -3769,7 +3770,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
       exportCompressedAll: (options = {}) => operation.run("data.exportCompressedAll", context => {
         context.report("serialize", {message: "正在压缩完整地图数据"});
         return exportCompressedAllMapDataViaWorker(state, documentRef, options, context);
-      }, {message: "正在压缩完整地图数据"}),
+      }, {message: "正在保存地图存档", paintLoadingFirst: true}),
       exportPNG: (options = {}) => operation.run("data.exportPNG", context => {
         context.report("render-export", {message: "正在导出 PNG"});
         return exportPngData(state, documentRef, options);
@@ -3789,7 +3790,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
       saveBrowserMap: (options = {}) => operation.run("data.saveBrowserMap", context => {
         context.report("collect", {message: browserMapSaveLoadingMessage("collect")});
         return saveMapToBrowserStorageViaApi(state, documentRef, options, context);
-      }, {message: browserMapSaveLoadingMessage("initial")}),
+      }, {message: browserMapSaveLoadingMessage("initial"), paintLoadingFirst: true}),
       restoreBrowserMap: (options = {}) => runMapReplace("data.restoreBrowserMap", context => restoreMapFromBrowserStorageViaApi(state, documentRef, options, context), loadingMessage("map-import-read"), {
         isNoop: result => result?.restored === false
       }),
