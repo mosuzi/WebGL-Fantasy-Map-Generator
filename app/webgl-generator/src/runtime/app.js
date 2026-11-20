@@ -13019,16 +13019,14 @@ function setLabelPositionLockViaApi(state, documentRef, label, locked, options =
 function getRuntimeLabelStyles(state) {
   if (!state.map) return {version: 1, overrides: {}, styles: {}};
   const store = ensureLabelStore(state.map).styles;
-  const styles = Object.fromEntries(LABEL_STYLE_TYPES.map(styleType => [styleType, {
-    styleType,
-    override: readLabelStyleOverride(store, styleType),
-    resolved: {...resolveLabelStyle(store, styleType, state.renderer?.visualTheme)}
-  }]));
-  return {
-    version: store.version,
-    overrides: Object.fromEntries(Object.entries(store.overrides).map(([key, value]) => [key, {...value}])),
-    styles
-  };
+  const styles = {};
+  const overrides = {};
+  for (const styleType of LABEL_STYLE_TYPES) {
+    const override = readLabelStyleOverride(store, styleType);
+    styles[styleType] = {styleType, override, resolved: {...resolveLabelStyle(store, styleType, state.renderer?.visualTheme)}};
+    if (Object.keys(override).length) overrides[styleType] = {...override};
+  }
+  return {version: store.version, overrides, styles};
 }
 
 function syncLabelStylesUi(state, documentRef) {

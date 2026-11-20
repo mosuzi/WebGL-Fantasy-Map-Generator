@@ -27,13 +27,16 @@ export const LABEL_FONT_FAMILIES = Object.freeze({
 export const LOCAL_LABEL_FONT_ID = "local";
 export const LABEL_FONT_FALLBACK = LABEL_FONT_FAMILIES.system;
 
+const DEFAULT_CITY_FONT_SIZE = 11;
+const CAPITAL_FONT_SIZE_OFFSET = 2;
+
 const CUSTOM_LABEL_STYLE_DEFAULT = freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 600, italic: false, letterSpacing: 0.15, color: "#2c3339", opacity: 0.96, strokeColor: "#f5f3eb", strokeWidth: 0.03, shadowColor: "#2c3339", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0});
 
 export const LABEL_STYLE_DEFAULTS = Object.freeze({
   [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 22, fontWeight: 500, italic: false, letterSpacing: 2.4, color: "#293038", opacity: 0.9, strokeColor: "#f5f2e8", strokeWidth: 0.03, shadowColor: "#293038", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
   [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 12, fontWeight: 500, italic: false, letterSpacing: 0.7, color: "#734750", opacity: 0.82, strokeColor: "#f5f2e8", strokeWidth: 0, shadowColor: "#734750", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 650, italic: false, letterSpacing: 0.1, color: "#20262c", opacity: 0.96, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#20262c", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 11, fontWeight: 600, italic: false, letterSpacing: 0.05, color: "#343a40", opacity: 0.9, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#343a40", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: DEFAULT_CITY_FONT_SIZE + CAPITAL_FONT_SIZE_OFFSET, fontWeight: 650, italic: false, letterSpacing: 0.1, color: "#20262c", opacity: 0.96, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#20262c", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: DEFAULT_CITY_FONT_SIZE, fontWeight: 600, italic: false, letterSpacing: 0.05, color: "#343a40", opacity: 0.9, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#343a40", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
   [LABEL_STYLE_TYPE.CUSTOM]: CUSTOM_LABEL_STYLE_DEFAULT,
   [LABEL_STYLE_TYPE.ZONE]: freezeStyle({...CUSTOM_LABEL_STYLE_DEFAULT})
 });
@@ -93,12 +96,15 @@ export function ensureLabelStyleStore(map) {
 export function resolveLabelStyle(mapOrStore, styleType, visualTheme = null) {
   assertLabelStyleType(styleType);
   const store = mapOrStore?.labels?.styles || mapOrStore?.styles || mapOrStore;
-  const override = normalizeLabelStyleStore(store).overrides[styleType] || {};
+  const {overrides} = normalizeLabelStyleStore(store);
   const resolved = {
     ...LABEL_STYLE_DEFAULTS[styleType],
     ...themeStyleForType(visualTheme, styleType),
-    ...override
+    ...overrides[styleType]
   };
+  if (styleType === LABEL_STYLE_TYPE.CAPITAL) {
+    resolved.fontSize = (overrides.city?.fontSize ?? DEFAULT_CITY_FONT_SIZE) + CAPITAL_FONT_SIZE_OFFSET;
+  }
   const display = isAncientTheme(visualTheme)
     ? {...resolved, color: ancientDisplayHex(resolved.color), strokeColor: ancientDisplayHex(resolved.strokeColor), shadowColor: ancientDisplayHex(resolved.shadowColor)}
     : resolved;
@@ -108,11 +114,17 @@ export function resolveLabelStyle(mapOrStore, styleType, visualTheme = null) {
 export function readLabelStyleOverride(mapOrStore, styleType) {
   assertLabelStyleType(styleType);
   const store = mapOrStore?.labels?.styles || mapOrStore?.styles || mapOrStore;
-  return {...(normalizeLabelStyleStore(store).overrides[styleType] || {})};
+  const override = {...normalizeLabelStyleStore(store).overrides[styleType]};
+  // Older maps retain their original capital size in storage only.
+  if (styleType === LABEL_STYLE_TYPE.CAPITAL) delete override.fontSize;
+  return override;
 }
 
 export function patchLabelStyle(map, styleType, patch) {
   assertLabelStyleType(styleType);
+  if (styleType === LABEL_STYLE_TYPE.CAPITAL && Object.hasOwn(patch || {}, "fontSize")) {
+    throw new Error("请在城市名称中设置字号，首都名称会自动大 2px。");
+  }
   const store = ensureLabelStyleStore(map);
   const nextSource = {...(store.overrides[styleType] || {}), ...(patch || {})};
   if (Object.hasOwn(patch || {}, "fontFamilyName") && patch.fontFamilyName === null) delete nextSource.fontFamilyName;

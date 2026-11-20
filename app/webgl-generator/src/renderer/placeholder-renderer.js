@@ -5173,8 +5173,6 @@ export class PlaceholderMapRenderer {
     const padding = labelPaddingForScale(scale);
     const labelPrewarm = overlayLabelPrewarmCssPx(rect);
     const stateLabelScale = stateLabelScaleBehavior(scale);
-    const capitalFontScale = this.map.labels?.styles?.overrides?.capital?.fontSize != null
-      ? 1 : (9 + 4 * smoothStep(0.5, 1.5, scale)) / 13;
     const priorityLayout = hasManualLabelPriorities(this.map);
     const labelItems = priorityLayout ? this.labelItems : automaticPoliticalLabelOrder(this.labelItems);
 
@@ -5222,15 +5220,7 @@ export class PlaceholderMapRenderer {
       }) : null);
       const screen = politicalPlacement?.anchor || baseScreen;
       const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
-      const textScale = item.styleType === "capital" ? capitalFontScale : 1;
-      if (item.styleType === "capital" && (item.capitalTextScale !== textScale || item.capitalTextStyle !== item.resolvedStyle)) {
-        setStylePropertyIfChanged(item.node, "--label-font-size", `${item.resolvedStyle.fontSize * textScale}px`);
-        setStylePropertyIfChanged(item.node, "--label-letter-spacing", `${item.resolvedStyle.letterSpacing * textScale}px`);
-        applyLabelEffectDimensions(item.node, item.resolvedStyle, textScale);
-        item.capitalTextScale = textScale;
-        item.capitalTextStyle = item.resolvedStyle;
-      }
-      const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor, textScale);
+      const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
       if (stateLabel && politicalPlacement) box.parts = politicalPlacement.glyphs.map(glyph => glyph.box);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const prewarm = politicalLabel ? politicalPrewarm : labelPrewarm;
@@ -8657,7 +8647,7 @@ function stateLabelScaleBehavior(scale) {
   };
 }
 
-function labelBoxForItem(item, screen, anchor = null, textScale = 1) {
+function labelBoxForItem(item, screen, anchor = null) {
   const metrics = item.metrics || estimateLabelTextBox(item.text, item.resolvedStyle);
   if (item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE) {
     const estimatedWidth = metrics.width;
@@ -8672,8 +8662,8 @@ function labelBoxForItem(item, screen, anchor = null, textScale = 1) {
       bottom: screen.y + boxHeight / 2
     };
   }
-  const estimatedWidth = metrics.width * textScale;
-  const estimatedHeight = metrics.height * textScale;
+  const estimatedWidth = metrics.width;
+  const estimatedHeight = metrics.height;
   if (item.targetKind === LABEL_TARGET_KIND.CITY) {
     const anchorY = anchor?.y ?? screen.y - 6;
     return {
