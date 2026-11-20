@@ -12,6 +12,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -34,9 +35,9 @@
 
   <UiPanelIoActions
     class-name="province-panel-list-actions"
-    label="省份列表高亮"
-    :actions="provinceHighlightActions"
-    @action="handleHighlightAction"
+    label="省份列表操作"
+    :actions="provinceListActions"
+    @action="handleListAction"
   />
 
   <UiDetailGrid class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
@@ -204,8 +205,6 @@ const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "province-panel", kind: "province", rows: visibleRows});
 const {selectedRowIds: selectedProvinceIds} = useVisibleRowSelection(visibleRows);
-const selectedProvinceRows = regenerationLocks.selectedRows;
-const highlightableProvinceRows = computed(() => selectedProvinceRows.value.filter(row => !row.neutral && Number(row.id) > 0));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -222,10 +221,8 @@ const provinceActions = computed(() => [
   {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "capital", resultClass: "open-secondary", label: "重评省会", icon: "省", disabled: modalActionActive.value || !canDeleteSelected.value}
 ]);
-const provinceHighlightActions = computed(() => [
+const provinceListActions = computed(() => [
   {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.filter(row => !row.neutral).length)}`, icon: "名", disabled: !visibleRows.value.some(row => !row.neutral)},
-  {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableProvinceRows.value.length)}`, icon: "◉", disabled: !highlightableProvinceRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -236,7 +233,6 @@ const summaryMetrics = computed(() => [
   {label: "实力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "目标省份", value: formatProvinceName(props.state.map, props.state.selectedProvinceId)},
   {label: "影响", value: formatNumber(props.state.lastAffected)}
 ]);
@@ -371,10 +367,8 @@ function handleEmptyAction(key) {
   if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
-function handleHighlightAction(key) {
+function handleListAction(key) {
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.filter(row => !row.neutral).map(row => row.id));
-  if (key === "highlight-selected") props.callbacks.onHighlight?.(highlightableProvinceRows.value);
-  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function provinceRows(map) {

@@ -32,6 +32,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -228,8 +229,6 @@ const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根�
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "religion-panel", kind: "religion", rows: visibleRows});
 const {selectedRowIds: selectedReligionIds} = useVisibleRowSelection(visibleRows);
-const selectedReligionRows = regenerationLocks.selectedRows;
-const highlightableReligionRows = computed(() => selectedReligionRows.value.filter(row => Number(row.id) > 0));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedReligionId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根宗教"));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
@@ -239,8 +238,6 @@ const defaultReligionEmptyAction = Object.freeze({key: "add", label: "新增空�
 const religionEmptyAction = computed(() => filterEmptyAction.value || defaultReligionEmptyAction);
 const religionListActions = computed(() => [
   {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.length)}`, icon: "名", disabled: !visibleRows.value.length},
-  {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableReligionRows.value.length)}`, icon: "◉", disabled: !highlightableReligionRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   defaultReligionEmptyAction,
   {
     key: "delete",
@@ -282,7 +279,6 @@ const summaryMetrics = computed(() => [
   {label: "城市", value: formatNumber(metrics.value.cities)},
   {label: "归属笔刷", value: props.state.assignmentActive ? "启用" : "关闭"},
   {label: "本次影响", value: formatNumber(props.state.lastAffected || 0)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -370,14 +366,6 @@ function handleActionSelect(actionKey) {
 function handleListAction(actionKey) {
   if (actionKey === "rename-visible") {
     props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
-    return;
-  }
-  if (actionKey === "highlight-selected") {
-    props.callbacks.onHighlight?.(highlightableReligionRows.value);
-    return;
-  }
-  if (actionKey === "clear-highlights") {
-    props.callbacks.onClearHighlights?.();
     return;
   }
   if (actionKey === "clear-filter") {

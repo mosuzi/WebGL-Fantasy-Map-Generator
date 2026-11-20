@@ -50,6 +50,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -72,9 +73,7 @@
     class-name="diplomacy-panel-export-actions"
     label="外交列表操作"
     :export-actions="diplomacyExportActions"
-    :actions="diplomacyHighlightActions"
     @export="handleDiplomacyExport"
-    @action="handleDiplomacyHighlightAction"
   />
   <p class="visual-theme-editor-note diplomacy-export-note">此处 CSV / JSON 是外交摘要；要完整保存并恢复双方关系、战争和历史，请使用控制面板“导出 → 完整地图数据”。</p>
 
@@ -246,10 +245,6 @@ const diplomacyExportActions = computed(() => [
   {key: "selected-csv", label: `导出选中 CSV ${formatNumber(selectedRelationRows.value.length)}`, disabled: !selectedRelationRows.value.length},
   {key: "selected-json", label: `导出选中 JSON ${formatNumber(selectedRelationRows.value.length)}`, disabled: !selectedRelationRows.value.length}
 ]);
-const diplomacyHighlightActions = computed(() => [
-  {key: "highlight-selected", label: `高亮关系 ${formatNumber(selectedRelationRows.value.length)}`, icon: "⇄", disabled: !selectedRelationRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
-]);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedObjectId) || visibleRows.value[0] || null);
 const matrix = computed(() => {
   props.state.version;
@@ -291,7 +286,6 @@ const summaryMetrics = computed(() => [
   {label: "战争", value: formatNumber(metrics.value.counts.Enemy || 0)},
   {label: "附庸", value: formatNumber(metrics.value.counts.Vassal || 0)},
   {label: "已选", value: formatNumber(selectedRelationRows.value.length)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "历史", value: formatNumber(metrics.value.history)}
 ]);
 
@@ -589,11 +583,6 @@ function handleDiplomacyExport(key) {
   if (key === "json") exportJson(visibleRows.value);
   if (key === "selected-csv") exportCsv(selectedRelationRows.value, {selectedOnly: true});
   if (key === "selected-json") exportJson(selectedRelationRows.value, {selectedOnly: true});
-}
-
-function handleDiplomacyHighlightAction(key) {
-  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRelationRows.value);
-  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function diplomacyToCsv({seed, map, metrics, matrix, relationRows = metrics.rows, selectedOnly = false}) {

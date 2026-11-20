@@ -80,6 +80,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -104,9 +105,7 @@
     class-name="military-panel-export-actions"
     label="军事导出"
     :export-actions="militaryExportActions"
-    :actions="militaryHighlightActions"
     @export="handleMilitaryExport"
-    @action="handleMilitaryHighlightAction"
   />
 
   <details class="panel-advanced-section military-advanced-section">
@@ -628,10 +627,6 @@ const militaryExportActions = computed(() => [
   {key: "selected-csv", label: `导出选中 CSV ${formatNumber(selectedRegimentRows.value.length)}`, disabled: !selectedRegimentRows.value.length},
   {key: "selected-json", label: `导出选中 JSON ${formatNumber(selectedRegimentRows.value.length)}`, disabled: !selectedRegimentRows.value.length}
 ]);
-const militaryHighlightActions = computed(() => [
-  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedRegimentRows.value.length)}`, icon: "◉", disabled: !selectedRegimentRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
-]);
 const battleEventExportActions = computed(() => [
   {key: "json", label: "档案 JSON", disabled: !exportBattleEventRows.value.length},
   {key: "csv", label: "档案 CSV", disabled: !exportBattleEventRows.value.length}
@@ -697,7 +692,6 @@ const summaryMetrics = computed(() => [
   {label: "记录", value: formatNumber(allBattleEvents.value.length)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)},
   {label: "已选", value: formatNumber(selectedRegimentRows.value.length)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const militaryDossierGroups = computed(() => selected.value ? [
@@ -1966,11 +1960,6 @@ function handleMilitaryExport(key) {
   if (key === "json") exportJson();
   if (key === "selected-csv") exportCsv(selectedRegimentRows.value, {selectedOnly: true});
   if (key === "selected-json") exportJson(selectedRegimentRows.value, {selectedOnly: true});
-}
-
-function handleMilitaryHighlightAction(key) {
-  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRegimentRows.value);
-  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function handleBattleEventExport(key) {

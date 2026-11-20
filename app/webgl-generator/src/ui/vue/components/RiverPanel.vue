@@ -39,6 +39,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -206,8 +207,6 @@ const riverActions = computed(() => [
 ]);
 const riverListActions = computed(() => [
   {key: "create", label: props.state.createMode ? "取消新增河流" : "新增河流", icon: "+", active: props.state.createMode},
-  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "◉", disabled: !selectedRiverRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选河流", icon: "名", disabled: !visibleRows.value.length},
   {key: "delete-selected", label: `批量删除选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "删", disabled: !selectedRiverRows.value.length},
   {key: "delete", label: "删除选中河流及支流", icon: "删", disabled: !selected.value}
@@ -217,7 +216,6 @@ const summaryMetrics = computed(() => [
   {label: "河流", value: formatNumber(rows.value.length)},
   {label: "总长度", value: formatLength(totalLength.value)},
   {label: "最大流量", value: formatRiverFlow(maxFlux.value)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
@@ -336,8 +334,6 @@ function openRenameEditor(row) {
 
 function handleRiverListAction(key) {
   if (key === "create") props.callbacks.onCreateMode?.(!props.state.createMode);
-  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRiverRows.value);
-  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
   if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
   if (key === "delete-selected") props.callbacks.onDeleteMany?.(selectedRiverRows.value.map(row => row.id));

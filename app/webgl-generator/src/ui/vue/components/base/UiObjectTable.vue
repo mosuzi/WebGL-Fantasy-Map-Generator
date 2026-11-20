@@ -1,5 +1,6 @@
 <template>
-  <div ref="tableWrap" class="object-table-wrap" :style="objectTableGeometryStyle" @scroll.passive="handleScroll">
+  <div ref="tableWrap" class="object-table-wrap" :style="objectTableGeometryStyle" @scroll.passive="handleScroll"
+    @pointermove="trackHover" @pointerover="trackHover" @pointerleave="endHover" @pointercancel="endHover">
     <table v-if="rows.length" class="object-table object-table-native" :class="{'has-locate-action': showLocateAction}" :aria-label="multiSelectionEnabled ? '对象列表，Ctrl+点击多选，Shift+点击连续选择' : '对象列表'">
       <thead>
         <tr>
@@ -136,6 +137,7 @@ defineOptions({
 });
 
 const props = defineProps({
+  hoverRow: Function,
   columns: {
     type: Array,
     required: true
@@ -228,6 +230,42 @@ const MAX_RESIZE_COLUMN_WIDTH = 640;
 const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "column-resize", "selection-change", "lock-toggle", "lock-selection-change"]);
 
 const tableWrap = ref(null);
+let pointer = null;
+let hoverTarget = null;
+let hoverTimer = 0;
+let hoverOutline;
+
+function setHover(target) {
+  if (target === hoverTarget) return;
+  clearTimeout(hoverTimer);
+  hoverOutline?.remove();
+  hoverOutline = null;
+  hoverTarget = target;
+  if (!target) return;
+  hoverTimer = setTimeout(() => {
+    if (!target.isConnected || !target.matches(":hover")) return endHover();
+    const row = visibleRows.value.find(item => rowKey(item) === target.dataset.rowKey);
+    if (row) hoverOutline = props.hoverRow?.(row);
+  }, 300);
+}
+
+function trackHover(event) {
+  if (!props.hoverRow || event.pointerType === "touch") return;
+  pointer = {x: event.clientX, y: event.clientY};
+  setHover(event.target.closest("tr[data-row-key]"));
+}
+
+function endHover() {
+  pointer = null;
+  setHover(null);
+}
+
+function refreshHover() {
+  if (!pointer) return;
+  const wrap = tableWrap.value;
+  const hit = wrap?.ownerDocument.elementFromPoint(pointer.x, pointer.y);
+  setHover(wrap?.contains(hit) ? hit.closest("tr[data-row-key]") : null);
+}
 const objectTableGeometryStyle = Object.freeze({"--object-table-row-height": `${OBJECT_TABLE_ROW_HEIGHT}px`});
 const scrollTop = ref(0);
 const viewportHeight = ref(300);
@@ -249,6 +287,12 @@ const virtualWindow = computed(() => {
   return {start, end};
 });
 const visibleRows = computed(() => props.rows.slice(virtualWindow.value.start, virtualWindow.value.end));
+watch(() => props.hoverRow, endHover);
+watch(visibleRows, () => {
+  if (!pointer) return;
+  if (hoverOutline && !hoverOutline.isCurrent()) setHover(null);
+  refreshHover();
+}, {flush: "post"});
 const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.value.start * OBJECT_TABLE_ROW_HEIGHT : 0);
 const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * OBJECT_TABLE_ROW_HEIGHT : 0);
 const sortableKeys = computed(() => new Set((props.sortOptions || []).map(option => option?.key).filter(Boolean)));
@@ -296,6 +340,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  endHover();
   selectedCenterController.cancel();
   cancelScrollMetricsFrame();
   stopColumnResize();
@@ -447,6 +492,7 @@ function handleEmptyAction() {
 }
 
 function handleScroll() {
+  refreshHover();
   if (!virtualEnabled.value) return;
   const view = tableWrap.value?.ownerDocument?.defaultView;
   if (!view?.requestAnimationFrame) {

@@ -2,7 +2,6 @@ import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const GOVERNMENT_PANEL_ID = "government-panel";
 const GOVERNMENT_COLUMN_WIDTHS = Object.freeze({
@@ -43,7 +42,6 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     selectedGovernmentKey: null,
     selectedStateId: null,
     version: 0
@@ -89,8 +87,7 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelectState?.(stateObject(row));
     },
     onLocateState: row => callbacks.onLocateState?.(stateObject(row)),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, stateObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(stateObject(row)),
     onOpenState: row => callbacks.onOpenState?.(stateObject(row)),
     onOpenDiplomacy: row => callbacks.onOpenDiplomacy?.(stateObject(row)),
     onBatchGovernmentChange: (stateIds, governmentKey) => callbacks.onBatchGovernmentChange?.(stateIds, governmentKey),
@@ -133,7 +130,6 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "state") {
         panelState.selectedStateId = normalizeStateId(selection.object.id);
         panelState.selectedGovernmentKey = map?.politics?.states?.[panelState.selectedStateId]?.governmentKey || panelState.selectedGovernmentKey;
@@ -149,7 +145,6 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (!governmentExists(map, panelState.selectedGovernmentKey)) panelState.selectedGovernmentKey = firstGovernmentKey(map);
       if (!stateExists(map, panelState.selectedStateId, panelState.selectedGovernmentKey)) panelState.selectedStateId = firstStateId(map, panelState.selectedGovernmentKey);
       panelState.version++;

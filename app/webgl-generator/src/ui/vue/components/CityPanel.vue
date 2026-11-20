@@ -8,12 +8,13 @@
   </div>
   <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
-    v-memo="[state.version, state.filter, state.sortKey, state.sortDir, state.columnWidths, state.selectedCityId, state.highlightCount, selectedCityIds, regenerationLocks.tableProps.lockedRowIds, regenerationLocks.tableProps.lockSelectionIds, regenerationLocks.tableProps.lockableRowIds]"
+    v-memo="[state.open, state.version, state.filter, state.sortKey, state.sortDir, state.columnWidths, state.selectedCityId, selectedCityIds, regenerationLocks.tableProps.lockedRowIds, regenerationLocks.tableProps.lockSelectionIds, regenerationLocks.tableProps.lockableRowIds]"
     v-bind="regenerationLocks.tableProps"
     v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -34,12 +35,6 @@
     @selection-change="selectedCityIds = $event"
   />
 
-  <UiPanelIoActions
-    class-name="city-panel-list-actions"
-    label="城市列表高亮"
-    :actions="cityHighlightActions"
-    @action="handleHighlightAction"
-  />
 
   <section v-if="selected" class="city-attribute-shortcuts">
     <strong class="city-attribute-name">{{ selected.rawName }}</strong>
@@ -129,7 +124,6 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
-import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -204,7 +198,6 @@ const metrics = computed(() => {
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "city-panel", kind: "city", rows: visibleRows});
 const {selectedRowIds: selectedCityIds} = useVisibleRowSelection(visibleRows);
-const selectedCityRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -284,10 +277,6 @@ const cityActions = computed(() => [
   {key: "visual", resultClass: "open-secondary", label: "调整剪影", icon: "▣", disabled: modalActionActive.value || !selected.value},
   {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !selected.value}
 ]);
-const cityHighlightActions = computed(() => [
-  {key: "highlight-selected", label: `高亮选中 ${formatNumberValue(selectedCityRows.value.length)}`, icon: "◉", disabled: !selectedCityRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumberValue(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
-]);
 
 const summaryMetrics = computed(() => [
   {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
@@ -298,7 +287,6 @@ const summaryMetrics = computed(() => [
   {label: "港口", value: formatNumberValue(metrics.value.ports)},
   {label: "资源城镇", value: formatNumberValue(metrics.value.resourceCities)},
   {label: "人口", value: formatPopulationValue(metrics.value.totalPopulation)},
-  {label: "高亮", value: formatNumberValue(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumberValue(visibleRows.value.length)}
 ]);
 
@@ -469,11 +457,6 @@ async function handleAttributeChange(action) {
   } finally {
     attributeBusy.value = false;
   }
-}
-
-function handleHighlightAction(key) {
-  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedCityRows.value);
-  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function cityRows(map) {

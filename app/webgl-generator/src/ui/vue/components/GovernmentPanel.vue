@@ -36,9 +36,7 @@
     class-name="government-panel-export-actions"
     label="政体导出"
     :export-actions="governmentExportActions"
-    :actions="governmentHighlightActions"
     @export="handleGovernmentExport"
-    @action="handleGovernmentHighlightAction"
   />
 
   <UiDetailGrid class-name="government-panel-details" empty-text="未选中政体" :rows="detailRows" />
@@ -63,6 +61,7 @@
     :columns="stateColumns"
     :column-widths="stateColumnWidths"
     :rows="selectedStateRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :selected-id="state.selectedStateId"
     empty-text="该政体下没有国家"
     resizable-columns
@@ -186,10 +185,6 @@ const selectedStateRows = computed(() => metrics.value.states
   .filter(row => row.governmentKey === selectedGovernmentKey.value)
   .sort((a, b) => b.population - a.population || b.economicPower - a.economicPower || a.id - b.id));
 const {selectedRowIds: selectedGovernmentStateIds, selectedRows: selectedGovernmentStateRows} = useVisibleRowSelection(selectedStateRows);
-const governmentHighlightActions = computed(() => [
-  {key: "highlight-selected", label: `高亮选中国家 ${formatNumber(selectedGovernmentStateRows.value.length)}`, icon: "◉", disabled: !selectedGovernmentStateRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
-]);
 const selectedState = computed(() => props.state.selectedStateId === null || props.state.selectedStateId === undefined
   ? selectedStateRows.value[0] || null
   : findByObjectId(selectedStateRows.value, props.state.selectedStateId) || null);
@@ -214,7 +209,6 @@ const summaryMetrics = computed(() => [
   {label: "君主系", value: formatNumber((metrics.value.familyCounts.monarchy || 0) + (metrics.value.familyCounts.autocracy || 0))},
   {label: "筛选", value: formatNumber(visibleGovernmentRows.value.length)},
   {label: "已选国家", value: formatNumber(selectedGovernmentStateRows.value.length)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const detailRows = computed(() => selectedGovernment.value ? [
@@ -289,11 +283,6 @@ function tableColumnWidths(table) {
 
 function handleEmptyAction(key) {
   if (key === "clear-filter") callbacks.onFilter?.("");
-}
-
-function handleGovernmentHighlightAction(key) {
-  if (key === "highlight-selected") callbacks.onHighlight?.(selectedGovernmentStateRows.value);
-  if (key === "clear-highlights") callbacks.onClearHighlights?.();
 }
 
 function syncBatchGovernmentKey() {

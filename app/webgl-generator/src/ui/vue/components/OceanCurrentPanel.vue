@@ -16,6 +16,7 @@
     v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :selected-id="state.selectedId"
     empty-text="当前地图没有洋流"
     :empty-action="filterEmptyAction"
@@ -27,10 +28,6 @@
     @selection-change="selectedRowIds = $event"
   />
 
-  <div class="ocean-current-panel-actions">
-    <UiButton variant="secondary" :disabled="!selectedRows.length" @click="callbacks.onHighlight?.(selectedRows.map(row => row.id))">高亮选中</UiButton>
-    <UiButton variant="secondary" :disabled="!state.highlightedIds.length" @click="callbacks.onClearHighlights?.()">清除高亮</UiButton>
-  </div>
 
   <UiDetailGrid class-name="ocean-current-panel-details" empty-text="未选中洋流" :rows="detailRows" />
 

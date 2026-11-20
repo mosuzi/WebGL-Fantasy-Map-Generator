@@ -34,6 +34,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -95,7 +96,6 @@ import {computed, ref, watch} from "vue";
 import OrphanNoteRescue from "./OrphanNoteRescue.vue";
 import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 import {noteRenameTargetKind} from "../../../runtime/notes-rename-target.js";
-import {isPersistentHighlightObjectKind} from "../../../runtime/persistent-highlights.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -161,7 +161,6 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const notesEmptyText = computed(() => filterEmptyAction.value ? "没有匹配的备注" : "暂无备注");
-const highlightableNoteRows = computed(() => selectedNoteRows.value.filter(row => row.object && !row.orphan && isPersistentHighlightObjectKind(row.object.kind)));
 const notesExportActions = computed(() => [
   {key: "notes", label: "导出备注摘要", disabled: !visibleRows.value.length},
   {key: "selected-notes", label: `导出选中 ${formatNumber(selectedNoteRows.value.length)}`, disabled: !selectedNoteRows.value.length}
@@ -176,8 +175,6 @@ const deleteTargetRows = computed(() => selectedNoteRows.value.length ? selected
 const notesListActions = computed(() => [
   {key: "create-standalone", label: props.state.createMode ? "取消放置独立备注" : "放置独立备注", icon: "+"},
   {key: "select-orphans", label: `只选孤儿备注 ${formatNumber(visibleOrphanRows.value.length)}`, icon: "◎", disabled: !visibleOrphanRows.value.length},
-  {key: "highlight-selected", label: `高亮备注对象 ${formatNumber(highlightableNoteRows.value.length)}`, icon: "◉", disabled: !highlightableNoteRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "delete-batch", label: deleteTargetRows.value.length > 1 ? `批量删除已选 ${formatNumber(deleteTargetRows.value.length)}` : "删除选中备注", icon: "×", disabled: !deleteTargetRows.value.length}
 ]);
 watch(() => selected.value?.id, () => { activeAction.value = null; });
@@ -186,7 +183,6 @@ const summaryMetrics = computed(() => [
   {label: "可定位", value: formatNumber(rows.value.filter(row => !row.orphan).length)},
   {label: "孤儿备注", value: formatNumber(rows.value.filter(row => row.orphan).length)},
   {label: "已选", value: formatNumber(selectedNoteRows.value.length)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 const detailRows = computed(() => selected.value ? [
@@ -339,14 +335,6 @@ function handleNotesAction(key) {
   }
   if (key === "select-orphans") {
     selectedNoteIds.value = visibleOrphanRows.value.map(row => row.id);
-    return;
-  }
-  if (key === "highlight-selected") {
-    props.callbacks.onHighlight?.(highlightableNoteRows.value);
-    return;
-  }
-  if (key === "clear-highlights") {
-    props.callbacks.onClearHighlights?.();
     return;
   }
   if (key === "delete-batch") {

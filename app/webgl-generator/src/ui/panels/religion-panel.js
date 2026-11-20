@@ -3,7 +3,6 @@ import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "..
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const RELIGION_PANEL_ID = "religion-panel";
 const RELIGION_COLUMN_WIDTHS = Object.freeze({
@@ -36,7 +35,6 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     treeOpen: listPreferences.treeOpen,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     selectedReligionId: null,
     targetReligionId: null,
     assignmentActive: false,
@@ -84,8 +82,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(religionObject(row));
     },
     onLocate: row => callbacks.onLocate?.(religionObject(row)),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, religionObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(religionObject(row)),
     onAdd: () => callbacks.onAdd?.(),
     onDelete: row => callbacks.onDelete?.(religionObject(row)),
     onRename: (religionId, name) => callbacks.onRename?.(religionId, name),
@@ -166,7 +163,6 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "religion") panelState.selectedReligionId = normalizeReligionId(selection.object.id);
       if (!religionExists(map, panelState.selectedReligionId)) panelState.selectedReligionId = firstReligionId(map);
       if (!religionExists(map, panelState.targetReligionId)) panelState.targetReligionId = panelState.selectedReligionId;
@@ -179,7 +175,6 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "religion") panelState.selectedReligionId = normalizeReligionId(selection.object.id);
       if (!religionExists(map, panelState.selectedReligionId)) panelState.selectedReligionId = firstReligionId(map);
       if (assignment.active !== undefined) panelState.assignmentActive = Boolean(assignment.active);

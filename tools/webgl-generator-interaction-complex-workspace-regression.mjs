@@ -27,8 +27,8 @@ assert.ok(report.fieldInstances.filter(item => item.effectClass === "map-command
 assert.ok(report.fieldInstances.filter(item => item.effectClass === "ui-local").every(item => /0 条 EditHistory/.test(item.historyEffect)), "局部字段必须明确零地图历史");
 
 assert.deepEqual(
-  pick(report.totals, ["tableHosts", "tableInstances", "independentlyFilterable", "sortable", "primarySelection", "globalSelection", "localSelection", "locate", "doubleClickEdit", "resizable", "virtualCapable", "emptyState", "actionableEmptyState", "batchSelection", "persistentHighlight", "selectedExport"]),
-  {tableHosts: 24, tableInstances: 27, independentlyFilterable: 26, sortable: 25, primarySelection: 27, globalSelection: 19, localSelection: 8, locate: 20, doubleClickEdit: 11, resizable: 26, virtualCapable: 27, emptyState: 27, actionableEmptyState: 25, batchSelection: 21, persistentHighlight: 17, selectedExport: 9},
+  pick(report.totals, ["tableHosts", "tableInstances", "independentlyFilterable", "sortable", "primarySelection", "globalSelection", "localSelection", "locate", "doubleClickEdit", "resizable", "virtualCapable", "emptyState", "actionableEmptyState", "batchSelection", "hoverHighlight", "selectedExport"]),
+  {tableHosts: 24, tableInstances: 27, independentlyFilterable: 26, sortable: 25, primarySelection: 27, globalSelection: 19, localSelection: 8, locate: 20, doubleClickEdit: 11, resizable: 26, virtualCapable: 27, emptyState: 27, actionableEmptyState: 25, batchSelection: 21, hoverHighlight: 18, selectedExport: 9},
   "对象表格实例能力分母漂移时必须重新审计"
 );
 assert.equal(new Set(report.tableInstances.map(item => item.tableId)).size, 27);
@@ -36,7 +36,7 @@ assert.deepEqual(report.tableInstances.filter(item => !item.independentlyFiltera
 assert.deepEqual(report.tableInstances.filter(item => !item.sortable).map(item => item.tableId), ["GovernmentPanel.vue#2", "OceanCurrentPanel.vue#1"]);
 assert.ok(report.tableInstances.every(item => item.rows && item.selectedId && item.emptyState && item.virtualCapable && (!item.resizable || item.columnWidths)), "每张表必须追到 rows、主选中、空态和虚拟能力；可调列宽表必须具有列宽来源");
 assert.ok(report.tableInstances.filter(item => item.batchSelection).every(item => /不触发主选中/.test(item.batchContract) && item.sourceRefs.some(ref => ref.file.includes("use-visible-row-selection") || ["NamebasePanel.vue#1", "OceanCurrentPanel.vue#1"].includes(item.tableId))), "21 张批量表必须记录真实批量集合与主选中隔离");
-assert.ok(report.tableInstances.filter(item => item.persistentHighlight).every(item => /100/.test(item.highlightContract) && /不写 EditHistory/.test(item.highlightContract)), "17 张高亮表必须记录上限和零历史边界");
+assert.ok(report.tableInstances.filter(item => item.hoverHighlight).every(item => /300ms/.test(item.highlightContract) && /不写 EditHistory/.test(item.highlightContract)), "18 张悬停描边表必须记录延迟和零历史边界");
 assert.ok(report.tableInstances.every(item => item.locateHistory.includes("不写 EditHistory")), "定位不得冒充地图编辑历史");
 
 assert.deepEqual(

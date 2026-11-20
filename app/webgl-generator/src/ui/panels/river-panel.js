@@ -1,7 +1,6 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const RIVER_PANEL_ID = "river-panel";
 const RIVER_COLUMN_WIDTHS = Object.freeze({
@@ -30,7 +29,6 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     createMode: false,
     waypointMode: false,
     waypointDraft: null,
@@ -68,8 +66,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     onSelect: row => callbacks.onSelect?.(riverObject(row)),
     onLocate: row => callbacks.onLocate?.(riverObject(row)),
     onRegenerate: () => callbacks.onRegenerate?.(),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, riverObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(riverObject(row)),
     onWaypointMode: (active, row) => callbacks.onWaypointMode?.(Boolean(active), riverObject(row)),
     onApplyWaypoint: () => callbacks.onApplyWaypoint?.(),
     onReselectWaypoint: () => callbacks.onReselectWaypoint?.(),
@@ -122,7 +119,6 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.selection = selection;
       panelState.editingObject = editingObject;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       panelState.open = true;
       panelState.version++;
       manager.open("river-panel");
@@ -133,7 +129,6 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.selection = selection;
       panelState.editingObject = editingObject;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       panelState.version++;
     },
     setSelection(selection, editingObject = panelState.editingObject) {

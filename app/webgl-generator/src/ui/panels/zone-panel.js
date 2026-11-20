@@ -2,7 +2,6 @@ import {markRaw, shallowReactive} from "vue";
 import {OBJECT_KIND} from "../../runtime/object-kinds.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const ZONE_PANEL_ID = "zone-panel";
 const ZONE_COLUMN_WIDTHS = Object.freeze({
@@ -31,7 +30,6 @@ export function createZonePanel(documentRef, manager, component, callbacks = {})
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     createMode: false,
     createType: "Disaster",
     regenerating: false,
@@ -67,8 +65,7 @@ export function createZonePanel(documentRef, manager, component, callbacks = {})
     },
     onSelect: row => callbacks.onSelect?.(zoneObject(row)),
     onLocate: row => callbacks.onLocate?.(zoneObject(row)),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, zoneObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(zoneObject(row)),
     onStyleChange: (zoneId, patch) => callbacks.onStyleChange?.(zoneId, patch),
     onPropertiesChange: (zoneId, patch) => callbacks.onPropertiesChange?.(zoneId, patch),
     onCreateMode: type => callbacks.onCreateMode?.(type),
@@ -128,7 +125,6 @@ export function createZonePanel(documentRef, manager, component, callbacks = {})
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       panelState.open = true;
       panelState.version++;
       manager.open("zone-panel");
@@ -138,7 +134,6 @@ export function createZonePanel(documentRef, manager, component, callbacks = {})
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       panelState.version++;
     },
     setSelection(selection) {

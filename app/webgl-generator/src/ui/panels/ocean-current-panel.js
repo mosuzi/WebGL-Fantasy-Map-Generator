@@ -34,14 +34,7 @@ export function createOceanCurrentPanel(documentRef, manager, callbacks = {}) {
     onRegenerate: () => callbacks.onRegenerate?.(),
     onWorldRebuild: () => callbacks.onWorldRebuild?.(),
     onCancelWorldRebuild: () => callbacks.onCancelWorldRebuild?.(),
-    onHighlight: ids => {
-      panelState.highlightedIds = [...new Set((ids || []).map(String))];
-      callbacks.onHighlight?.(panelState.highlightedIds);
-    },
-    onClearHighlights: () => {
-      panelState.highlightedIds = [];
-      callbacks.onHighlight?.([]);
-    },
+    onHover: row => callbacks.onHover?.({kind: "ocean-current", id: row.id}),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };

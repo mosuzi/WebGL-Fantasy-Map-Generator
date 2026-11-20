@@ -165,7 +165,7 @@ function pointInPackCell(vertexIds, vertices, x, y) {
   return inside;
 }
 
-function resolveStateCapitalPackCell(map, state) {
+export function resolveStateCapitalPackCell(map, state) {
   const capitalId = integerOrNull(state?.capital);
   if (capitalId === null || capitalId <= 0) return null;
   const direct = map?.pack?.burgs?.[capitalId];

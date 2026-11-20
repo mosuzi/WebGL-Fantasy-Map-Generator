@@ -8,6 +8,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -141,8 +142,7 @@ const labelActions = Object.freeze([
   {key: "display", resultClass: "open-secondary", label: "显示布局", icon: "⌖"}
 ]);
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedLabelKeys, selectedRows: selectedLabelRows} = useVisibleRowSelection(visibleRows, {idKey: "key"});
-const highlightableLabelRows = computed(() => selectedLabelRows.value.filter(row => !row.hidden));
+const {selectedRowIds: selectedLabelKeys} = useVisibleRowSelection(visibleRows, {idKey: "key"});
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -150,8 +150,6 @@ const defaultLabelEmptyAction = Object.freeze({key: "add", label: "新增标签"
 const labelEmptyAction = computed(() => filterEmptyAction.value || defaultLabelEmptyAction);
 const selected = computed(() => rows.value.find(row => row.key === props.state.selectedLabelKey) || null);
 const labelManagementActions = computed(() => [
-  {key: "highlight-selected", label: `高亮可见标签 ${formatNumber(highlightableLabelRows.value.length)}`, icon: "◉", disabled: !highlightableLabelRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   defaultLabelEmptyAction,
   {key: selected.value?.hidden ? "restore" : "delete", label: selected.value?.hidden ? "恢复标签" : "删除标签", icon: selected.value?.hidden ? "↺" : "×", disabled: !selected.value}
 ]);
@@ -162,7 +160,6 @@ const summaryMetrics = computed(() => [
   {label: "国家", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.STATE).length)},
   {label: "省份", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.PROVINCE).length)},
   {label: "手工", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CUSTOM).length)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
@@ -189,14 +186,6 @@ watch(() => selected.value?.key, key => {
 });
 
 function handleLabelManagementAction(key) {
-  if (key === "highlight-selected") {
-    props.callbacks.onHighlight?.(highlightableLabelRows.value);
-    return;
-  }
-  if (key === "clear-highlights") {
-    props.callbacks.onClearHighlights?.();
-    return;
-  }
   if (key === "clear-filter") {
     props.callbacks.onFilter?.("");
     return;

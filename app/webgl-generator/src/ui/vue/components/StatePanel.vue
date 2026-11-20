@@ -13,6 +13,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -33,12 +34,6 @@
     @selection-change="selectedStateIds = $event"
   />
 
-  <UiPanelIoActions
-    class-name="state-panel-list-actions"
-    label="国家列表高亮"
-    :actions="stateHighlightActions"
-    @action="handleHighlightAction"
-  />
 
   <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
 
@@ -224,7 +219,6 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
-import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
@@ -317,8 +311,6 @@ const stateOptions = computed(() => {
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "state-panel", kind: "state", rows: visibleRows});
 const {selectedRowIds: selectedStateIds} = useVisibleRowSelection(visibleRows);
-const selectedStateRows = regenerationLocks.selectedRows;
-const highlightableStateRows = computed(() => selectedStateRows.value.filter(row => !row.neutral && Number(row.id) > 0));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -370,10 +362,6 @@ const stateActions = computed(() => [
   {key: "merge", resultClass: "open-secondary", label: "合并相邻国家", icon: "⇄", panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
   {key: "split", resultClass: "open-secondary", label: "按完整省份拆分国家", icon: "⑂", panelWidth: 420, panelHeight: 560, disabled: modalActionActive.value || !canDeleteSelected.value || stateProvinces(props.state.map, selected.value?.id).length < 2}
 ]);
-const stateHighlightActions = computed(() => [
-  {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableStateRows.value.length)}`, icon: "◉", disabled: !highlightableStateRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
-]);
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
@@ -383,7 +371,6 @@ const summaryMetrics = computed(() => [
   {label: "国力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "目标国家", value: formatStateName(props.state.map, props.state.targetStateId)},
   {label: "影响", value: formatNumber(props.state.lastAffected)}
 ]);
@@ -680,11 +667,6 @@ function openRenameEditor(row) {
 
 function handleEmptyAction(key) {
   if (key === "clear-filter") props.callbacks.onFilter?.("");
-}
-
-function handleHighlightAction(key) {
-  if (key === "highlight-selected") props.callbacks.onHighlight?.(highlightableStateRows.value);
-  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function stateRows(map) {

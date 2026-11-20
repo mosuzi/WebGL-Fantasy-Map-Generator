@@ -8,6 +8,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -138,8 +139,6 @@ const measurementExportActions = computed(() => [
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedMeasurementId) || null);
 const measurementListActions = computed(() => [
   startMeasurementAction,
-  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMeasurementRows.value.length)}`, icon: "◉", disabled: !selectedMeasurementRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "edit", label: "编辑测量形状", icon: "◎", disabled: !selected.value},
   {key: "delete", label: "删除测量", icon: "×", disabled: !selected.value}
 ]);
@@ -150,7 +149,6 @@ const summaryMetrics = computed(() => [
   {label: "总长度", value: formatDistanceValue(totalDistance.value)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},
   {label: "已选", value: formatNumber(selectedMeasurementRows.value.length)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 const detailRows = computed(() => selected.value ? [
@@ -288,14 +286,6 @@ function openRenameEditor(row) {
 function handleMeasurementAction(key) {
   if (key === "start") {
     props.callbacks.onStart?.();
-    return;
-  }
-  if (key === "highlight-selected") {
-    props.callbacks.onHighlight?.(selectedMeasurementRows.value);
-    return;
-  }
-  if (key === "clear-highlights") {
-    props.callbacks.onClearHighlights?.();
     return;
   }
   if (!selected.value) return;

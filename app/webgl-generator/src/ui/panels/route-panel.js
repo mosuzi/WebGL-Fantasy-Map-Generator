@@ -2,7 +2,6 @@ import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const ROUTE_PANEL_ID = "route-panel";
 const ROUTE_COLUMN_WIDTHS = Object.freeze({
@@ -31,7 +30,6 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     createMode: false,
     editMode: false,
     waypointMode: false,
@@ -73,8 +71,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(routeObject(row));
     },
     onLocate: row => callbacks.onLocate?.(routeObject(row)),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, routeObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(routeObject(row)),
     onNoteChange: (routeId, body) => callbacks.onNoteChange?.(routeId, body),
     onDelete: row => callbacks.onDelete?.(routeObject(row)),
     onDeleteMany: routeIds => callbacks.onDeleteMany?.(routeIds),
@@ -135,7 +132,6 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "route") panelState.selectedRouteId = normalizeRouteId(selection.object.id);
       if (!routeExists(map, panelState.selectedRouteId)) panelState.selectedRouteId = firstRouteId(map);
       panelState.open = true;
@@ -147,7 +143,6 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "route") panelState.selectedRouteId = normalizeRouteId(selection.object.id);
       if (!routeExists(map, panelState.selectedRouteId)) panelState.selectedRouteId = firstRouteId(map);
       panelState.version++;

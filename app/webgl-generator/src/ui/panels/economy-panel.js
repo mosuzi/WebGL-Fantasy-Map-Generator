@@ -4,7 +4,6 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 import {OBJECT_KIND} from "../../runtime/object-kinds.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const ECONOMY_PANEL_ID = "economy-panel";
 const ECONOMY_COLUMN_WIDTHS = Object.freeze({
@@ -63,7 +62,6 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     selectedGoodId: null,
     selectedMarketId: null,
     selectedDealId: null,
@@ -130,8 +128,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       else if (row?.locateObject) callbacks.onLocate?.(row.locateObject);
     },
     onLocateAssociation: object => callbacks.onLocate?.(object),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, tradeFlowObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(tradeFlowObject(row)),
     onMarketAssignmentActive: active => callbacks.onMarketAssignmentActive?.(Boolean(active)),
     onTargetMarketId: value => {
       panelState.targetMarketId = normalizeId(value);
@@ -188,7 +185,6 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       ensureSelection(panelState);
       panelState.targetMarketId ??= panelState.selectedMarketId;
       panelState.version++;
@@ -233,7 +229,6 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       ensureSelection(panelState);
       panelState.version++;
     },

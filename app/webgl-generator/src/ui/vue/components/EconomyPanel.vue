@@ -118,6 +118,7 @@
     :columns="dealColumns"
     :column-widths="dealColumnWidths"
     :rows="visibleDealRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="activeSortOptions"
@@ -140,9 +141,7 @@
     class-name="economy-panel-export-actions"
     label="经济列表操作"
     :export-actions="economyExportActions"
-    :actions="economyHighlightActions"
     @export="handleEconomyExport"
-    @action="handleEconomyHighlightAction"
   />
 
   <p v-if="activeTotalRows > activeVisibleRows" class="economy-panel-limit">
@@ -418,18 +417,11 @@ const regenerationLocks = useRegenerationLockSelection({
 const selectedEconomyRows = computed(() => props.state.tab === "goods"
   ? selectedVisibleEconomyRows.value
   : regenerationLocks.selectedRows.value);
-const highlightableTradeFlowRows = computed(() => props.state.tab === "deals"
-  ? selectedEconomyRows.value.filter(row => row.sellerValid && row.buyerValid)
-  : []);
 const economyExportActions = computed(() => [
   {key: "csv", label: "导出 CSV", disabled: !activeTotalRows.value},
   {key: "json", label: "导出 JSON", disabled: !activeTotalRows.value},
   {key: "selected-csv", label: `导出选中 CSV ${formatNumber(selectedEconomyRows.value.length)}`, disabled: !selectedEconomyRows.value.length},
   {key: "selected-json", label: `导出选中 JSON ${formatNumber(selectedEconomyRows.value.length)}`, disabled: !selectedEconomyRows.value.length}
-]);
-const economyHighlightActions = computed(() => [
-  {key: "highlight-selected", label: `高亮交易流 ${formatNumber(highlightableTradeFlowRows.value.length)}`, icon: "⇢", disabled: !highlightableTradeFlowRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
 ]);
 const selectedGood = computed(() => findByObjectId(metrics.value.goods, props.state.selectedGoodId) || metrics.value.goods[0] || null);
 const selectedMarket = computed(() => findByObjectId(metrics.value.markets, props.state.selectedMarketId) || metrics.value.markets[0] || null);
@@ -487,7 +479,6 @@ const summaryMetrics = computed(() => [
   {label: "价格信号", value: formatNumber(metrics.value.summary.priceSignals)},
   {label: "交易额", value: formatNumber(metrics.value.summary.tradeValue)},
   {label: "已选", value: formatNumber(selectedEconomyRows.value.length)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const economyDetail = computed(() => {
@@ -1049,11 +1040,6 @@ function handleEconomyExport(key) {
   if (key === "json") exportJson();
   if (key === "selected-csv") exportCsv(selectedEconomyRows.value, {selectedOnly: true});
   if (key === "selected-json") exportJson(selectedEconomyRows.value, {selectedOnly: true});
-}
-
-function handleEconomyHighlightAction(key) {
-  if (key === "highlight-selected") props.callbacks.onHighlight?.(highlightableTradeFlowRows.value);
-  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function exportRows() {

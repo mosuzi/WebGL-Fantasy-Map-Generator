@@ -565,6 +565,13 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
   const mapRevision = new MapRevisionTracker();
   let state = null;
+  const previewListObject = object => {
+    const renderer = state?.renderer;
+    const outline = renderer?.previewListObject(object);
+    if (!outline) return;
+    const revision = mapRevision.mapRevision;
+    return {remove: outline.remove, isCurrent: () => renderer.listHoverOutline === outline && mapRevision.mapRevision === revision};
+  };
   const saveState = new MapSaveState({
     getIdentity: () => state?.map ? mapRevision.getSnapshot().mapIdentity : null,
     getPresentation: () => {
@@ -1378,9 +1385,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       });
     },
     onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("states", {confirm: true})),
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onEdit: object => {
       startObjectEditing(object, {
         afterStart: target => {
@@ -1498,9 +1503,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         }
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onOpenState: object => {
       selectionStore.setSelection({object});
       setStatePanelTarget(state, object.id);
@@ -1585,9 +1588,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         afterSelect: target => provincePanel.setSelectedProvinceId(target.id)
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onEdit: object => {
       startObjectEditing(object, {
         afterStart: target => {
@@ -1651,9 +1652,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         return null;
       }
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onRename: (cityId, name) => {
       const object = {kind: "city", id: cityId};
       const context = {map: state.map};
@@ -1769,9 +1768,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         afterSelect: target => culturePanel.setSelectedCultureId(target.id)
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onAdd: () => {
       const command = createAddCultureCommand();
       const context = {map: state.map};
@@ -1859,9 +1856,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         afterSelect: target => religionPanel.setSelectedReligionId(target.id)
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onAdd: () => {
       const command = createAddReligionCommand();
       const context = {map: state.map};
@@ -1947,9 +1942,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onLocate: object => {
       locateAndSelectObject("diplomacy-panel", object);
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onOpenState: object => {
       selectionStore.setSelection({object});
       setStatePanelTarget(state, object.id);
@@ -1989,9 +1982,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       const resolved = resolveObject(state.map, object);
       if (resolved) selectFromPanel("economy-panel", resolved);
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onMarketAssignmentActive: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, "panel-toggle");
@@ -2015,9 +2006,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       });
     },
     onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("military", {confirm: true})),
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onRatiosApply: (stateId, ratios) => state.runtimeActions.edit.military.setRatios(stateId, ratios),
     onStatusApply: (target, status) => {
       const command = createSetMilitaryStatusCommand(target, status);
@@ -2126,9 +2115,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         afterSelect: target => routePanel.setSelectedRouteId(target.id)
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onNoteChange: (routeId, body) => {
       const route = state.map?.settlements?.routes?.find(item => item.id === routeId);
       const context = {map: state.map};
@@ -2193,9 +2180,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         afterSelect: selected => markerPanel.setSelectedMarkerId(selected.id)
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onRename: (markerId, name) => {
       const object = {kind: OBJECT_KIND.MARKER, id: markerId};
       const context = {map: state.map};
@@ -2255,9 +2240,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         afterSelect: target => labelNamingPanel.setSelectedLabelKey(labelKeyForObject(target))
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onRename: (object, name) => {
       const context = {map: state.map};
       const command = object.targetKind === LABEL_TARGET_KIND.CUSTOM ? createRenameCustomLabelCommand(object.targetId ?? object.id, name) : createRenameObjectCommand(object, name);
@@ -2356,9 +2339,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         afterSelect: () => notesPanel.setSelectedNoteId(row.id)
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onDelete: row => {
       if (!row?.id) return;
       runtimeActions.edit.notes.delete(row.id, {name: row.name});
@@ -2430,9 +2411,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onClose: () => {
       stopMeasurementMode(state, documentRef, "panel-close");
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onRename: (measurementId, name) => {
       const command = createRenameMeasurementCommand(measurementId, name);
       executeEditCommand(state, documentRef, command);
@@ -2481,9 +2460,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       });
     },
     onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("rivers", {confirm: true})),
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onWaypointMode: (active, object) => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, {riverId: object?.id});
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "panel-toggle");
@@ -2591,6 +2568,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.oceanCurrents.regenerate()),
     onWorldRebuild: () => runtimeActions.oceanCurrents.rebuildWorld({confirm: true}),
     onCancelWorldRebuild: () => runtimeActions.oceanCurrents.cancelWorldRebuild(),
+    onHover: previewListObject,
     onHighlight: ids => state.renderer.setOceanCurrentHighlights(ids),
     onUndo: () => executeHistoryCommand(state, documentRef, "undo", {afterRefresh: () => updateOceanCurrentPanel(state)}),
     onRedo: () => executeHistoryCommand(state, documentRef, "redo", {afterRefresh: () => updateOceanCurrentPanel(state)})
@@ -2614,9 +2592,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         afterSelect: target => lakePanel.setSelection({object: target})
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onRename: (lakeId, name) => {
       const object = {kind: OBJECT_KIND.LAKE, id: lakeId};
       const context = {map: state.map};
@@ -2707,9 +2683,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         afterSelect: target => zonePanel.setSelection({object: target})
       });
     },
-    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
-    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onHover: previewListObject,
     onStyleChange: (zoneId, patch) => {
       const context = {map: state.map};
       const command = createSetZoneStyleCommand(zoneId, patch);
@@ -10054,24 +10028,7 @@ function sameShallowObject(left, right) {
 
 function refreshPersistentHighlightUi(state, documentRef) {
   updateRuntimePanel(documentRef, state);
-  updateStatePanel(state);
-  updateProvincePanel(state);
-  updateCulturePanel(state);
-  updateReligionPanel(state);
-  updateRoutePanel(state);
-  updateRiverPanel(state);
-  updateLakePanel(state);
-  updateCityPanel(state);
-  updateMarkerPanel(state);
-  updateMilitaryPanel(state);
-  updateZonePanel(state);
-  updateLabelNamingPanel(state);
-  updateNotesPanel(state);
-  updateGovernmentPanel(state);
-  updateMeasurementPanel(state);
   updateMeasurementOverlay(state, documentRef);
-  updateDiplomacyPanel(state);
-  updateEconomyPanel(state);
 }
 
 function startEditingObjectViaApi(state, object, options = {}) {

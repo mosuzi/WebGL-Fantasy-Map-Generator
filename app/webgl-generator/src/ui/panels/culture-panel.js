@@ -3,7 +3,6 @@ import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "..
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const CULTURE_PANEL_ID = "culture-panel";
 const CULTURE_COLUMN_WIDTHS = Object.freeze({
@@ -36,7 +35,6 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     treeOpen: listPreferences.treeOpen,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     selectedCultureId: null,
     targetCultureId: null,
     assignmentActive: false,
@@ -84,8 +82,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(cultureObject(row));
     },
     onLocate: row => callbacks.onLocate?.(cultureObject(row)),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, cultureObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(cultureObject(row)),
     onAdd: () => callbacks.onAdd?.(),
     onDelete: row => callbacks.onDelete?.(cultureObject(row)),
     onRename: (cultureId, name) => callbacks.onRename?.(cultureId, name),
@@ -167,7 +164,6 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
       if (!cultureExists(map, panelState.targetCultureId)) panelState.targetCultureId = panelState.selectedCultureId;
@@ -180,7 +176,6 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
       if (assignment.active !== undefined) panelState.assignmentActive = Boolean(assignment.active);

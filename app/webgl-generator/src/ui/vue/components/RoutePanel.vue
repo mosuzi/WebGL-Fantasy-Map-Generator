@@ -11,6 +11,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -217,8 +218,6 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   : null);
 const routeListActions = computed(() => [
   {key: "create", label: props.state.createMode ? "取消绘制路线" : "绘制路线", icon: "+", active: props.state.createMode},
-  {key: "highlight-selected", label: `高亮选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "◉", disabled: !selectedRouteRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumberValue(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "delete-selected", label: `批量删除选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "删", disabled: !selectedRouteRows.value.length},
   {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value},
   {key: "regenerate", label: "重算道路", icon: "↻", disabled: regenerationActionBusy.value}
@@ -228,7 +227,6 @@ const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.len
 const summaryMetrics = computed(() => [
   {label: "路线", value: formatNumberValue(rows.value.length)},
   {label: "筛选", value: formatNumberValue(visibleRows.value.length)},
-  {label: "高亮", value: formatNumberValue(props.state.highlightCount || 0)},
   {label: "总长度", value: formatRouteLength(totalLength.value)},
   {label: "资源路线", value: formatNumberValue(rows.value.filter(row => row.resourceCells > 0).length)},
   {label: "海路", value: formatNumberValue(rows.value.filter(row => row.type === "searoute").length)}
@@ -342,8 +340,6 @@ function sortRows(sourceRows, key, direction) {
 
 function handleRouteAction(key) {
   if (key === "create") props.callbacks.onCreateMode?.(!props.state.createMode);
-  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRouteRows.value);
-  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "regenerate") {
     void handleRouteRegeneration();
     return;

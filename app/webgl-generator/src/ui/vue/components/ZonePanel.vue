@@ -30,6 +30,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -50,9 +51,9 @@
 
   <UiPanelIoActions
     class-name="zone-panel-list-actions"
-    label="地区列表高亮"
-    :actions="zoneHighlightActions"
-    @action="handleHighlightAction"
+    label="地区列表操作"
+    :actions="zoneListActions"
+    @action="handleListAction"
   />
 
   <UiDetailGrid class-name="zone-panel-details" empty-text="未选中地区" :rows="detailRows" />
@@ -207,7 +208,6 @@ const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "zone-panel", kind: "zone", rows: visibleRows});
 const {selectedRowIds: selectedZoneIds} = useVisibleRowSelection(visibleRows);
-const selectedZoneRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -225,10 +225,8 @@ const legendItems = computed(() => {
     color: meta.color
   }));
 });
-const zoneHighlightActions = computed(() => [
+const zoneListActions = computed(() => [
   {key: "create", label: props.state.createMode ? "取消放置地区" : "放置地区", icon: "+"},
-  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedZoneRows.value.length)}`, icon: "◉", disabled: !selectedZoneRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "delete", label: "删除选中地区", icon: "×", disabled: !selected.value || props.state.createMode}
 ]);
 
@@ -237,7 +235,6 @@ const summaryMetrics = computed(() => [
   {label: "可见", value: formatNumber(visibleCount.value)},
   {label: "涉及区域", value: formatNumber(totalCells.value)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -316,10 +313,8 @@ function handleEmptyAction(key) {
   if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
-function handleHighlightAction(key) {
+function handleListAction(key) {
   if (key === "create") toggleCreateMode();
-  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedZoneRows.value);
-  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "delete" && selected.value) props.callbacks.onDelete?.(selected.value.id);
 }
 

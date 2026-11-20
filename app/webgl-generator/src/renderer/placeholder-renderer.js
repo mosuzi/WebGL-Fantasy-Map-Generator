@@ -153,6 +153,7 @@ import {
 import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelPlacement} from "./military-label-layout.js";
 import {cityLabelAnchorOffset} from "./city-label-icon-layout.js";
 import {isSelectionForLabelItem, shouldShowDefaultSelectionMarker} from "./selection-marker-policy.js";
+import {showListHoverOutline} from "./list-hover-outline.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
 import {DEFAULT_STATE_BORDER_BLEND, normalizeStateBorderBlendStyle} from "./state-border-blend-style.js";
 import {drawRouteMeshBatches, emptyRouteDrawRanges, resolveRouteStyle, SELECTED_ROUTE_COLOR} from "./route-style.js";
@@ -3484,7 +3485,21 @@ export class PlaceholderMapRenderer {
     }
   }
 
+  previewListObject(object) {
+    return showListHoverOutline(this, object, (map, target) => {
+      if (target.kind === OBJECT_KIND.LABEL) {
+        const item = this.labelItems.find(label => isSelectionForLabelItem(target, label));
+        if (item?.visible && item.box) {
+          const rect = this.canvas.getBoundingClientRect();
+          return this.screenToWorld(rect.left + (item.box.left + item.box.right) / 2, rect.top + (item.box.top + item.box.bottom) / 2);
+        }
+      }
+      return selectionPoint(map, target);
+    });
+  }
+
   draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true, viewportPreview = false, checkGlError = !viewportPreview, trackPerformance = true} = {}) {
+    this.listHoverOutline?.update();
     if (this.webGlContextLost || this.webGlContextResourceState !== "ready") return;
     if (this.retainedResourcePublishSuspended > 0) {
       this.retainedResourcePublishPendingDraw = true;

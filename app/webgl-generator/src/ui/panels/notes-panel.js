@@ -1,7 +1,6 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const NOTES_PANEL_ID = "notes-panel";
 const NOTES_COLUMN_WIDTHS = Object.freeze({
@@ -34,7 +33,6 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     importPreview: null,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     selectedNoteId: null,
     createMode: false,
     version: 0
@@ -103,8 +101,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     onNoteChange: (row, body) => callbacks.onNoteChange?.(row, body),
     onRescue: (row, patch, map) => callbacks.onRescue?.(row, patch, map),
     onExport: rows => callbacks.onExport?.(rows),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, row => row.object),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(row.orphan ? null : row.object),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -146,7 +143,6 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
       panelState.notes = markRaw(callbacks.listNotes?.() || []);
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (!noteExists(panelState.notes, panelState.selectedNoteId)) panelState.selectedNoteId = firstNoteId(panelState.notes);
       panelState.open = true;
       panelState.version++;
@@ -158,7 +154,6 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
       panelState.notes = markRaw(callbacks.listNotes?.() || []);
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (!noteExists(panelState.notes, panelState.selectedNoteId)) panelState.selectedNoteId = firstNoteId(panelState.notes);
       panelState.version++;
     },

@@ -3,7 +3,6 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {sameObjectId, toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 import {diplomacyRelationObject, parseDiplomacyRelationIdentity} from "../../runtime/diplomacy-relations.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const DIPLOMACY_PANEL_ID = "diplomacy-panel";
 const DIPLOMACY_COLUMN_WIDTHS = Object.freeze({
@@ -36,7 +35,6 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
     historyScope: listPreferences.scope,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     selectedStateId: null,
     selectedObjectId: null,
     version: 0
@@ -95,8 +93,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       panelState.selectedObjectId = row.id;
       callbacks.onOpenState?.(stateObject(row));
     },
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, diplomacyRelationObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(diplomacyRelationObject(row)),
     onRelationChange: (subjectId, objectId, relation, reason) => callbacks.onRelationChange?.(subjectId, objectId, relation, reason),
     onRegenerate: () => callbacks.onRegenerate?.(),
     onShowTheme: stateId => callbacks.onShowTheme?.(stateId),
@@ -139,7 +136,6 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       applySelectionTarget(panelState, map, selection);
       if (!stateExists(map, panelState.selectedStateId)) panelState.selectedStateId = firstStateId(map);
       if (!stateExists(map, panelState.selectedObjectId, panelState.selectedStateId)) panelState.selectedObjectId = firstOtherStateId(map, panelState.selectedStateId);
@@ -152,7 +148,6 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       applySelectionTarget(panelState, map, selection);
       if (!stateExists(map, panelState.selectedStateId)) panelState.selectedStateId = firstStateId(map);
       if (!stateExists(map, panelState.selectedObjectId, panelState.selectedStateId)) panelState.selectedObjectId = firstOtherStateId(map, panelState.selectedStateId);

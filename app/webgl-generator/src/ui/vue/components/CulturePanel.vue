@@ -32,6 +32,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -233,8 +234,6 @@ const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根�
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "culture-panel", kind: "culture", rows: visibleRows});
 const {selectedRowIds: selectedCultureIds} = useVisibleRowSelection(visibleRows);
-const selectedCultureRows = regenerationLocks.selectedRows;
-const highlightableCultureRows = computed(() => selectedCultureRows.value.filter(row => Number(row.id) > 0));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCultureId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根文化"));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
@@ -267,8 +266,6 @@ const defaultCultureEmptyAction = Object.freeze({key: "add", label: "新增空�
 const cultureEmptyAction = computed(() => filterEmptyAction.value || defaultCultureEmptyAction);
 const cultureListActions = computed(() => [
   {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.length)}`, icon: "名", disabled: !visibleRows.value.length},
-  {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableCultureRows.value.length)}`, icon: "◉", disabled: !highlightableCultureRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   defaultCultureEmptyAction,
   {
     key: "delete",
@@ -287,7 +284,6 @@ const summaryMetrics = computed(() => [
   {label: "城市", value: formatNumber(metrics.value.cities)},
   {label: "归属笔刷", value: props.state.assignmentActive ? "启用" : "关闭"},
   {label: "本次影响", value: formatNumber(props.state.lastAffected || 0)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -377,14 +373,6 @@ function openRenameEditor(row) {
 function handleListAction(actionKey) {
   if (actionKey === "rename-visible") {
     props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
-    return;
-  }
-  if (actionKey === "highlight-selected") {
-    props.callbacks.onHighlight?.(highlightableCultureRows.value);
-    return;
-  }
-  if (actionKey === "clear-highlights") {
-    props.callbacks.onClearHighlights?.();
     return;
   }
   if (actionKey === "clear-filter") {

@@ -21,6 +21,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
     :sort-options="sortOptions"
@@ -175,7 +176,6 @@ const scopedRows = computed(() => applyScope(metrics.value.rows, props.state.sco
 const visibleRows = computed(() => sortRows(filterRows(scopedRows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "marker-panel", kind: "marker", rows: visibleRows});
 const {selectedRowIds: selectedMarkerIds} = useVisibleRowSelection(visibleRows);
-const selectedMarkerRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -198,8 +198,6 @@ const markerActions = Object.freeze([
 ]);
 const markerListActions = computed(() => [
   {...defaultMarkerEmptyAction, active: props.state.editMode === "add", disabled: props.state.editMode === "move"},
-  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMarkerRows.value.length)}`, icon: "◉", disabled: !selectedMarkerRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "move", label: "移动选中对象", icon: "⌖", active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
   {key: "delete", label: "删除选中对象", icon: "×", disabled: !selected.value || Boolean(props.state.editMode)}
 ]);
@@ -208,7 +206,6 @@ const summaryMetrics = computed(() => [
   {label: "标记", value: formatNumber(metrics.value.total)},
   {label: "资源点", value: formatNumber(metrics.value.resources)},
   {label: "资源潜力", value: formatNumber(metrics.value.resourcePotential)},
-  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
@@ -346,14 +343,6 @@ function startMoveSelected() {
 function handleMarkerListAction(key) {
   if (key === "add") {
     startAddResource();
-    return;
-  }
-  if (key === "highlight-selected") {
-    props.callbacks.onHighlight?.(selectedMarkerRows.value);
-    return;
-  }
-  if (key === "clear-highlights") {
-    props.callbacks.onClearHighlights?.();
     return;
   }
   if (key === "move") {

@@ -13,8 +13,6 @@ const FILES = Object.freeze({
   objectTableGeometry: `${COMPONENT_ROOT}/base/object-table-geometry.js`,
   actionDock: `${COMPONENT_ROOT}/base/UiActionDock.vue`,
   visibleSelection: "app/webgl-generator/src/ui/vue/composables/use-visible-row-selection.js",
-  persistentHighlights: "app/webgl-generator/src/runtime/persistent-highlights.js",
-  panelHighlightActions: "app/webgl-generator/src/ui/panels/panel-highlight-actions.js",
   runtime: "app/webgl-generator/src/runtime/app.js",
   styles: "app/webgl-generator/src/styles.css"
 });
@@ -52,7 +50,7 @@ const EXPECTED_GLOBAL_SELECTION_TABLES = new Set([
 const EXPECTED_HIGHLIGHT_TABLES = new Set([
   "CityPanel.vue#1", "CulturePanel.vue#1", "DiplomacyPanel.vue#1", "EconomyPanel.vue#3",
   "GovernmentPanel.vue#2", "LabelNamingPanel.vue#1", "LakePanel.vue#1", "MarkerPanel.vue#1",
-  "MeasurementPanel.vue#1", "MilitaryPanel.vue#1", "NotesPanel.vue#1", "ProvincePanel.vue#1",
+  "MeasurementPanel.vue#1", "MilitaryPanel.vue#1", "NotesPanel.vue#1", "OceanCurrentPanel.vue#1", "ProvincePanel.vue#1",
   "ReligionPanel.vue#1", "RiverPanel.vue#1", "RoutePanel.vue#1", "StatePanel.vue#1", "ZonePanel.vue#1"
 ]);
 
@@ -109,7 +107,7 @@ export function buildComplexWorkspaceAudit() {
       emptyState: tableInstances.filter(item => item.emptyState).length,
       actionableEmptyState: tableInstances.filter(item => item.actionableEmptyState).length,
       batchSelection: tableInstances.filter(item => item.batchSelection).length,
-      persistentHighlight: tableInstances.filter(item => item.persistentHighlight).length,
+      hoverHighlight: tableInstances.filter(item => item.hoverHighlight).length,
       selectedExport: tableInstances.filter(item => item.selectedExport).length,
       actionDockHosts: actionDockHosts.length,
       actionDockActions: actionDockActions.length,
@@ -288,11 +286,10 @@ function buildTableInstances(file) {
     const batchSelection = hasBooleanProp(normalized, "selectable-rows");
     const independentlyFilterable = source.includes("<UiFilterInput") && /^visible/i.test(rows);
     const selectionContract = discoverSelectionContract(file, source, normalized);
-    const persistentHighlight = discoverPersistentHighlight(file, source, rows, batchSelection);
+    const hoverHighlight = Boolean(boundProp(normalized, "hover-row"));
     const selectedExport = batchSelection && /key:\s*"selected-(?:csv|json|legacy|measurements|notes)"/.test(source);
     const doubleClickEdit = /doubleClickAction|double-click-action/.test(normalized);
     if (batchSelection) verifyBatchSelectionSource(file, source);
-    if (persistentHighlight) verifyHighlightSource(file, source);
     if (doubleClickEdit) verifyDoubleClickEditSource(file, source);
     const expectedGlobal = EXPECTED_GLOBAL_SELECTION_TABLES.has(tableId) ? "global-selection" : "panel-local";
     if (selectionContract !== expectedGlobal) throw new Error(`${tableId} 主选中路由漂移：${selectionContract}/${expectedGlobal}`);
@@ -314,8 +311,8 @@ function buildTableInstances(file) {
       actionableEmptyState: /:empty-action=/.test(normalized),
       batchSelection,
       batchContract: batchSelection ? batchSelectionContract(file) : "无 checkbox 批量集合",
-      persistentHighlight,
-      highlightContract: persistentHighlight ? "仅显式动作写入 persistent highlight；过滤无效对象并截到 100；不写 EditHistory 或地图 checksum" : "无显式地图高亮动作",
+      hoverHighlight,
+      highlightContract: hoverHighlight ? "同一行悬停 300ms 后描边；离开即清除；不写 EditHistory 或地图 checksum" : "无行悬停描边",
       selectedExport,
       locateHistory: "定位只移动视口 / selection，不写 EditHistory",
       editHistory: doubleClickEdit ? "双击只打开编辑入口；实际提交由二级表单 callback/command 划定历史" : "无双击编辑提交",
@@ -326,7 +323,7 @@ function buildTableInstances(file) {
         {file: FILES.objectTable, tokens: ["handleRowClick", "handleRowDoubleClick", "handleSelectAllChange", "VIRTUAL_ROW_HEIGHT = 32"]},
         ...(doubleClickEdit ? [{file, pattern: "function openRenameEditor\\(row\\)[\\s\\S]*?if \\([^\\n]+\\) props\\.callbacks\\.onSelect\\?\\.\\(row\\)"}] : []),
         ...(batchSelection ? batchSelectionSourceRefs(file) : []),
-        ...(persistentHighlight ? [{file, tokens: ['key: "highlight-selected"', "onHighlight"]}, {file: FILES.persistentHighlights, tokens: ["MAX_PERSISTENT_OBJECT_HIGHLIGHTS = 100", "normalizePersistentHighlights"]}, {file: FILES.runtime, tokens: ["requested.slice(0, MAX_PERSISTENT_OBJECT_HIGHLIGHTS)", "strictLimit === true"]}, {file: FILES.panelHighlightActions, tokens: ["callbacks.onHighlight"]}] : []),
+        ...(hoverHighlight ? [{file, tokens: [":hover-row", "callbacks.onHover"]}, {file: FILES.objectTable, tokens: ["setHover", "hoverOutline"]}] : []),
         ...(selectedExport ? [{file, pattern: 'key:\\s*"selected-(?:csv|json|legacy|measurements|notes)"'}] : [])
       ]
     };
@@ -357,12 +354,6 @@ function discoverSelectionContract(file, componentSource, tableTag) {
     ? balancedSlice(wrapperSource, bodyStart, "{", "}")
     : wrapperSource.slice(bodyStart, wrapperSource.indexOf("\n", bodyStart));
   return /callbacks\.onSelect\w*\?\./.test(callbackScope) ? "global-selection" : "panel-local";
-}
-
-function discoverPersistentHighlight(file, source, rows, batchSelection) {
-  if (!batchSelection || !source.includes('key: "highlight-selected"') || !source.includes("onHighlight")) return false;
-  if (basename(file) !== "EconomyPanel.vue") return true;
-  return /deal/i.test(rows);
 }
 
 function verifyBatchSelectionSource(file, source) {
@@ -397,10 +388,6 @@ function batchSelectionSourceRefs(file) {
   return [{file: FILES.visibleSelection, tokens: ["watch(visibleRows", "selectedRowIds.value = selectedRowIds.value.filter"]}];
 }
 
-function verifyHighlightSource(file, source) {
-  requireTokens(file, source, ["highlight-selected", "onHighlight"]);
-}
-
 function verifyDoubleClickEditSource(file, source) {
   const editor = source.match(/function openRenameEditor\(row\) \{[\s\S]*?\n\}/)?.[0] || "";
   if (!/if \([^\n]+\) props\.callbacks\.onSelect\?\.\(row\);/.test(editor)) {
@@ -409,7 +396,7 @@ function verifyDoubleClickEditSource(file, source) {
 }
 
 function verifyTableSemanticDenominators(tables) {
-  compareIdSets("持久高亮表格", tables.filter(item => item.persistentHighlight).map(item => item.tableId), EXPECTED_HIGHLIGHT_TABLES);
+  compareIdSets("悬停描边表格", tables.filter(item => item.hoverHighlight).map(item => item.tableId), EXPECTED_HIGHLIGHT_TABLES);
   compareIdSets("选中导出表格", tables.filter(item => item.selectedExport).map(item => item.tableId), EXPECTED_SELECTED_EXPORT_TABLES);
 }
 
@@ -519,7 +506,7 @@ function buildDictionaries() {
     tableActions: {
       primary: "行 click 只改变单一 selectedId；是否同步全局 Selection 由宿主决定",
       batch: "checkbox 只改变批量集合，不触发行 select；是否随可见行裁剪由各宿主真实契约记录，均不持久化",
-      highlight: "显式动作才写持久高亮，最多 100 个；不写 EditHistory 或 checksum",
+      highlight: "同一行悬停 300ms 后描边；离开即清除；不写 EditHistory 或 checksum",
       locate: "只定位视口 / 对象，不写 EditHistory",
       doubleClick: "浏览器 click 序列负责主选中，dblclick 只 emit edit；宿主仅在 selection 尚未同步时条件补选，编辑提交仍在二级表单",
       sortAndFilter: "只改变列表投影与偏好，不改地图业务数据",
@@ -681,7 +668,7 @@ function renderMarkdown(report) {
     `- 面板分母：${t.panelProfiles}；复杂工作区：${t.complexWorkspaces}`,
     `- 复杂工作区字段模板：${t.complexWorkspaceFields}（共享 ${t.sharedFields} / 原生与 Element 例外 ${t.exceptionFields} / 导出参数 ${t.exportParameterFields}）`,
     `- 对象表格：${t.tableHosts} 个宿主 / ${t.tableInstances} 个实例；独立筛选 ${t.independentlyFilterable}；排序 ${t.sortable}`,
-    `- 主选中：${t.primarySelection}（全局 ${t.globalSelection} / 面板局部 ${t.localSelection}）；批量集合 ${t.batchSelection}；持久高亮 ${t.persistentHighlight}`,
+    `- 主选中：${t.primarySelection}（全局 ${t.globalSelection} / 面板局部 ${t.localSelection}）；批量集合 ${t.batchSelection}；悬停描边 ${t.hoverHighlight}`,
     `- 定位 ${t.locate}；双击编辑 ${t.doubleClickEdit}；列宽 ${t.resizable}；虚拟列表 ${t.virtualCapable}；可恢复空态 ${t.actionableEmptyState}`,
     `- 动作坞：${t.actionDockHosts} 个宿主 / ${t.actionDockActions} 个动作（${t.uniqueActionKeys} 个 unique key）= 模式 ${t.toggleModeActions} + 直接 ${t.directActions} + 二级面板 ${t.secondaryPanelActions} + 其它面板 ${t.otherPanelActions}`,
     `- 未分类字段 / 未解析表格 / 未解析动作：${t.unknownFields} / ${t.unresolvedTables} / ${t.unresolvedActions}`,
@@ -699,7 +686,7 @@ function renderMarkdown(report) {
     "",
     "| 表格 | 筛选 / 排序 | 主选中 | 批量 / 高亮 | 定位 / 双击 |",
     "|---|---|---|---|---|",
-    ...report.tableInstances.map(item => `| \`${item.tableId}\` | ${item.independentlyFilterable ? "是" : "否"} / ${item.sortable ? "是" : "否"} | ${item.selectionContract} | ${item.batchSelection ? "是" : "否"} / ${item.persistentHighlight ? "是" : "否"} | ${item.locate ? "是" : "否"} / ${item.doubleClickEdit ? "是" : "否"} |`),
+    ...report.tableInstances.map(item => `| \`${item.tableId}\` | ${item.independentlyFilterable ? "是" : "否"} / ${item.sortable ? "是" : "否"} | ${item.selectionContract} | ${item.batchSelection ? "是" : "否"} / ${item.hoverHighlight ? "是" : "否"} | ${item.locate ? "是" : "否"} / ${item.doubleClickEdit ? "是" : "否"} |`),
     "",
     "浏览器证据统一保留为 `pending-Q107`；本报告只形成 `E-C`，不修改正式应用业务或交互。",
     ""

@@ -150,7 +150,7 @@ function buildPanelRows() {
   for (const file of panelFiles) {
     const rel = relativePath(file);
     const source = readText(file);
-    if (["lazy-vue-panel.js", "panel-highlight-actions.js"].includes(basename(file))) {
+    if (basename(file) === "lazy-vue-panel.js") {
       rows.push(surface({
         id: `panel-helper:${basename(file, ".js")}`,
         type: "non-vue-panel",
@@ -158,7 +158,7 @@ function buildPanelRows() {
         entry: "无直接用户入口",
         condition: "由其它面板内部调用",
         events: eventSummary(source),
-        result: "内部挂载或高亮桥接",
+        result: "内部面板挂载",
         included: false,
         exclusionReason: "内部面板基础设施，不是独立用户交互表面"
       }));

@@ -1,7 +1,6 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const LAKE_PANEL_ID = "lake-panel";
 const LAKE_COLUMN_WIDTHS = Object.freeze({
@@ -30,7 +29,6 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     createMode: false,
     outletDraft: null,
     outletPreview: null,
@@ -68,8 +66,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => callbacks.onSelect?.(lakeObject(row)),
     onLocate: row => callbacks.onLocate?.(lakeObject(row)),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, lakeObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(lakeObject(row)),
     onRename: (lakeId, name) => callbacks.onRename?.(lakeId, name),
     onRenameVisibleFromNamebase: lakeIds => callbacks.onRenameVisibleFromNamebase?.(lakeIds),
     onDelete: lakeId => callbacks.onDelete?.(lakeId),
@@ -145,7 +142,6 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       panelState.open = true;
       panelState.version++;
       manager.open("lake-panel");
@@ -155,7 +151,6 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       panelState.version++;
     },
     setSelection(selection) {

@@ -3,7 +3,6 @@ import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "..
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const STATE_PANEL_ID = "state-panel";
 const STATE_COLUMN_WIDTHS = Object.freeze({
@@ -39,7 +38,6 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     radius: readBrushRadiusContract(BRUSH_RADIUS_ID.STATE).defaultValue,
     addMode: false,
     deleteMode: false,
@@ -87,8 +85,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     },
     onLocate: row => callbacks.onLocate?.(stateObject(row)),
     onRegenerate: () => callbacks.onRegenerate?.(),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, stateObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(stateObject(row)),
     onEdit: row => {
       const nextActive = !(panelState.active && panelState.targetStateId === row.id);
       panelState.targetStateId = row.id;
@@ -176,7 +173,6 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     open(map, history) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (!stateExists(map, panelState.targetStateId)) panelState.targetStateId = firstStateId(map);
       panelState.open = true;
       panelState.version++;
@@ -188,7 +184,6 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       panelState.sourceStateId = sourceStateId;
       panelState.lastAffected = lastAffected;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (!stateExists(map, panelState.targetStateId)) panelState.targetStateId = firstStateId(map);
       panelState.version++;
     },

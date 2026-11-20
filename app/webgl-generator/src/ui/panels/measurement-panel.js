@@ -2,7 +2,6 @@ import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {measurementHighlightObject} from "../../runtime/measurement-highlights.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
-import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const MEASUREMENT_PANEL_ID = "measurement-panel";
 const MEASUREMENT_COLUMN_WIDTHS = Object.freeze({
@@ -30,7 +29,6 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readPanelHighlightCount(callbacks),
     selectedMeasurementId: null,
     version: 0
   });
@@ -74,8 +72,7 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
     onRename: (measurementId, name) => callbacks.onRename?.(measurementId, name),
     onDelete: row => callbacks.onDelete?.(row),
     onExport: rows => callbacks.onExport?.(rows),
-    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, measurementHighlightObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onHover: row => callbacks.onHover?.(measurementHighlightObject(row)),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -115,7 +112,6 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
     open(map, history) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (!measurementExists(map, panelState.selectedMeasurementId)) panelState.selectedMeasurementId = firstMeasurementId(map);
       panelState.open = true;
       panelState.version++;
@@ -125,7 +121,6 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
     update(map, history) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
-      syncPanelHighlightCount(panelState, callbacks);
       if (!measurementExists(map, panelState.selectedMeasurementId)) panelState.selectedMeasurementId = firstMeasurementId(map);
       panelState.version++;
     },

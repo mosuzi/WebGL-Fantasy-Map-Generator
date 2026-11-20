@@ -85,7 +85,7 @@
 
 <script setup>
 import {computed, ref} from "vue";
-import {Brush, Delete, Document, Download, EditPen, Hide, Location, Plus, Rank, Refresh, Upload, View} from "@element-plus/icons-vue";
+import {Brush, Delete, Document, Download, EditPen, Location, Plus, Rank, Refresh, Upload} from "@element-plus/icons-vue";
 
 defineOptions({
   name: "UiPanelIoActions"
@@ -128,8 +128,6 @@ const ICON_RULES = Object.freeze([
   [/delete|remove/, Delete],
   [/regenerate|rebuild|refresh/, Refresh],
   [/rename|edit/, EditPen],
-  [/highlight-selected/, View],
-  [/clear-highlights/, Hide],
   [/move|station/, Rank],
   [/note|report|archive/, Document],
   [/color|visual|style/, Brush]
