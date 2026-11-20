@@ -103,19 +103,22 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
     container.dataset.errorKind = failure.kind;
 
     const title = documentRef.createElement("strong");
-    title.textContent = messages.failure || "面板加载失败，请检查开发模式日志。";
+    const debug = view.__webglGeneratorDebug?.enabled === true;
+    title.textContent = debug && messages.failure ? messages.failure : "暂时无法打开此面板。";
     container.append(title);
 
     if (failure.kind === LAZY_PANEL_ERROR_KIND.MODULE_FETCH) {
       const explanation = documentRef.createElement("p");
-      explanation.textContent = "页面版本可能已经更新，当前页面无法取得原版本的面板资源。请先保存尚未保存的地图，再刷新页面。";
+      explanation.textContent = "页面可能已经更新。请先保存当前地图，确认保存成功后刷新页面，再打开面板。";
       container.append(explanation);
     }
 
-    const detail = documentRef.createElement("p");
-    detail.className = "lazy-panel-recovery-detail";
-    detail.textContent = failure.message;
-    container.append(detail);
+    if (debug) {
+      const detail = documentRef.createElement("p");
+      detail.className = "lazy-panel-recovery-detail";
+      detail.textContent = failure.message;
+      container.append(detail);
+    }
 
     const actions = documentRef.createElement("div");
     actions.className = "lazy-panel-recovery-actions";

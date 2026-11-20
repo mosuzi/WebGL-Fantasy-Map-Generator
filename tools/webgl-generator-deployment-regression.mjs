@@ -41,7 +41,14 @@ assert.deepEqual(vercel.rewrites?.find(item => item.source === "/prototype/:prot
   source: "/prototype/:prototype/",
   destination: "/prototype/:prototype/index.html"
 }, "prototype 目录入口没有优先改写到自身 index.html");
-assert.deepEqual(vercel.rewrites?.at(-1), {source: "/(.*)", destination: "/index.html"}, "正式应用 SPA fallback 不在路由末尾");
+const fallback = vercel.rewrites.at(-1);
+assert.equal(fallback.destination, "/index.html");
+const appPath = new RegExp(`^${fallback.source}$`);
+for (const url of ["/", "/map", "/maps/example"]) assert.match(url, appPath);
+for (const url of ["/assets", "/assets/HeightPanel-old.js", "/assets/old.css"]) assert.doesNotMatch(url, appPath);
+assert.ok(!vercel.headers.some(rule => new RegExp(`^${rule.source}$`).test("/assets/missing.js")
+  && rule.headers.some(header => header.key.toLowerCase() === "cache-control" && /immutable/.test(header.value))),
+  "缺失资源不可获得不可变缓存头");
 assert.match(viteSource, /stagePrototypeDeployments\([\s\S]*?"prototype"[\s\S]*?"dist", "webgl-generator", "prototype"/, "Vite 构建没有动态装配 prototype 目录");
 assert.deepEqual(deployments.map(item => item.id), ["boundary-topology-lab", "loading-scroll-showcase", "river-network-lab", "webgl-cells"], "当前 prototype 分母漂移");
 assert.deepEqual(SELF_CONTAINED_PROTOTYPE_IDS, ["boundary-topology-lab", "river-network-lab"], "依赖正式源码的实验室自包含构建范围漂移");

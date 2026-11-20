@@ -13,8 +13,9 @@ import {
 const rootDir = new URL("../", import.meta.url);
 const read = path => readFile(new URL(path, rootDir), "utf8");
 
-const [appSource, zoneController, cloudController, cloudComponent] = await Promise.all([
+const [appSource, heightController, zoneController, cloudController, cloudComponent] = await Promise.all([
   read("app/webgl-generator/src/runtime/app.js"),
+  read("app/webgl-generator/src/ui/panels/height-panel.js"),
   read("app/webgl-generator/src/ui/panels/zone-panel.js"),
   read("app/webgl-generator/src/ui/panels/cloud-storage-panel.js"),
   read("app/webgl-generator/src/ui/vue/components/CloudStoragePanel.vue")
@@ -22,6 +23,8 @@ const [appSource, zoneController, cloudController, cloudComponent] = await Promi
 
 assert.match(appSource, /import CloudStoragePanelComponent from "\.\.\/ui\/vue\/components\/CloudStoragePanel\.vue"/);
 assert.match(appSource, /import ZonePanelComponent from "\.\.\/ui\/vue\/components\/ZonePanel\.vue"/);
+assert.match(appSource, /import HeightPanelComponent from "\.\.\/ui\/vue\/components\/HeightPanel\.vue"/);
+assert.doesNotMatch(heightController, /import\(["']\.\.\/vue\/components\/HeightPanel\.vue["']\)/);
 assert.doesNotMatch(zoneController, /import\(["']\.\.\/vue\/components\/ZonePanel\.vue["']\)/, "地区面板仍会首次打开时请求独立 chunk");
 assert.doesNotMatch(cloudController, /import\(["']\.\.\/vue\/components\/CloudStoragePanel\.vue["']\)/, "云端面板仍会首次打开时请求独立 chunk");
 assert.match(cloudComponent, /import UiButton from "\.\/base\/UiButton\.vue"/, "云端面板没有显式注册 UiButton");
@@ -93,8 +96,9 @@ async function verifyOnDemandPreload() {
   panel.unmount();
 }
 
-async function verifyModuleFetchRecovery() {
+async function verifyModuleFetchRecovery(debug = false) {
   const fixture = createDocumentFixture();
+  fixture.documentRef.defaultView.__webglGeneratorDebug = {enabled: debug};
   let attempts = 0;
   const panel = createLazyVuePanel(
     fixture.documentRef,
@@ -109,8 +113,9 @@ async function verifyModuleFetchRecovery() {
   await panel.load();
   const recovery = fixture.root.children[0];
   assert.equal(recovery.dataset.errorKind, LAZY_PANEL_ERROR_KIND.MODULE_FETCH);
-  assert.match(flatText(recovery), /页面版本可能已经更新/);
-  assert.match(flatText(recovery), /先保存尚未保存的地图/);
+  assert.match(flatText(recovery), /先保存当前地图.*保存成功.*刷新页面/);
+  if (debug) assert.match(flatText(recovery), /Failed to fetch dynamically imported module: \/assets\/old-panel\.js/);
+  else assert.doesNotMatch(flatText(recovery), /开发模式|Failed to fetch|old-panel\.js/);
   assert.deepEqual(buttonLabels(recovery), ["刷新页面"]);
   assert.equal(fixture.reloads(), 0, "模块加载失败后发生了自动刷新");
   findButton(fixture.root.children[0], "刷新页面").click();
@@ -276,6 +281,7 @@ function findButton(node, label) {
 }
 
 await verifyModuleFetchRecovery();
+await verifyModuleFetchRecovery(true);
 await verifyComponentFailure();
 await verifyMountFailureRetry();
 await verifyDelayedLoading();

@@ -90,6 +90,7 @@ import {createStatePanel} from "../ui/panels/state-panel.js";
 import {createZonePanel} from "../ui/panels/zone-panel.js";
 import {scheduleLazyVuePanelPreload} from "../ui/panels/lazy-vue-panel.js";
 import CloudStoragePanelComponent from "../ui/vue/components/CloudStoragePanel.vue";
+import HeightPanelComponent from "../ui/vue/components/HeightPanel.vue";
 import ZonePanelComponent from "../ui/vue/components/ZonePanel.vue";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
@@ -894,7 +895,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     }
   });
   state.panels.objectDetails = objectDetailsPanel;
-  heightPanel = createHeightPanel(documentRef, panelManager, {
+  heightPanel = createHeightPanel(documentRef, panelManager, HeightPanelComponent, {
     onBrushRadiusChange: radius => {
       heightPanel?.persistBrushRadius?.(radius);
       refreshBrushCursor();

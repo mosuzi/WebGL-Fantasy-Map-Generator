@@ -21,7 +21,7 @@ export const HEIGHT_EDITOR_PREFERENCES_STORAGE_KEY = "webgl-generator-height-edi
 export const HEIGHT_TERRAIN_PROGRAM_STORAGE_USER_MESSAGE = "当前无法保存用户模板，请检查浏览器设置后重试。";
 export const HEIGHT_TERRAIN_PROGRAM_STORAGE_ERROR_CODE = "height_terrain_program_storage_unavailable";
 
-export function createHeightPanel(documentRef, manager, callbacks = {}) {
+export function createHeightPanel(documentRef, manager, component, callbacks = {}) {
   const loadedPrograms = loadUserTerrainPrograms(documentRef);
   const savedPreferences = loadHeightEditorPreferences(documentRef);
   const panelState = reactive({
@@ -145,7 +145,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const lazyPanel = createLazyVuePanel(
     documentRef,
     root,
-    () => import("../vue/components/HeightPanel.vue"),
+    () => component,
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "高度编辑将在首次打开时加载。",

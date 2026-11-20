@@ -14,6 +14,8 @@
 | Output Directory | `dist/webgl-generator` |
 | Node.js | `^20.19.0 || >=22.12.0` |
 
+应用页面路径回退至 `index.html`。根 `/assets/` 下缺失的脚本或样式返回 404，资源响应使用平台缓存策略。高度编辑组件随应用运行时代码载入，打开窗口时才挂载，已经打开的地图可以跨发布首次打开高度编辑。
+
 `package.json` 同步补充了常规脚本：
 
 ```powershell
