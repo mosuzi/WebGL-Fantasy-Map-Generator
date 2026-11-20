@@ -3290,6 +3290,7 @@ select:disabled {
 }
 
 .object-table-native {
+  --object-table-action-width: 32px;
   width: 100%;
   min-width: max-content;
   border-collapse: separate;
@@ -3439,24 +3440,13 @@ select:disabled {
 }
 
 .object-table-action-column,
-.object-table-action-cell {
-  box-sizing: border-box;
-  width: 40px;
-  min-width: 40px;
-  max-width: 40px;
-  position: sticky;
-  right: 0;
-  z-index: 1;
-  background: inherit;
-  text-align: center;
-}
-
+.object-table-action-cell,
 .object-table-lock-column,
 .object-table-lock-cell {
   box-sizing: border-box;
-  width: 40px;
-  min-width: 40px;
-  max-width: 40px;
+  width: var(--object-table-action-width);
+  min-width: var(--object-table-action-width);
+  max-width: var(--object-table-action-width);
   position: sticky;
   right: 0;
   z-index: 1;
@@ -3466,11 +3456,11 @@ select:disabled {
 
 .has-locate-action .object-table-lock-column,
 .has-locate-action .object-table-lock-cell {
-  right: 40px;
+  right: var(--object-table-action-width);
 }
 
 .object-table-native :is(.object-table-action-column, .object-table-action-cell, .object-table-lock-column, .object-table-lock-cell) {
-  padding-inline: 4px;
+  padding-inline: 0;
 }
 
 .object-table-action-column,

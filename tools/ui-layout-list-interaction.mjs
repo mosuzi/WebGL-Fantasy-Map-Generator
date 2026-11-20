@@ -54,11 +54,11 @@ export async function inspectListInteraction(page) {
   for (const sample of geometry.samples) {
     if (sample.locate) {
       assert.ok(Math.abs(sample.locate.right - sample.edge) < 2, "定位列始终固定右侧");
-      assert.ok(sample.locate.right - sample.locate.left <= 40.5, "定位图标列不得占用正文空间");
+      assert.ok(Math.abs(sample.locate.right - sample.locate.left - 32) <= 0.5, "定位列应与 32px 命中区同宽");
     }
     if (sample.lock) {
       assert.ok(Math.abs(sample.lock.right - (sample.locate?.left ?? sample.edge)) < 2, "锁列贴合定位且不重叠");
-      assert.ok(sample.lock.right - sample.lock.left <= 40.5, "锁图标列不得占用正文空间");
+      assert.ok(Math.abs(sample.lock.right - sample.lock.left - 32) <= 0.5, "锁列应与 32px 命中区同宽");
       assert.ok(Math.abs(sample.headRight - sample.lock.right) < 2, "锁列表头与表体对齐");
     }
   }
