@@ -15,11 +15,11 @@
   <div class="zone-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 类型 / 国家 / 纹理" @update:model-value="callbacks.onFilter" />
   </div>
-  <div class="zone-panel-controls">
+  <div class="zone-panel-controls list-filter-toolbar">
     <UiSelectField label="新增地区类型" :model-value="zoneDraft.type" :options="ZONE_CREATION_TYPE_OPTIONS" @update:model-value="zoneDraft.type = $event" />
     <UiButton variant="secondary" :active="state.createMode" @click="toggleCreateMode">{{ state.createMode ? "取消放置" : "放置地区" }}</UiButton>
   </div>
-  <div class="zone-panel-regeneration">
+  <div class="zone-panel-regeneration list-toolbar-actions">
     <UiButton variant="danger" :disabled="state.regenerating" @click="callbacks.onRegenerate">重新生成地区</UiButton>
     <span aria-live="polite">{{ state.regenerationStatus }}</span>
   </div>

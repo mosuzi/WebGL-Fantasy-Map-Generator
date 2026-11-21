@@ -1,7 +1,7 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="province-panel-summary" />
 
-  <div class="province-panel-controls">
+  <div class="province-panel-controls list-filter-toolbar">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号 / 国家" @update:model-value="callbacks.onFilter" />
     <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成省份</UiButton>
   </div>

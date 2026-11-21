@@ -100,7 +100,8 @@ assert.match(panelSource, /surface-gyres-v1[\s\S]{0,180}?简化表层环流[\s\S
 assert.doesNotMatch(panelSource, /control1|control2|path\.segments/, "洋流面板不得暴露路径控制点编辑");
 assert.match(panelWrapperSource, /onClose:[\s\S]{0,180}?onHighlight\?\.\(\[\]\)/, "关闭洋流面板时没有清除高亮");
 assert.match(pngSource, /copyWebglCanvasTo2d\([\s\S]{0,700}?renderer\.draw\(\)/, "PNG 没有复用实时 WebGL 画布语义");
-assert.match(stylesSource, /@media \(max-width: 620px\)[\s\S]{0,220}?\.ocean-current-panel-controls/, "洋流面板缺少窄视口布局");
+assert.match(panelSource, /class="ocean-current-panel-controls list-filter-toolbar"/, "洋流筛选和重算按钮应随面板宽度换行");
+assert.match(stylesSource, /\.list-filter-toolbar,\s*\.list-toolbar-actions\s*\{[^}]*flex-wrap: wrap/, "共享工具栏应按实际可用宽度换行");
 
 console.log(JSON.stringify({
   ok: true,

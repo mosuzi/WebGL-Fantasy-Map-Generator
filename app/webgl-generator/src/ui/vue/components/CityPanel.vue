@@ -1,10 +1,12 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="city-panel-summary" />
 
-  <div class="city-panel-controls">
+  <div class="city-panel-controls list-filter-toolbar">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号 / 国家 / 省份" @update:model-value="callbacks.onFilter" />
-    <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(visibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
-    <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成城镇</UiButton>
+    <div class="list-toolbar-actions">
+      <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(visibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
+      <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成城镇</UiButton>
+    </div>
   </div>
   <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable

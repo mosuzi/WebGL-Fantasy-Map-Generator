@@ -1,16 +1,18 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="marker-panel-summary" />
 
-  <div class="marker-panel-controls">
+  <div class="marker-panel-controls list-filter-toolbar">
     <UiSegmented label="对象类型" :options="scopeOptions" :model-value="state.scope" @select="callbacks.onScope" />
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号 / 类型 / 国家 / 省份" @update:model-value="callbacks.onFilter" />
   </div>
 
-  <div class="marker-edit-toolbar">
+  <div class="marker-edit-toolbar list-filter-toolbar">
     <UiSelectField class-name="marker-resource-select" label="新增通用标记" :model-value="markerDraft.type" :options="markerTypeOptions" @update:model-value="markerDraft.type = $event" />
-    <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
-    <UiButton variant="secondary" :disabled="!state.editMode" @click="callbacks.onCancelEdit?.()">取消</UiButton>
-    <UiButton class="marker-regenerate-button" variant="danger" @click="callbacks.onRegenerateResources?.()">重新生成资源点</UiButton>
+    <div class="list-toolbar-actions">
+      <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
+      <UiButton variant="secondary" :disabled="!state.editMode" @click="callbacks.onCancelEdit?.()">取消</UiButton>
+      <UiButton class="marker-regenerate-button" variant="danger" @click="callbacks.onRegenerateResources?.()">重新生成资源点</UiButton>
+    </div>
   </div>
 
   <div v-if="editStatus" class="marker-edit-status">{{ editStatus }}</div>

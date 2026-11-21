@@ -1,7 +1,7 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="government-panel-summary" />
 
-  <div class="government-panel-controls">
+  <div class="government-panel-controls list-filter-toolbar">
     <UiFilterInput :model-value="state.filter" placeholder="筛选政体 / 类型 / 国家" @update:model-value="callbacks.onFilter" />
     <UiSelectField
       input-id="government-family-filter"

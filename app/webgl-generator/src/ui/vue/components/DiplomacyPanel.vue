@@ -1,7 +1,7 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="diplomacy-panel-summary" />
 
-  <div class="diplomacy-panel-controls">
+  <div class="diplomacy-panel-controls list-filter-toolbar">
     <UiSelectField
       input-id="diplomacy-subject-select"
       class-name="diplomacy-subject-select"
@@ -13,7 +13,7 @@
     <UiFilterInput :model-value="state.filter" placeholder="筛选国家 / 编号 / 关系 / 文化 / 宗教" @update:model-value="callbacks.onFilter" />
   </div>
 
-  <div class="diplomacy-edit-toolbar">
+  <div class="diplomacy-edit-toolbar list-toolbar-actions">
     <UiButton id="diplomacy-show-theme" variant="secondary" @click="callbacks.onShowTheme?.(selectedSubjectId)">外交着色</UiButton>
     <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成外交</UiButton>
   </div>

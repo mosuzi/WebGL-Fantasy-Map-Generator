@@ -1,11 +1,13 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="ocean-current-panel-summary" />
 
-  <div class="ocean-current-panel-controls">
+  <div class="ocean-current-panel-controls list-filter-toolbar">
     <UiFilterInput :model-value="state.filter" placeholder="筛选洋流名称 / 冷暖类型" @update:model-value="callbacks.onFilter" />
-    <UiButton variant="secondary" :disabled="worldRebuildBusy" @click="callbacks.onRegenerate?.()">仅重新计算洋流</UiButton>
-    <UiButton v-if="!worldRebuildBusy" :disabled="worldRebuildBusy" @click="callbacks.onWorldRebuild?.()">重算气候与世界</UiButton>
-    <UiButton v-else variant="danger" @click="callbacks.onCancelWorldRebuild?.()">取消重算</UiButton>
+    <div class="list-toolbar-actions">
+      <UiButton variant="secondary" :disabled="worldRebuildBusy" @click="callbacks.onRegenerate?.()">仅重新计算洋流</UiButton>
+      <UiButton v-if="!worldRebuildBusy" :disabled="worldRebuildBusy" @click="callbacks.onWorldRebuild?.()">重算气候与世界</UiButton>
+      <UiButton v-else variant="danger" @click="callbacks.onCancelWorldRebuild?.()">取消重算</UiButton>
+    </div>
   </div>
 
   <p v-if="worldRebuildBusy" class="ocean-current-world-status" role="status">{{ worldRebuildMessage }}</p>

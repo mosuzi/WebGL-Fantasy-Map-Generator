@@ -25,12 +25,13 @@ async function openPanel(name) {
   return panel.locator(".object-table-wrap").last().locator("tr[data-row-key]");
 }
 
-function redPixels(pixels) {
-  let red = 0;
+function rosePixels(pixels) {
+  let rose = 0;
   for (let i = 0; i < pixels.length; i += 4) {
-    if (pixels[i] > 160 && pixels[i + 1] < 100 && pixels[i + 2] < 105) red++;
+    const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+    if (r >= 135 && r <= 185 && g < 90 && b - g > 24 && r - b > 32) rose++;
   }
-  return red;
+  return rose;
 }
 
 async function renderedMapState() {
@@ -106,12 +107,13 @@ try {
         ms: parseFloat(getComputedStyle(p).animationDuration) * 1000,
         delay: parseFloat(getComputedStyle(p).animationDelay) * 1000
       })));
-      assert.ok(Math.abs(paths.at(-1).delay + paths.at(-1).ms - 900) < 0.1, name);
+      assert.equal(await outline.locator(".list-hover-trace").first().evaluate(g => getComputedStyle(g).stroke), "rgb(150, 47, 97)");
+      assert.ok(Math.abs(paths.at(-1).delay + paths.at(-1).ms - 1600) < 0.1, name);
       let delay = 0;
       const length = paths.reduce((sum, p) => sum + p.length, 0);
       for (const p of paths) {
         assert.ok(Math.abs(p.delay - delay) < 0.1);
-        assert.ok(Math.abs(p.ms - 900 * p.length / length) < 0.5, "速度须与对象轮廓总长成正比");
+        assert.ok(Math.abs(p.ms - 1600 * p.length / length) < 0.6, "各段描画时长须与轮廓长度成正比");
         delay += p.ms;
       }
       results[name] = {row: await row.getAttribute("data-row-key"), paths: paths.length};
@@ -125,17 +127,20 @@ try {
           return document.getElementById("list-hover-path-0").isPointInFill(new DOMPoint(p.x, p.y));
         });
         assert.notEqual(firstRingContainsCapital, false, "首都必须位于第一块领土");
-        const during = redPixels(PNG.sync.read(await page.screenshot()).data);
-        await page.waitForTimeout(1000);
-        const after = PNG.sync.read(await page.screenshot());
-        const complete = redPixels(after.data);
+        const during = rosePixels(PNG.sync.read(await page.screenshot()).data);
+        await outline.evaluate(svg => Promise.all(svg.getAnimations({subtree: true}).map(a => a.finished)));
+        const after = PNG.sync.read(await page.screenshot({path: process.env.FMG_HOVER_SHOT}));
+        const complete = rosePixels(after.data);
         await outline.evaluate(el => {el.style.visibility = "hidden";});
         const before = PNG.sync.read(await page.screenshot());
-        const baseline = redPixels(before.data);
+        const baseline = rosePixels(before.data);
         await outline.evaluate(el => {el.style.visibility = "";});
         assert.ok(complete > during && complete > baseline + 30, JSON.stringify({complete, during, baseline}));
         await checkInwardStroke(before, after);
-        assert.equal(redPixels(PNG.sync.read(await page.screenshot()).data), complete, "悬停结束后描边须保持");
+        assert.equal(rosePixels(PNG.sync.read(await page.screenshot()).data), complete, "悬停结束后描边须保持");
+        await page.emulateMedia({reducedMotion: "reduce"});
+        assert.equal(await outline.locator(".list-hover-trace").first().evaluate(g => getComputedStyle(g).animationName), "none");
+        await page.emulateMedia({reducedMotion: "no-preference"});
         Object.assign(results[name], {during, complete, baseline});
       }
       found = true;

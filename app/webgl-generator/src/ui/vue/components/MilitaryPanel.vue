@@ -18,8 +18,10 @@
       :options="statusOptions"
       @update:model-value="callbacks.onStatusChange"
     />
-    <UiFilterInput :model-value="state.filter" placeholder="筛选军团 / 国家 / 兵种" @update:model-value="callbacks.onFilter" />
-    <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成军事</UiButton>
+    <div class="list-filter-toolbar">
+      <UiFilterInput :model-value="state.filter" placeholder="筛选军团 / 国家 / 兵种" @update:model-value="callbacks.onFilter" />
+      <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成军事</UiButton>
+    </div>
   </div>
 
   <p v-if="battleEventsImportStatus" class="military-import-status">{{ battleEventsImportStatus }}</p>

@@ -1,7 +1,7 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="economy-panel-summary" />
 
-  <div class="economy-panel-controls">
+  <div class="economy-panel-controls list-filter-toolbar">
     <UiSegmented label="经济范围" :options="tabOptions" :model-value="state.tab" @select="callbacks.onTab" />
     <UiFilterInput :model-value="state.filter" placeholder="筛选商品 / 市场 / 城镇 / 国家 / 来源" @update:model-value="callbacks.onFilter" />
   </div>

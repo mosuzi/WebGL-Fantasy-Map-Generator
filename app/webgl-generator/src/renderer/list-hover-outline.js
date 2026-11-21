@@ -1,6 +1,6 @@
 import {listHoverGeometry} from "./list-hover-geometry.js";
 
-const DURATION = 900;
+const DURATION = 1600;
 const bands = [[16, 0.04], [13, 0.08], [10, 0.14], [7, 0.24], [4, 0.5], [2, 0.95]];
 
 // This sibling of the map canvas is transient. It participates in neither
@@ -27,7 +27,7 @@ export function showListHoverOutline(renderer, object, pointForObject) {
     const mask = element("clipPath", defs, {id: "list-hover-interior"});
     clip = element("path", mask, {"clip-rule": "evenodd"});
   }
-  const ink = element("g", svg, {fill: "none", stroke: "#e21a22", "stroke-linejoin": "round", ...(clip && {"clip-path": "url(#list-hover-interior)"})});
+  const ink = element("g", svg, {fill: "none", stroke: "#962f61", "stroke-linejoin": "round", ...(clip && {"clip-path": "url(#list-hover-interior)"})});
   const traces = strokes.map(path => {
     const trace = element("g", ink, {class: "list-hover-trace", "stroke-dasharray": "1 1"});
     for (const [width, opacity] of bands) {
