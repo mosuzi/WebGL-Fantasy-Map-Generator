@@ -69,7 +69,7 @@ try {
     assert.equal(layout.clippedButtons.length, 0, `${viewport.label} 城市详情按钮文字被裁切：${layout.clippedButtons.join("、")}`);
     assert.deepEqual(layout.overlapPairs, [], `${viewport.label} 城市详情按钮相互重叠`);
     assert.deepEqual(layout.rowCounts, [3], `${viewport.label} 操作应在同一行`);
-    assert.deepEqual(layout.iconSizes, [[32, 32, 20, 20], [32, 32, 20, 20]]);
+    assert.deepEqual(layout.iconSizes, [[24, 24, 15, 15], [24, 24, 15, 15]]);
     if (process.env.FMG_ACTION_SHOTS) await page.locator('[data-panel-id="object-details"]').screenshot({path: join(process.env.FMG_ACTION_SHOTS, `城市详情-${viewport.label}.png`)});
     layouts.push({...viewport, ...layout});
   }
@@ -219,9 +219,10 @@ async function inspectCityActions(page) {
     }));
     const rows = [];
     for (const rect of rects) {
-      const row = rows.find(item => Math.abs(item.top - rect.top) <= 2);
+      const center = rect.top + rect.height / 2;
+      const row = rows.find(item => center >= item.top && center < item.bottom);
       if (row) row.items.push(rect);
-      else rows.push({top: rect.top, items: [rect]});
+      else rows.push({top: rect.top, bottom: rect.top + rect.height, items: [rect]});
     }
     const computed = getComputedStyle(actions);
     const overlapPairs = [];

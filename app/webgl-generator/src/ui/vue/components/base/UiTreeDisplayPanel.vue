@@ -4,7 +4,7 @@
       <header class="ui-tree-display-header" @pointerdown="startPanelDrag">
         <strong>{{ title }}</strong>
         <span>{{ nodes.length }} 节点</span>
-        <ElButton class="ui-close-button ui-tree-display-close" text circle aria-label="关闭树状总览" @pointerdown.stop @click="emit('update:open', false)">×</ElButton>
+        <ElButton class="ui-icon-action ui-close-button ui-tree-display-close" aria-label="关闭树状总览" @pointerdown.stop @click="emit('update:open', false)">×</ElButton>
       </header>
 
       <div ref="viewport" class="ui-tree-display-viewport">

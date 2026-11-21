@@ -40,29 +40,25 @@
 
   <section v-if="selected" class="city-attribute-shortcuts">
     <strong class="city-attribute-name"><UiInlineValue :key="selected.id" ref="cityName" label="名称" :display="selected.rawName" :editor="{value: selected.rawName, maxLength: 48, disabled: modalActionActive, apply: value => callbacks.onRename(selected.id, value)}" /></strong>
+    <div class="ui-action-icon-row" role="group" aria-label="城市属性">
+      <UiButton
+        v-for="action in attributeActions"
+        :key="action.key"
+        class="ui-icon-action city-attribute-button"
+        :active="action.active"
+        :disabled="action.disabled || modalActionActive || attributeBusy"
+        :title="action.title"
+        :aria-label="action.label"
+        :aria-pressed="action.active ? 'true' : 'false'"
+        @click="handleAttributeChange(action)"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path :d="action.path" fill-rule="evenodd" /></svg>
+      </UiButton>
+    </div>
   </section>
+  <span v-if="attributeFeedback" class="city-attribute-feedback" role="status">{{ attributeFeedback }}</span>
 
-  <UiDetailGrid :key="selected?.id" class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows">
-    <template #标记>
-      <span v-if="selected.provincial">省会</span>
-      <div class="ui-action-icon-row" role="group" aria-label="城市属性">
-        <UiButton
-          v-for="action in attributeActions"
-          :key="action.key"
-          class="ui-icon-action city-attribute-button"
-          :active="action.active"
-          :disabled="action.disabled || modalActionActive || attributeBusy"
-          :title="action.title"
-          :aria-label="action.label"
-          :aria-pressed="action.active ? 'true' : 'false'"
-          @click="handleAttributeChange(action)"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path :d="action.path" /></svg>
-        </UiButton>
-      </div>
-      <span v-if="attributeFeedback" class="city-attribute-feedback" role="status">{{ attributeFeedback }}</span>
-    </template>
-  </UiDetailGrid>
+  <UiDetailGrid :key="selected?.id" class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
 
   <span v-if="populationFeedback" class="city-population-feedback" role="status">{{ populationFeedback }}</span>
 
@@ -259,7 +255,6 @@ const detailRows = computed(() => selected.value ? [
   {label: "潜在人口", value: formatPopulationValue(populationPotential.value),
     editor: selected.value.population !== populationPotential.value ? {type: "action", label: "采用潜在人口", disabled: populationDisabled.value, apply: () => applyPopulation(true)} : null},
   {label: "征募潜力", value: formatNumberValue(cityRecruitmentPotential(props.state.map.pack, props.state.map.pack.burgs[selected.value.burgId])) + " 人"},
-  {label: "标记", wide: true, value: selected.value.flags},
   {label: "资源区域", value: formatNumberValue(selected.value.resourceCells)},
   {label: "资源种类", value: selected.value.resourceGoodNames || "无"},
   {label: "所属国家", value: selected.value.stateName},

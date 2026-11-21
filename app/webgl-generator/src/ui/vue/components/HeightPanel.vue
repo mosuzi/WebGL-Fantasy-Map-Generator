@@ -386,7 +386,7 @@
       <ol v-if="state.terrainProgramDraftSteps.length" class="height-template-step-list">
         <li v-for="(step, index) in state.terrainProgramDraftSteps" :key="`${index}-${step.operation}`">
           <span>{{ index + 1 }}. {{ terrainProgramStepLabel(step) }}</span>
-          <button type="button" :aria-label="`移除第 ${index + 1} 步`" @click="callbacks.onTerrainProgramStepRemove?.(index)">×</button>
+          <UiButton class="ui-icon-action" :aria-label="`移除第 ${index + 1} 步`" @click="callbacks.onTerrainProgramStepRemove?.(index)">×</UiButton>
         </li>
       </ol>
       <p v-else class="height-action-help">尚未加入步骤。</p>
@@ -480,7 +480,7 @@
     >
       <header class="heightmap-workbench-header" @pointerdown="startWorkbenchDrag">
         <strong id="heightmap-workbench-title">高度图导入工作台</strong>
-        <ElButton class="ui-close-button heightmap-workbench-close" text circle aria-label="关闭高度图导入工作台" @click="closeImportWorkbench">×</ElButton>
+        <ElButton class="ui-icon-action ui-close-button heightmap-workbench-close" aria-label="关闭高度图导入工作台" @click="closeImportWorkbench">×</ElButton>
       </header>
 
       <div class="heightmap-workbench-body">

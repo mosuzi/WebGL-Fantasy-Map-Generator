@@ -89,11 +89,12 @@ const LAYER_CONTRACTS = Object.freeze([
   visualContract("political-labels", "国家与省份标签", "2；省份碰撞降级为 1", FILES.styles, [".political-label", ".province-label", ".province-label.collision-fallback", "z-index: 2", "z-index: 1"])
 ]);
 
+const editorIconSize = ["width: var(--editor-icon-hit)", "height: var(--editor-icon-hit)"];
 const TARGET_SIZE_CONTRACTS = Object.freeze([
-  targetSize("panel-header-actions", ".floating-panel-history-button", "28×28；与 .floating-panel-close 共用规则", "shared-panel-header", ["width: 28px", "height: 28px"]),
-  targetSize("icon-action", ".ui-icon-action.el-button", "32×32", "shared-action", ["width: 32px", "height: 32px"]),
-  targetSize("secondary-close", ".ui-secondary-action-close", "视觉 26×26；透明命中 28×28", "compact-close", ["width: 26px", "height: 26px"], [cssRef(".ui-secondary-action-close::before", ["inset: -1px"])]),
-  targetSize("table-row-action", ".table-icon-action", "32×32", "table-row", ["width: 32px", "height: 32px"]),
+  targetSize("panel-header-actions", ".floating-panel-history-button", "鼠标 24×24，触屏 32×32", "shared-panel-header", editorIconSize),
+  targetSize("icon-action", ".ui-icon-action.el-button", "鼠标 24×24，触屏 32×32", "shared-action", editorIconSize),
+  targetSize("secondary-close", ".ui-secondary-action-close", "鼠标 24×24，触屏 32×32", "compact-close", editorIconSize),
+  targetSize("table-row-action", ".table-icon-action", "鼠标 24×24，触屏 32×32", "table-row", editorIconSize),
   targetSize("table-sort", ".object-table-sort-button", "min-height 28；宽度随表头", "table-header", ["min-height: 28px", "width: 100%"]),
   targetSize("table-resize", ".object-table-column-resize-handle", "透明命中 16×表头高度；视觉线 2px", "precision-drag", ["width: 16px", "height: 100%"], [cssRef(".object-table-column-resize-handle::after", ["width: 2px"])]),
   targetSize("table-checkbox", ".object-table-selection-hit", "视觉 14×14；透明命中 28×28", "checkbox", ["width: 28px", "height: 28px"], [cssRef(".object-table-selection-checkbox", ["width: 14px", "height: 14px"])]),

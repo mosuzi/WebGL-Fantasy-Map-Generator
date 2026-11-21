@@ -18,7 +18,7 @@
     </template>
     <button v-else ref="trigger" type="button" class="ui-inline-trigger" data-layout-multiline="对象名称和备注可换行"
       :title="accessibleLabel" :aria-label="accessibleLabel" :disabled="editor.disabled" @click="start"><i v-if="editor.type === 'color'" class="ui-inline-swatch" :style="{backgroundColor: editor.value}" />{{ display }}</button>
-    <button v-if="editor.reset" type="button" class="ui-inline-reset" :aria-label="editor.resetLabel" :title="editor.resetLabel"
+    <button v-if="editor.reset" type="button" class="ui-inline-reset ui-icon-action" :aria-label="editor.resetLabel" :title="editor.resetLabel"
       :disabled="editor.disabled" @click="editor.reset()">↺</button>
     <small v-if="error" role="alert">{{ error }}</small>
   </span>
@@ -123,7 +123,10 @@ defineExpose({start});
 .ui-inline-choice select, .ui-inline-choice input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .ui-inline-field .ui-inline-trigger:hover, .ui-inline-choice:hover { text-decoration-style: solid; }
 .ui-inline-field :focus-visible, .ui-inline-choice:focus-within { outline: 2px solid var(--ui-accent, #34666a); outline-offset: 2px; }
-.ui-inline-field .ui-inline-reset { text-decoration: none; width: 24px; text-align: center; }
+.ui-inline-field .ui-inline-reset {
+  width: var(--editor-icon-hit); height: var(--editor-icon-hit); flex: none; padding: 0;
+  font-size: var(--editor-icon-size); text-decoration: none; text-align: center;
+}
 .ui-inline-field :disabled, .ui-inline-choice.is-disabled { cursor: default; text-decoration: none; }
 .ui-inline-field .ui-inline-input { min-width: 0; width: 100%; box-sizing: border-box; font: inherit; }
 .ui-inline-field small { flex-basis: 100%; font-weight: normal; }

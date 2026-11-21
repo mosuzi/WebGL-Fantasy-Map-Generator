@@ -710,7 +710,7 @@ async function auditPanel(page, panel) {
           minButtonWidth: minRectValue(buttons, "width"),
           maxButtonHeight: maxRectValue(buttons, "height"),
           compactIconGroup,
-          minButtonThreshold: compactIconGroup ? 28 : 72
+          minButtonThreshold: compactIconGroup ? (matchMedia("(pointer: coarse)").matches ? 32 : 24) : 72
         };
       })
       .filter(Boolean);

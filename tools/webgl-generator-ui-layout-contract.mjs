@@ -10,10 +10,13 @@ try {
     <button id="allowed" data-layout-multiline="文件名和说明分行">文件名<br>说明</button>
     <button id="bad-exception" data-layout-multiline="允许分行" style="width:40px;height:15px;overflow:hidden">很长的文字内容</button>
     <div class="box"><button>原按钮</button><button id="overlap">遮挡</button></div>
+    <button id="small-icon" class="ui-icon-action" style="width:18px;height:24px" aria-label="定位"></button>
+    <button id="wide-icon" class="ui-icon-action" style="width:48px;height:24px" aria-label="锁定"></button>
     <ul><li role="menuitem" id="wrapped-menu" style="width:50px">名称库改名</li></ul><button hidden>隐藏按钮<br>不计</button>`);
   const r = await page.evaluate(inspectUiLayout);
   for (const [target, type] of [["#wrapped", "label-wrap"], ["#clipped", "label-clip"], ["#bad-exception", "label-clip"], ["#wrapped-menu", "label-wrap"]]) assert.ok(r.issues.some(i => i.target === target && i.type === type), `${target}/${type}`);
   assert.ok(r.issues.some(i => i.type === "control-overlap"));
+  for (const id of ["#small-icon", "#wide-icon"]) assert.ok(r.issues.some(i => i.target === id && i.type === "icon-target"));
   assert.ok(!r.issues.some(i => ["#good", "#allowed"].includes(i.target)));
   console.log("排版检测器：折行、裁切、重叠反例拒绝；显式多行仍检查裁切；隐藏项不误报。");
 } finally {await browser.close();}

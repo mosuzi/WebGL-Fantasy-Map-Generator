@@ -43,7 +43,7 @@ try {
               const input = n.matches(".ui-filter-input"), button = n.matches("button");
               const tabs = Array.from(n.querySelectorAll(".el-segmented__item"), tab => tab.getBoundingClientRect().top);
               return {type: input ? "input" : button ? "button" : "field", stackedTabs: new Set(tabs).size > 1, text: n.textContent.trim().slice(0, 24),
-                x: Math.round(r.left - rect.left), y: Math.round(r.top - rect.top), w: Math.round(r.width)};
+                x: Math.round(r.left - rect.left), centerY: Math.round(r.top + r.height / 2 - rect.top), w: Math.round(r.width)};
             });
           return {group: group.className, w: Math.round(rect.width), bits};
         }));
@@ -62,7 +62,7 @@ try {
             centered: svg && Math.abs(hit.x + hit.width / 2 - svg.x - svg.width / 2) <= 1 && Math.abs(hit.y + hit.height / 2 - svg.y - svg.height / 2) <= 1};
         });
       });
-      for (const icon of icons) assert.ok(icon.label && icon.hit.every(v => v === 32) && icon.glyph?.every(v => v === 20) && icon.centered, JSON.stringify({name, width, icon}));
+      for (const icon of icons) assert.ok(icon.label && icon.hit.every(v => v === 24) && icon.glyph?.every(v => v === 15) && icon.centered, JSON.stringify({name, width, icon}));
       if (width === 560 && ["city", "state", "province", "culture", "religion", "lake", "river"].includes(name)) {
         const snapshot = () => page.evaluate(kind => {
           const {map, editHistory} = window.__webglGeneratorApp;
@@ -81,8 +81,8 @@ try {
       }
       if (name === "state" || name === "city") {
         const {bits} = rows[0], [input, rename, regenerate] = bits;
-        if (bits.length !== 3 || Math.abs(rename.y - regenerate.y) > 3
-          || (width >= 560 && Math.abs(input.y - rename.y) > 3)) issues.push({width, name, ...rows[0]});
+        if (bits.length !== 3 || Math.abs(rename.centerY - regenerate.centerY) > 5
+          || (width >= 560 && Math.abs(input.centerY - rename.centerY) > 5)) issues.push({width, name, ...rows[0]});
         if (name === "state") await panel.locator(".state-panel-controls").screenshot({path: join(out, "国家筛选-" + width + ".png")});
         if (width === 560) {
           const filter = panel.locator(".ui-filter-input input").first();

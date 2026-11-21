@@ -119,13 +119,31 @@ try {
     assert.notDeepEqual(await snapshot(), keyboardBefore, "空格键须激活图标按钮");
     await button("撤销").click();
     assert.deepEqual(await snapshot(), keyboardBefore);
+    await checkCityHeader(panel, 24);
+    await panel.locator(".city-attribute-shortcuts").screenshot({path: join(output, `${target}-city-header.png`)});
     await panel.screenshot({path: join(output, `${target}-desktop.png`)});
     await page.setViewportSize({width: 690, height: 960});
-    const layout = await panel.getByRole("group", {name: "城市属性"}).evaluate(element => ({width: element.clientWidth, scrollWidth: element.scrollWidth, buttons: [...element.querySelectorAll("button")].map(button => ({label: button.getAttribute("aria-label"), width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height}))}));
-    assert.equal(layout.width, layout.scrollWidth, "窄面板图标组不得溢出");
-    assert.equal(layout.buttons.length, 6);
-    assert.ok(layout.buttons.every(button => button.width >= 32 && button.height >= 32));
+    const layout = await checkCityHeader(panel, 24);
     await panel.screenshot({path: join(output, `${target}-narrow.png`)});
+    if (target === targets[0]) {
+      await page.setViewportSize({width: 320, height: 800});
+      const title = panel.locator(".city-attribute-name");
+      const original = await title.innerText();
+      await title.getByRole("button").click();
+      const name = "长安".repeat(24);
+      await title.getByRole("textbox").fill(name);
+      await checkCityHeader(panel, 24);
+      await title.getByRole("textbox").press("Enter");
+      await title.getByRole("button").filter({hasText: name}).waitFor();
+      await checkCityHeader(panel, 24);
+      await button("撤销").click();
+      assert.equal(await title.innerText(), original);
+      const touch = await page.context().newCDPSession(page);
+      await touch.send("Emulation.setTouchEmulationEnabled", {enabled: true, maxTouchPoints: 1});
+      await checkCityHeader(panel, 32);
+      await touch.send("Emulation.setTouchEmulationEnabled", {enabled: false});
+      await touch.detach();
+    }
     if (profiler) {
       const {profile} = await profiler.send("Profiler.stop");
       writeFileSync(join(output, `${target}.cpuprofile`), JSON.stringify(profile));
@@ -150,6 +168,33 @@ try {
 } finally {
   await browser.close();
   await new Promise(resolve => server.httpServer.close(resolve));
+}
+
+async function checkCityHeader(panel, hitSize) {
+  const layout = await panel.locator(".city-attribute-shortcuts").evaluate(header => {
+    const name = header.querySelector(".city-attribute-name").getBoundingClientRect();
+    const group = header.querySelector('[role="group"]').getBoundingClientRect();
+    return {nameGap: group.left - name.right, centerOffset: group.top + group.height / 2 - name.top - name.height / 2,
+      ink: getComputedStyle(header.querySelector(".city-attribute-name")).color,
+      overflow: header.scrollWidth - header.clientWidth, groupWidth: group.width,
+      buttons: Array.from(header.querySelectorAll(".city-attribute-button"), button => {
+        const bounds = button.getBoundingClientRect(), svg = button.querySelector("svg"), style = getComputedStyle(button);
+        return {label: button.getAttribute("aria-label"), width: bounds.width, height: bounds.height, glyph: svg.getBoundingClientRect().width,
+          state: button.getAttribute("aria-pressed"), color: style.color, fill: getComputedStyle(svg).fill, shadow: style.boxShadow};
+      })};
+  });
+  assert.ok(Math.abs(layout.centerOffset) <= 1 && layout.nameGap === 6, "属性组须紧邻名称且垂直居中");
+  assert.equal(layout.overflow, 0);
+  assert.equal(layout.groupWidth, hitSize * 6 + 2 * 5, "六个属性应单行等距排列");
+  assert.deepEqual(layout.buttons.map(button => button.label), ["首都", "贸易中心", "要塞", "城墙", "港口", "神庙"]);
+  for (const item of layout.buttons) {
+    assert.deepEqual([item.width, item.height, item.glyph], [hitSize, hitSize, 15]);
+    assert.equal(item.shadow, "none");
+    assert.equal(item.fill, item.color);
+    if (item.state === "true") assert.equal(item.color, layout.ink);
+    else assert.notEqual(item.color, layout.ink, "关闭的属性应浅于名称与启用的属性");
+  }
+  return layout;
 }
 
 async function select(id) {

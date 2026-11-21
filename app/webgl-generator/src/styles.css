@@ -7,6 +7,9 @@
   --ui-focus-width: 2px;
   --ui-focus-offset: 2px;
   --ui-focus-shadow: 0 0 0 3px rgba(98, 171, 216, 0.18);
+  --editor-icon-hit: 24px;
+  --editor-icon-size: 15px;
+  --editor-icon-gap: 2px;
   /* Element Plus 共用尺寸与遮罩变量；界面颜色见 panel-theme.css。优先用变量约束组件默认状态，局部 CSS 只处理布局和特殊交互。 */
   --el-border: 1px solid var(--el-border-color);
   --el-border-radius-base: 6px;
@@ -31,6 +34,10 @@
   --el-transition-duration-fast: 0.12s;
   --el-popper-border-radius: 7px;
   --el-slider-border-radius: 999px;
+}
+
+@media (pointer: coarse) {
+  :root { --editor-icon-hit: 32px; }
 }
 
 * {
@@ -2512,13 +2519,14 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 4px;
+  gap: var(--editor-icon-gap);
 }
 
 .floating-panel-history-button,
 .floating-panel-close {
-  width: 28px;
-  height: 28px;
+  width: var(--editor-icon-hit);
+  height: var(--editor-icon-hit);
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2529,15 +2537,15 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 
 .ui-close-button {
   font-family: Arial, sans-serif;
-  font-size: 18px;
+  font-size: var(--editor-icon-size);
   font-weight: 500;
   line-height: 1;
 }
 
 .floating-panel-history-button:hover,
 .floating-panel-close:hover {
-  background: transparent;
-  color: var(--panel-accent);
+  background: var(--panel-surface-alt);
+  color: var(--panel-text);
 }
 
 .floating-panel-history-button:disabled {
@@ -3002,13 +3010,15 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 .ui-action-icon-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--editor-icon-gap);
 }
 
 .ui-icon-action.el-button {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+  width: var(--editor-icon-hit);
+  height: var(--editor-icon-hit);
+  min-width: var(--editor-icon-hit);
+  flex: 0 0 var(--editor-icon-hit);
+  transition: none;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -3021,14 +3031,14 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   padding: 0;
 }
 
-.ui-icon-action.el-button:hover:not(.is-disabled),
-.ui-icon-action.el-button.active {
-  background: transparent;
-  color: var(--panel-accent);
+.ui-icon-action.el-button:hover:not(.is-disabled) {
+  background: var(--panel-surface-alt);
+  color: var(--panel-text);
 }
 
 .ui-icon-action.el-button.active {
-  box-shadow: inset 0 -2px 0 var(--panel-accent);
+  background: color-mix(in srgb, var(--panel-text) 12%, transparent);
+  color: var(--panel-text);
 }
 
 .ui-icon-action.el-button:focus-visible {
@@ -3045,8 +3055,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 
 .ui-icon-action.el-button.active.is-disabled,
 .ui-icon-action.el-button.active:disabled {
-  background: transparent;
-  color: var(--panel-accent);
+  color: var(--panel-text);
   opacity: 0.82;
 }
 
@@ -3060,9 +3069,9 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 .ui-icon-action.el-button .el-icon,
 .table-icon-action .el-icon {
   flex: none;
-  width: 20px;
-  height: 20px;
-  font-size: 20px;
+  width: var(--editor-icon-size);
+  height: var(--editor-icon-size);
+  font-size: var(--editor-icon-size);
 }
 
 .ui-secondary-action-panel {
@@ -3109,39 +3118,28 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   appearance: none;
   display: grid;
   place-items: center;
-  width: 26px;
-  flex: 0 0 26px;
-  height: 26px;
-  min-width: 26px;
+  width: var(--editor-icon-hit);
+  flex: 0 0 var(--editor-icon-hit);
+  height: var(--editor-icon-hit);
+  min-width: var(--editor-icon-hit);
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--panel-text);
   cursor: pointer;
   font: inherit;
-  font-size: 17px;
+  font-size: var(--editor-icon-size);
   line-height: 1;
   margin: 0;
   padding: 0;
   position: relative;
 }
 
-.ui-secondary-action-close::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-}
-
 .ui-secondary-action-close:hover,
-.ui-secondary-action-close:focus-visible {
-  background: transparent;
-  color: var(--panel-accent);
-  box-shadow: none;
-}
-
+.ui-secondary-action-close:focus-visible,
 .ui-secondary-action-close:active {
-  background: transparent;
-  color: var(--panel-accent);
+  background: var(--panel-surface-alt);
+  color: var(--panel-text);
 }
 
 .ui-secondary-action-body {
@@ -3351,7 +3349,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .object-table-native {
-  --object-table-action-width: 32px;
+  --object-table-action-width: var(--editor-icon-hit);
   width: 100%;
   min-width: max-content;
   border-collapse: separate;
@@ -3669,10 +3667,8 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
+  width: var(--editor-icon-hit);
+  height: var(--editor-icon-hit);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -3684,10 +3680,9 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .table-icon-action:hover,
-.table-icon-action:focus-visible,
-.object-table-lock-action[aria-pressed="true"] {
-  background: transparent;
-  color: var(--panel-accent);
+.table-icon-action:focus-visible {
+  background: var(--panel-surface-alt);
+  color: var(--panel-text);
 }
 
 .river-panel-details,
@@ -3919,7 +3914,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 .height-player-tool-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--editor-icon-gap);
   margin-bottom: 12px;
 }
 
@@ -3943,12 +3938,6 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   border-color: var(--panel-accent);
   background: linear-gradient(180deg, var(--panel-accent-soft) 0%, var(--panel-accent-soft) 100%);
   color: var(--panel-accent);
-}
-
-.height-player-tool-button.ui-icon-action.el-button {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
 }
 
 .height-player-tool-state {
@@ -4905,16 +4894,13 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .generation-map-name-control .generation-field-row input {
-  padding-right: 38px;
+  padding-right: calc(var(--editor-icon-hit) + 6px);
 }
 
 .generation-save-template-toggle.ui-icon-action.el-button {
   position: absolute;
   top: 50%;
   right: 3px;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
   transform: translateY(-50%);
   border: 0;
   background: transparent;
@@ -4926,7 +4912,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 .generation-save-template-toggle.ui-icon-action.el-button.active {
   border-color: transparent;
   background: transparent;
-  color: var(--panel-accent);
+  color: var(--panel-text);
 }
 
 .generation-save-template-toggle.ui-icon-action.el-button > span {
@@ -5243,7 +5229,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 
 .project-export-panel-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr) var(--editor-icon-hit);
   align-items: center;
   gap: 8px;
   cursor: move;
@@ -5261,14 +5247,14 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .project-export-panel-close {
-  width: 28px;
-  height: 28px;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  width: var(--editor-icon-hit);
+  height: var(--editor-icon-hit);
+  padding: 0;
+  border: 0;
   background: transparent;
   color: var(--panel-text);
   cursor: pointer;
-  font-size: 18px;
+  font-size: var(--editor-icon-size);
   line-height: 1;
 }
 
@@ -5768,23 +5754,6 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 .heightmap-workbench-header strong {
   color: var(--panel-text);
   font-size: 13px;
-}
-
-.heightmap-workbench-close.el-button {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--panel-text);
-  font-size: 17px;
-}
-
-.heightmap-workbench-close.el-button:hover {
-  background: transparent;
-  color: var(--panel-accent);
 }
 
 .heightmap-workbench-body {
@@ -7914,31 +7883,41 @@ input.ui-switch-native {
 
 .city-attribute-shortcuts {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: 6px;
   margin: 10px 0;
 }
 
 .city-attribute-name {
+  min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
   color: var(--panel-text);
 }
 
+.city-attribute-shortcuts .ui-action-icon-row {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+.city-attribute-button.el-button[aria-pressed="false"] {
+  color: color-mix(in srgb, var(--panel-text) 59%, var(--panel-surface));
+}
+
+.city-attribute-button.el-button[aria-pressed="true"] {
+  background: transparent;
+  color: var(--panel-text);
+  opacity: 1;
+}
+
 .city-attribute-button svg {
   display: block;
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  width: var(--editor-icon-size);
+  height: var(--editor-icon-size);
+  fill: currentColor;
 }
 
 .city-attribute-feedback {
-  flex-basis: 100%;
   font-size: 12px;
   color: var(--panel-text);
 }
@@ -8795,7 +8774,7 @@ input.ui-switch-native {
 
 .ui-tree-display-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 28px;
+  grid-template-columns: minmax(0, 1fr) auto var(--editor-icon-hit);
   align-items: center;
   gap: 10px;
   min-height: 38px;
@@ -8823,24 +8802,9 @@ input.ui-switch-native {
   font-size: 12px;
 }
 
-.ui-tree-display-close.el-button {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--panel-text);
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-  margin: 0;
-  padding: 0;
-}
-
-.ui-tree-display-close.el-button:hover {
-  background: transparent;
-  color: var(--panel-accent);
+.ui-close-button.ui-icon-action,
+.height-template-step-list .ui-icon-action {
+  font-size: var(--editor-icon-size);
 }
 
 .ui-tree-display-viewport {
@@ -10706,10 +10670,6 @@ input.ui-switch-native {
   min-width: max-content;
   color: var(--panel-text);
   font-size: 12px;
-}
-
-.regeneration-lock-action.el-button {
-  flex: 0 0 32px;
 }
 
 .state-panel-controls .ui-filter-input,

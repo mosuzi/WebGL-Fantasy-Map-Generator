@@ -152,11 +152,16 @@
 .ui-button[data-layout-multiline],.ui-button[data-layout-multiline]>span{white-space:normal;overflow-wrap:anywhere}
 .floating-panel .el-button+.el-button,.ui-secondary-action-panel .el-button+.el-button{margin-left:0}
 .floating-panel :is([class$=-controls],[class$=-actions],[class$=-toolbar]),.ui-secondary-action-panel [class$=-actions]{gap:8px;flex-wrap:wrap;min-width:0}
-.ui-action-icon-row,.ui-panel-io-actions,.regeneration-lock-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.ui-panel-io-group{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px}
-.ui-icon-action,.floating-panel-history-button,.floating-panel-close{min-width:32px;min-height:32px;width:32px;height:32px;flex:0 0 32px;padding:5px!important;border-radius:6px}
+.floating-panel :is(.ui-action-icon-row,.ui-panel-io-actions,.regeneration-lock-actions,.list-toolbar-actions,.object-details-actions,.floating-panel-header-actions),
+.ui-secondary-action-panel .ui-action-icon-row { gap: var(--editor-icon-gap); }
+.ui-panel-io-group{display:inline-flex;align-items:center;flex-wrap:wrap;gap:var(--editor-icon-gap)}
 .ui-panel-danger-action.el-button{width:auto;flex:0 1 auto;gap:5px;padding-inline:9px!important}
 .floating-panel :is(button,input,select,textarea):focus-visible,.ui-secondary-action-panel :is(button,input,select,textarea):focus-visible{outline:2px solid var(--panel-accent);outline-offset:2px}
+:is(.floating-panel,.ui-secondary-action-panel) :is(.ui-icon-action.el-button,.table-icon-action,.floating-panel-close,.floating-panel-history-button,.ui-secondary-action-close):focus-visible {
+  outline: 2px solid var(--panel-text);
+  outline-offset: -2px;
+  box-shadow: none;
+}
 .floating-panel :is([class$=-grid],[class$=-editor],[class$=-field]){min-width:0}
 .floating-panel :is(.ui-key-value-value,.ui-state-banner-message,[role=status]){overflow-wrap:anywhere;line-height:1.5}
 .floating-panel input[type=number]:not(.el-input__inner){min-width:64px}

@@ -92,14 +92,14 @@ assertHitVsVisual({
   label: "列宽拖柄"
 });
 assert.ok(px(cssRule(".object-table-sort-button"), "min-height") >= 28, "排序按钮命中高度不得小于 28px");
-assert.equal(px(cssRule(".ui-secondary-action-close"), "width"), 26, "二级关闭视觉宽度保持 26px");
-assert.equal(insetExpansion(cssRule(".ui-secondary-action-close::before")), 2, "二级关闭透明命中应扩展到 28px");
+assert.match(cssRule(".ui-secondary-action-close"), /width: var\(--editor-icon-hit\)/);
+assert.match(cssRule(".ui-secondary-action-close"), /height: var\(--editor-icon-hit\)/);
 assert.equal(px(cssRule(".object-table-empty-action"), "min-height"), 26, "空态动作视觉高度保持 26px");
 assert.equal(insetExpansion(cssRule(".object-table-empty-action::before")), 2, "空态动作透明命中应扩展到至少 28px");
 assert.match(tableSource, /@keydown\.space\.self\.prevent/, "移除多选框后保留行的键盘选择入口");
-assert.equal(px(cssRule(".object-table-action-cell"), "width"), 40);
-assert.equal(px(cssRule(".object-table-lock-cell"), "width"), 40);
-assert.equal(px(cssRule(".has-locate-action .object-table-lock-cell"), "right"), 40, "锁列固定在定位列左边");
+assert.match(cssRule(".object-table-native"), /--object-table-action-width: var\(--editor-icon-hit\)/);
+assert.match(cssRule(".object-table-lock-cell"), /width: var\(--object-table-action-width\)/);
+assert.match(cssRule(".has-locate-action .object-table-lock-cell"), /right: var\(--object-table-action-width\)/, "锁列固定在定位列左边");
 assert.equal((tableSource.match(/emit\("column-resize"/g) || []).length, 1, "列宽 pointerup 至多派发一次持久化事件");
 assert.match(tableSource, /session\.finish\(event\?\.type === "pointerup" \? "pointerup" : event\?\.type \|\| "unmount", event\)/, "列宽必须只把 pointerup 路由为提交");
 runSelectionEventContract();
@@ -109,7 +109,7 @@ console.log(JSON.stringify({
   tables: {hosts: 24, instances: 27, virtual: 27, resizable: 26, checkbox: 0, ctrlSelection: 21, locate: 20, doubleClick: 11},
   rowHeight: OBJECT_TABLE_ROW_HEIGHT,
   panelAvailableHeight: {576: 504, 720: 648, 820: 748},
-  hitTargets: {resize: "2/16", sort: 28, secondaryClose: "26/28", emptyAction: "26/28"}
+  hitTargets: {resize: "2/16", sort: 28, secondaryClose: "24/32", emptyAction: "26/28"}
 }, null, 2));
 
 function cssRule(selector) {

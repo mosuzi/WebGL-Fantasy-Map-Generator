@@ -54,16 +54,16 @@ export async function inspectListInteraction(page) {
   for (const sample of geometry.samples) {
     if (sample.locate) {
       assert.ok(Math.abs(sample.locate.right - sample.edge) < 2, "定位列始终固定右侧");
-      assert.ok(Math.abs(sample.locate.right - sample.locate.left - 32) <= 0.5, "定位列应与 32px 命中区同宽");
+      assert.ok(Math.abs(sample.locate.right - sample.locate.left - 24) <= 0.5, "定位列应与 24px 桌面命中区同宽");
     }
     if (sample.lock) {
       assert.ok(Math.abs(sample.lock.right - (sample.locate?.left ?? sample.edge)) < 2, "锁列贴合定位且不重叠");
-      assert.ok(Math.abs(sample.lock.right - sample.lock.left - 32) <= 0.5, "锁列应与 32px 命中区同宽");
+      assert.ok(Math.abs(sample.lock.right - sample.lock.left - 24) <= 0.5, "锁列应与 24px 桌面命中区同宽");
       assert.ok(Math.abs(sample.headRight - sample.lock.right) < 2, "锁列表头与表体对齐");
     }
   }
   for (const button of geometry.iconButtons) {
-    assert.ok(Math.abs(button.width - 32) < 1 && Math.abs(button.height - 32) < 1, "表格图标命中区应为正方形");
+    assert.ok(Math.abs(button.width - 24) < 1 && Math.abs(button.height - 24) < 1, "表格图标命中区应为正方形");
     assert.equal(button.border, "0px", "表格图标不应带常态圆框");
     assert.equal(button.background, "rgba(0, 0, 0, 0)", "表格图标不应带常态底框");
   }

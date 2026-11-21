@@ -5,12 +5,12 @@ import {createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {CITY_DEVELOPMENT_DESCRIPTIONS} from "../generator/city-development.js";
 
 export const CITY_ATTRIBUTE_OPTIONS = Object.freeze([
-  {key: "capital", label: "首都", path: "m3 6 4 4 5-7 5 7 4-4-2 13H5Z"},
-  {key: "plaza", label: "贸易中心", path: "M3 10h18M5 10v10h14V10M3 10l2-6h14l2 6M9 20v-6h6v6"},
-  {key: "citadel", label: "要塞", path: "M4 21V5h4v4h2V3h4v6h2V5h4v16ZM10 21v-6h4v6"},
-  {key: "walls", label: "城墙", path: "M3 20V6h4v4h3V6h4v4h3V6h4v14ZM3 15h18M8 15v5m8-5v5"},
-  {key: "port", label: "港口", path: "M12 7v14M8 10h8M3 14v3c0 2 4 4 9 4s9-2 9-4v-3M3 14l3 3m15-3-3 3M15 4a3 3 0 1 1-6 0 3 3 0 0 1 6 0"},
-  {key: "temple", label: "神庙", path: "m3 8 9-5 9 5ZM5 10v8m5-8v8m4-8v8m5-8v8M3 21h18M4 18h16"}
+  {key: "capital", label: "首都", path: "m12 1 3.3 6.8 7.5 1.1-5.4 5.3 1.3 7.5-6.7-3.6-6.7 3.6 1.3-7.5-5.4-5.3 7.5-1.1Z"},
+  {key: "plaza", label: "贸易中心", path: "M4 3h16l3 6v2a3 3 0 0 1-5 2 3 3 0 0 1-4 0 3 3 0 0 1-4 0 3 3 0 0 1-4 0 3 3 0 0 1-5-2V9ZM3 15h3v4h7v-4h5v6H3Zm16 0h2v6h-2Z"},
+  {key: "citadel", label: "要塞", path: "M4 2h4v4h2V2h4v4h2V2h4v7l-3 3 1 6H6l1-6-3-3ZM4 19h16v3H4Z"},
+  {key: "walls", label: "城墙", path: "M1 5h3v3h2V5h3v7h6V5h3v3h2V5h3v16h-9v-4a2 2 0 0 0-4 0v4H1Zm3 6v3h2v-3Zm14 0v3h2v-3Z"},
+  {key: "port", label: "港口", path: "M12 1a4 4 0 0 1 1.5 7.7V10H17v2.5h-3.5v6.6a8 8 0 0 0 5.2-3.4L17 15l5-3-.2 6-1.2-.8a11 11 0 0 1-8.6 5.1 11 11 0 0 1-8.6-5.1l-1.2.8L2 12l5 3-1.7.7a8 8 0 0 0 5.2 3.4v-6.6H7V10h3.5V8.7A4 4 0 0 1 12 1Zm0 2.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"},
+  {key: "temple", label: "神庙", path: "m12 1 11 6v2H1V7Zm-9 9h4v8H3Zm7 0h4v8h-4Zm7 0h4v8h-4ZM1 19h22v3H1Z"}
 ]);
 
 export function readCityAttributeActions(map, cityId) {

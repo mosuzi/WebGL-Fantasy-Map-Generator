@@ -9,6 +9,7 @@ export function inspectUiLayout(selector = "body") {
   const key = el => el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}.${[...el.classList].slice(0, 3).join(".")}`;
   const issue = (el, type, detail) => issues.push({type, target: key(el), text: el.textContent.trim().replace(/\s+/g, " ").slice(0, 100), detail});
   const buttons = [...new Set(roots.flatMap(root => [...root.querySelectorAll('button,[role="tab"],[role="menuitem"],.el-segmented__item')]))].filter(visible);
+  const iconHit = matchMedia("(pointer: coarse)").matches ? 32 : 24;
   for (const el of buttons) {
     // 排序标题属于表头排版，拖柄与数字步进属于复合输入，不按操作按钮计。
     if (el.matches('.object-table-sort-button,.object-table-column-resize-handle,.el-slider__button') || el.closest('.el-input-number')) continue;
@@ -27,7 +28,9 @@ export function inspectUiLayout(selector = "body") {
     if (lines > 1 && !reason) issue(el, "label-wrap", `${lines} 行`);
     const clipped = rects.some(t => t.left < r.left - 2 || t.right > r.right + 2 || t.top < r.top - 2 || t.bottom > r.bottom + 2);
     if (clipped || el.scrollWidth > el.clientWidth + 2) issue(el, "label-clip", "文本越过按钮边界或被裁切");
-    if (el.matches('.ui-icon-action,.ui-button') && (r.height < 30 || r.width < 30)) issue(el, "small-target", `${r.width.toFixed(1)} × ${r.height.toFixed(1)}`);
+    if (el.matches('.ui-icon-action,.table-icon-action,.floating-panel-history-button,.ui-close-button,.map-search-close')) {
+      if (Math.abs(r.width - iconHit) > 1 || Math.abs(r.height - iconHit) > 1) issue(el, "icon-target", `${r.width.toFixed(1)} × ${r.height.toFixed(1)}`);
+    } else if (el.matches('.ui-button') && (r.height < 30 || r.width < 30)) issue(el, "small-target", `${r.width.toFixed(1)} × ${r.height.toFixed(1)}`);
     // 允许滚动列表中的按钮处于滚动区外；禁止静态操作区撑出面板。
     for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
       const style = getComputedStyle(p), pr = p.getBoundingClientRect();
