@@ -2794,8 +2794,35 @@ export class PlaceholderMapRenderer {
     return true;
   }
 
-  refreshPointLayers({draw = true, binding = null} = {}) {
+  refreshPointLayers({draw = true, binding = null, cityIds = null, populationMaximum = false} = {}) {
     if (!this.map) return;
+    if (cityIds?.length && this.pointDrawRanges) {
+      const {gl, map} = this, context = createRenderContext(map);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.pointBuffer);
+      const cityRange = this.pointDrawRanges.find(range => range.layer === "cities");
+      if (cityRange) {
+        const ids = new Set(cityIds);
+        let offset = cityRange.first;
+        for (const city of map.settlements.cities) {
+          if (!city) continue;
+          if (ids.has(city.id)) {
+            const vertex = [];
+            appendCityPoint(vertex, context, city);
+            gl.bufferSubData(gl.ARRAY_BUFFER, offset * 24, new Float32Array(vertex));
+          }
+          offset++;
+        }
+      }
+      const populationRange = populationMaximum && this.pointDrawRanges.find(range => range.layer === "population");
+      if (populationRange) {
+        const vertices = [];
+        appendPopulationPoints(vertices, context, map.settlements);
+        gl.bufferSubData(gl.ARRAY_BUFFER, populationRange.first * 24, new Float32Array(vertices));
+      }
+      adoptRenderCacheResourceBinding(this, "point", currentRendererRenderCacheBinding(this, binding));
+      if (draw) this.draw();
+      return;
+    }
     this.cellMetricLayer?.invalidate();
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("pointRefresh", {drawRequested: draw}, startedAt);
@@ -5029,7 +5056,7 @@ export class PlaceholderMapRenderer {
     };
   }
 
-  buildLabels(map, {cityRolesOnly = false, politicalOnly = false, stateIds = []} = {}) {
+  buildLabels(map, {cityRolesOnly = false, politicalOnly = false, stateIds = [], cityIds = null} = {}) {
     if (!this.overlay) {
       this.gridCellIdLayer = null;
       this.labelItems = [];
@@ -5074,8 +5101,26 @@ export class PlaceholderMapRenderer {
         ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CUSTOM).sort((a, b) => a.rank - b.rank)
       ]
       : [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getLabelZones(map), ...getCustomLabels(map)];
+    const localEdit = scoped && cityIds?.length && !politicalOnly;
+    const retained = new Set();
+    if (localEdit) {
+      const oldCities = new Map(this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).map(item => [item.targetId, item]));
+      for (const [i, candidate] of sourceLabels.entries()) {
+        const old = oldCities.get(candidate.targetId);
+        if (candidate.targetKind === LABEL_TARGET_KIND.CITY && old && !cityIds.includes(candidate.targetId) && old.text === candidate.text) {
+          if (old.rank !== candidate.rank) {
+            old.rank = candidate.rank;
+            old.layout = resolveLabelLayout(map, candidate.targetKind, candidate.targetId, candidate.city, candidate);
+            old.minScale = old.layout.minScale;
+          }
+          sourceLabels[i] = old;
+        }
+        if (sourceLabels[i].node) retained.add(sourceLabels[i]);
+      }
+    }
     if (scoped) {
       for (const item of this.labelItems) {
+        if (retained.has(item)) continue;
         if (politicalOnly
           ? (item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId))) || (item.targetKind === LABEL_TARGET_KIND.PROVINCE && provinceIdSet.has(Number(item.targetId)))
           : item.targetKind === LABEL_TARGET_KIND.CITY || (item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId)))) item.node.remove();
@@ -5085,7 +5130,7 @@ export class PlaceholderMapRenderer {
     const fragment = documentRef.createDocumentFragment();
     const labels = sourceLabels.map(item => {
       if (scoped && item.node) {
-        fragment.append(item.node);
+        if (!localEdit) fragment.append(item.node);
         return item;
       }
       const node = documentRef.createElement("span");
@@ -5121,23 +5166,25 @@ export class PlaceholderMapRenderer {
     const cityLabelWidths = politicalOnly ? null : new Map(labels
       .filter(item => item.targetKind === LABEL_TARGET_KIND.CITY)
       .map(item => [String(item.targetId), item.metrics?.width]));
-    if (!politicalOnly) this.cityIconItems = getCityIconItems(map).map(item => ({
-      ...item,
-      nameWidthCss: cityLabelWidths.get(String(item.id)),
-      maxSizeFactor: cityIconMaxSizeFactor({
-        silhouette: item.silhouette,
-        roles: item.roles,
-        nameWidthCss: cityLabelWidths.get(String(item.id))
-      }),
-      box: null,
-      visible: false,
-      buffered: false,
-      visibilityTarget: 0,
-      selected: false
-    }));
+    if (!politicalOnly) this.cityIconItems = getCityIconItems(map).map(item => {
+      const old = localEdit && this.cityIconItemsById.get(String(item.id));
+      if (old && !cityIds.includes(item.id) && old.rank === item.rank && old.scale === item.scale
+        && old.nameWidthCss === cityLabelWidths.get(String(item.id))) return old;
+      return {
+        ...item,
+        nameWidthCss: cityLabelWidths.get(String(item.id)),
+        maxSizeFactor: cityIconMaxSizeFactor({silhouette: item.silhouette, roles: item.roles, nameWidthCss: cityLabelWidths.get(String(item.id))}),
+        box: null,
+        visible: old?.visible || false,
+        buffered: old?.buffered || false,
+        visibilityTarget: old?.visibilityTarget || 0,
+        selected: old?.selected || false
+      };
+    });
     if (!politicalOnly) {
+      if (localEdit) this.cityIconLayer.updateModels(this.cityIconItems.filter(item => item !== this.cityIconItemsById.get(String(item.id))));
+      else this.cityIconLayer.setInstances(this.cityIconItems, {nowMs: performance.now()});
       this.cityIconItemsById = new Map(this.cityIconItems.map(item => [String(item.id), item]));
-      this.cityIconLayer.setInstances(this.cityIconItems, {nowMs: performance.now()});
     }
     if (scoped) {
       const firstMarker = this.markerIconItems[0]?.node || this.militaryIconItems[0]?.node || this.selectionMarker;
@@ -8610,6 +8657,19 @@ function finiteWidthStat(value) {
   return value === Infinity ? 0 : roundValue(value);
 }
 
+function appendPopulationPoints(vertices, context, settlements) {
+  const maximum = Math.max(1, settlements.metadata.maxPopulation);
+  for (const point of settlements.populationPoints) {
+    const alpha = Math.min(0.8, 0.25 + point.population / maximum);
+    pushWorldVertex(vertices, context, point.point, [0.25, 0.42, 0.24, alpha]);
+  }
+}
+
+function appendCityPoint(vertices, context, city) {
+  const color = city.capital ? [0.98, 0.82, 0.32, 1] : city.port ? [0.35, 0.72, 0.95, 1] : [0.92, 0.72, 0.38, 1];
+  pushWorldVertex(vertices, context, [city.x, city.y], color);
+}
+
 export function buildPointLayer(map) {
   const context = createRenderContext(map);
   const vertices = [];
@@ -8620,17 +8680,11 @@ export function buildPointLayer(map) {
     const count = vertices.length / 6 - first;
     if (count > 0) drawRanges.push({layer, first, count});
   };
-  appendRange("population", () => {
-    for (const point of map.settlements.populationPoints) {
-      const alpha = Math.min(0.8, 0.25 + point.population / Math.max(1, map.settlements.metadata.maxPopulation));
-      pushWorldVertex(vertices, context, point.point, [0.25, 0.42, 0.24, alpha]);
-    }
-  });
+  appendRange("population", () => appendPopulationPoints(vertices, context, map.settlements));
   appendRange("cities", () => {
     for (const city of map.settlements.cities) {
       if (!city) continue;
-      const color = city.capital ? [0.98, 0.82, 0.32, 1] : city.port ? [0.35, 0.72, 0.95, 1] : [0.92, 0.72, 0.38, 1];
-      pushWorldVertex(vertices, context, [city.x, city.y], color);
+      appendCityPoint(vertices, context, city);
     }
   });
   let markerLayer = null;

@@ -168,6 +168,26 @@ export class CityIconWebglLayer {
     return this.instances.length;
   }
 
+  updateModels(items) {
+    const changed = [];
+    for (const item of items) {
+      const index = this.instanceIndexById.get(String(item.id));
+      if (!Number.isInteger(index)) continue;
+      const model = normalizeCityIconInstance(item, 0);
+      const previous = this.instances[index];
+      if (["x", "y", "shape", "baseTierScale", "tierScale", "minScale", "roleBits", "maxSizeFactor"]
+        .every(key => model[key] === previous[key])) continue;
+      for (const key of ["visibilityFrom", "visibilityTarget", "visibilityStartedMs", "selected"]) model[key] = previous[key];
+      this.instances[index] = model;
+      writeInstanceData(this.instanceData, index, model);
+      changed.push(index);
+    }
+    if (!changed.length) return;
+    uploadChangedInstanceRanges(this.gl, this.instanceBuffer, this.instanceData, changed);
+    this.stats.stateUploads++;
+    this.stats.uploadedBytes += changed.length * INSTANCE_STRIDE_BYTES;
+  }
+
   updateInstanceStates(changes = [], {nowMs = 0} = {}) {
     const normalizedChanges = changes instanceof Map
       ? [...changes].map(([id, state]) => ({id, ...state}))

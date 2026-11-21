@@ -1,5 +1,6 @@
 import {inspectRelocatedSettlementPort} from "../generator/settlements.js";
 import {objectAffected} from "./edit-command-effects.js";
+import {withCityLocalUpdates} from "./city-local-updates.js";
 import {createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {CITY_DEVELOPMENT_DESCRIPTIONS} from "../generator/city-development.js";
 
@@ -19,7 +20,7 @@ export function readCityAttributeActions(map, cityId) {
     const active = attributeActive(city, burg, option.key);
     const inspection = inspectCityAttribute(map, cityId, option.key, option.key === "capital" || !active);
     return {...option, active, disabled: !inspection.valid || !inspection.changed,
-      title: `${inspection.reason || `${active ? "取消" : "设置"}${option.label}`}；${CITY_DEVELOPMENT_DESCRIPTIONS[option.key]}。相关数据重算时生效。`};
+      title: `${inspection.reason || `${active ? "取消" : "设置"}${option.label}`}；${CITY_DEVELOPMENT_DESCRIPTIONS[option.key]}。`};
   });
 }
 
@@ -52,9 +53,15 @@ export function createSetCityAttributeCommand(cityId, key, enabled, {faultInject
   const changesMapRole = key === "capital" || key === "port";
   let before = null;
   let after = null;
-  return {
+  return withCityLocalUpdates({
     label: `${enabled ? "设置" : "取消"}${label} #${cityId}`,
-    cityUpdateGuidance: {cityId, attribute: key, reason: `${enabled ? "设置" : "取消"}${label}`},
+    getReplicaPaths() {
+      const roots = {cities: "settlements.cities", burgs: "pack.burgs", states: "politics.states", packStates: "pack.states"};
+      return (before || []).flatMap(target => {
+        const path = target.collection === "metadata" ? "settlements.metadata" : roots[target.collection] + "." + target.id;
+        return target.values.map(({field, present}) => present ? path + "." + field : path);
+      });
+    },
     domain: "city",
     effects: {render: changesMapRole ? "draw" : "none", selection: "refresh", runtimeStats: true, pickPanel: true,
       derived: ["object-panels", ...(changesMapRole ? ["point-layers", "labels", "city-role-labels"] : []), ...(key === "capital" ? ["state-capital"] : [])],
@@ -77,7 +84,7 @@ export function createSetCityAttributeCommand(cityId, key, enabled, {faultInject
         for (const target of targets) target.fields.push("group", ...(target.collection === "cities" ? ["provincial"] : ["state"]));
         if (previousCity) targets.push({collection: "cities", id: previousCity.id, fields: ["capital", "group", "provincial"]}, {collection: "burgs", id: previousCity.burgId, fields: ["capital", "group", "state"]});
         for (const collection of ["states", "packStates"]) targets.push({collection, id: city.state, fields: ["capital", "center", "gridCenter", "religion"]});
-        capitalCommand = createSetStateCapitalCommand(Number(city.state), Number(city.burgId));
+        capitalCommand = createSetStateCapitalCommand(Number(city.state), Number(city.burgId), {updateCityOutputs: false});
         this.effects.affected = [...objectAffected("state", city.state), ...objectAffected("city", city.id), ...(previousCity ? objectAffected("city", previousCity.id) : [])];
       }
       if (map.settlements.metadata && changesMapRole) targets.push({collection: "metadata", fields: [key === "capital" ? "capitals" : "ports"]});
@@ -106,7 +113,11 @@ export function createSetCityAttributeCommand(cityId, key, enabled, {faultInject
       if (!before) throw new Error("缺少可撤销的城市属性记录。");
       restoreFields(map, before);
     }
-  };
+  }, map => {
+    const city = map.settlements?.cities?.[cityId];
+    const previous = key === "capital" && map.pack?.burgs?.[map.politics?.states?.[city?.state]?.capital]?.cityId;
+    return key === "capital" && Number.isInteger(previous) && previous !== cityId ? [previous, cityId] : [cityId];
+  });
 }
 
 function cityPair(map, cityId) {

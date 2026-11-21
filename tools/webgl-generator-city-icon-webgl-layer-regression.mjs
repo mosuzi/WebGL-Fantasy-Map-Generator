@@ -535,6 +535,7 @@ function testPlaceholderDrawTailState() {
     selectionDrawRanges: {landMasked: {first: 0, count: 0}, ordinary: {first: 0, count: 0}},
     pointBuffer,
     pointVertexCount: 0,
+    cellMetricLayer: {draw: () => ({layers: []})},
     labelItems: [],
     cityIconItems: [],
     cityIconItemsById: new Map(),

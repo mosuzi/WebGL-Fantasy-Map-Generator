@@ -23,19 +23,24 @@ try {
   await page.goto("http://127.0.0.1:5542/", {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 120000);
   for (const target of process.env.CITY_POWER_CELLS?.split(",").map(Number) || [3000, 100000]) {
-    await page.evaluate(async cellsTarget => {
-      const r = await window.webglGeneratorApi.generate.newMap({confirm: true, seed: "city-power-385", cellsTarget, heightmapTemplate: "continents"});
-      if (!r.ok) throw Error(JSON.stringify(r.error));
-    }, target);
+    if (process.env.FMG_CITY_SAVE && target === 100000) {
+      await page.locator("#import-map-file").setInputFiles(process.env.FMG_CITY_SAVE);
+      await page.waitForFunction(() => window.__webglGeneratorApp.map?.grid?.points?.length === 100000, null, {timeout: 120000});
+    } else {
+      await page.evaluate(async cellsTarget => {
+        const r = await window.webglGeneratorApi.generate.newMap({confirm: true, seed: "city-power-385", cellsTarget, heightmapTemplate: "continents"});
+        if (!r.ok) throw Error(JSON.stringify(r.error));
+      }, target);
+    }
     await waitForApiReady(page, 120000);
-    await rebuild();
-    const id = await page.evaluate(() => window.__webglGeneratorApp.map.settlements.cities.find(c => c && !c.removed && !c.citadel && c.state > 0 && c.province > 0).id);
+    const id = await page.evaluate(() => window.__webglGeneratorApp.map.settlements.cities.find(c => c && !c.removed && !c.walls && c.state > 0 && c.province > 0).id);
     await page.evaluate(id => {
       const a = window.__webglGeneratorApp;
       a.panels.city.open(a.map, {object: {kind: "city", id}}, a.editHistory.getStats()); a.panels.city.setSelectedCityId(id);
     }, id);
     const cityPanel = page.locator('.floating-panel[data-panel-id="city-panel"]:not(.hidden)');
-    await cityPanel.getByRole("button", {name: "要塞", exact: true}).waitFor();
+    await cityPanel.getByRole("button", {name: "城墙", exact: true}).waitFor();
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     errors.length = 0;
     await page.evaluate(diagnose => {
       window.__powerTasks = []; window.__powerObserver?.disconnect();
@@ -55,19 +60,25 @@ try {
     }, diagnose);
     if (profiler) {await profiler.send("Profiler.enable"); await profiler.send("Profiler.start");}
     const before = await read(id);
-    await cityPanel.getByRole("button", {name: "要塞", exact: true}).click();
-    assert.deepEqual(await read(id), before, "属性设置不立即重算国力");
+    const localResources = () => page.evaluate(() => {
+      const r = window.__webglGeneratorApp.renderer;
+      return {gridMetrics: r.cellMetricLayer.token, iconModelUploads: r.cityIconLayer.stats.modelUploads};
+    });
+    const originalResources = await localResources();
     const count = await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo);
-    await rebuild();
+    await cityPanel.getByRole("button", {name: "城墙", exact: true}).click();
+    assert.equal(await cityPanel.locator(".city-update-guidance").count(), 0);
     const after = await read(id);
-    assert.ok(after.state.settlementPower > before.state.settlementPower);
-    assert.ok(after.state.powerScore > before.state.powerScore);
-    assert.ok(after.province.settlementPower > before.province.settlementPower);
+    assert.ok(after.state.settlementPower > (before.state.settlementPower ?? 0));
+    assert.ok(after.state.powerScore > (before.state.powerScore ?? 0));
+    assert.ok(after.province.settlementPower > (before.province.settlementPower ?? 0));
     assert.equal(after.state.settlementPower, after.packState.settlementPower);
     assert.equal(await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo), count + 1);
     await history("undo"); assert.deepEqual(await read(id), before);
     await history("redo"); assert.deepEqual(await read(id), after);
-    await rebuild(); assert.deepEqual(await read(id), after, "重复重算无复利");
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.deepEqual(await localResources(), originalResources, "城市编辑或撤销重做触发了全图重建");
+    const editTasks = await page.evaluate(() => {window.__powerObserver.disconnect(); return window.__powerTasks.slice();});
     for (const kind of ["state", "province"]) {
       await page.evaluate(({id, kind}) => {
         const a = window.__webglGeneratorApp, c = a.map.settlements.cities[id];
@@ -87,7 +98,7 @@ try {
       const {profile} = await profiler.send("Profiler.stop"); writeFileSync(join(output, `${target}.cpuprofile`), JSON.stringify(profile));
       writeFileSync(join(output, `${target}-timing.json`), JSON.stringify(await page.evaluate(() => ({tasks: window.__powerTaskDetails, stages: window.__powerStages})), null, 2));
     }
-    const report = {target, before, after, diagnostics, errors: [...errors]}; reports.push(report);
+    const report = {target, before, after, editTasks, originalResources, diagnostics, errors: [...errors]}; reports.push(report);
     writeFileSync(join(output, "report.json"), JSON.stringify({reports}, null, 2));
     assert.equal(diagnostics.gl, 0); assert.deepEqual(diagnostics.health, []); assert.deepEqual(errors, []);
     assert.ok(diagnostics.longTasks.every(ms => ms <= 200));
@@ -98,7 +109,6 @@ try {
   await page.screenshot({path: join(output, "failure.png")});
   writeFileSync(join(output, "failure.json"), JSON.stringify({error: error.stack, errors, reports}, null, 2)); throw error;
 } finally {await browser.close(); await new Promise(resolve => server.httpServer.close(resolve));}
-async function rebuild() {const r = await page.evaluate(() => window.webglGeneratorApi.edit.economy.rebuild({confirm: true})); assert.equal(r.ok, true, JSON.stringify(r.error));}
 async function history(action) {const r = await page.evaluate(action => window.webglGeneratorApi.history[action](), action); assert.equal(r.ok, true, JSON.stringify(r.error));}
 async function read(id) {
   return page.evaluate(id => {

@@ -103,7 +103,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.derived.includes("point-layers") && typeof state.renderer.refreshPointLayers === "function") {
-        state.renderer.refreshPointLayers({draw: false, binding: retainedBinding});
+        state.renderer.refreshPointLayers({draw: false, binding: retainedBinding, ...cityPointOptions(effects)});
       }
 
       if (effects.derived.includes("object-index") && typeof state.renderer.refreshObjectPickingIndex === "function") {
@@ -266,7 +266,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         });
       }
       if (effects.derived.includes("point-layers") && typeof state.renderer.refreshPointLayers === "function") {
-        await runStep(() => state.renderer.refreshPointLayers({draw: false, binding: retainedBinding}));
+        await runStep(() => state.renderer.refreshPointLayers({draw: false, binding: retainedBinding, ...cityPointOptions(effects)}));
       }
       if (effects.derived.includes("object-index") && typeof state.renderer.refreshObjectPickingIndex === "function") {
         await runStep(() => state.renderer.refreshObjectPickingIndex(retainedBinding, {pointsOnly: sourceEffects?.pointsOnlyPicking === true}));
@@ -317,8 +317,15 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
   };
 }
 
+function cityPointOptions(effects) {
+  return effects.derived.includes("city-local-edit")
+    ? {cityIds: effects.affected.filter(item => item.kind === "city").map(item => Number(item.id)),
+      populationMaximum: effects.derived.includes("population-maximum")} : {};
+}
+
 function labelRefreshOptions(effects) {
   return {
+    ...cityPointOptions(effects),
     cityRolesOnly: effects.derived.includes("city-role-labels"),
     stateIds: effects.derived.includes("state-capital")
       ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id))
@@ -362,7 +369,8 @@ function editedColorPaletteMode(derived) {
 }
 
 function invalidateRendererBuffers(renderer, effects) {
-  if (effects.derived.some(item => item === "point-layers" || item === "cell-colors" || item === "terrain-caches")) renderer?.cellMetricLayer?.invalidate?.();
+  if (effects.derived.includes("cell-colors") || effects.derived.includes("terrain-caches")
+    || (effects.derived.includes("point-layers") && !effects.derived.includes("city-local-edit"))) renderer?.cellMetricLayer?.invalidate?.();
   if (typeof renderer?.invalidateDynamicBuffers !== "function") return;
   renderer.invalidateDynamicBuffers({
     routes: effects.derived.includes("route-mesh") || effects.derived.includes("render-mesh"),

@@ -19,7 +19,7 @@ try{
   const original=city.population;
   unwrap(await api.data.saveBrowserMap());check("浏览器保存后清洁",!app.saveState.getStatus().dirty);
   unwrap(await api.edit.cities.setPopulation(city.id,original+100));check("人口编辑后未保存",app.saveState.getStatus().dirty);
-  check("人口关联提示",app.cityGuidance?.read?.(city.id)?.pending?.length>0,app.cityGuidance?.read?.(city.id));
+  check("人口及产出同步",city.population===original+100 && city.product===app.map.pack.burgs[city.burgId].product);
   unwrap(await api.history.undo());check("撤销回保存位置",!app.saveState.getStatus().dirty);
   unwrap(await api.history.redo());check("重做恢复未保存",app.saveState.getStatus().dirty);
   const receiptCount=app.saveState.getStatus().receipts.length;

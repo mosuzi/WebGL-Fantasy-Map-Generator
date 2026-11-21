@@ -34,15 +34,19 @@ for (const scale of [.1, 1, 1.1, 10]) {
       assert.equal(map[domain][collection][id].rural, base[domain][collection][id].rural);
     }
     assert.deepEqual(map.pack.cells.pop, base.pack.cells.pop);
-    assert.deepEqual(map.economy, base.economy);
+    assert.equal(map.economy.deals.length, base.economy.deals.length);
+    for (const market of map.pack.markets.filter(Boolean)) {
+      if (market.i !== burg.market) assert.deepEqual(market, base.pack.markets[market.i]);
+    }
     assert.deepEqual(map.military, base.military);
     assert.deepEqual(map.settlements.routes, base.settlements.routes);
     assert.equal(map.settlements.cities[city.id].visual.silhouette, "hamlet");
     const committed = structuredClone(map);
     assert.equal(createSetCityPopulationCommand(city.id, units).isNoop({map}), true);
     const writes = captureCommandMapReplicaWrites({map, command});
-    assert.ok(writes.some(write => write.path === "society.cultures"));
-    assert.ok(writes.some(write => write.path === "pack.religions"));
+    for (const root of [`society.cultures.${city.culture}`, `pack.religions.${city.religion}`]) {
+      assert.ok(writes.some(write => write.path === root || write.path === root + ".urban"), root);
+    }
     history.undo({map}); assert.deepEqual(map, base, "旧字段及独立镜像精确撤销");
     history.redo({map}); assert.deepEqual(map, committed);
     history.undo({map});

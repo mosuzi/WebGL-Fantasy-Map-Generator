@@ -140,9 +140,8 @@ export function refreshCityScaleVisuals(map, {cityIds = null} = {}) {
   const cities = map?.settlements?.cities || [];
   const burgs = map?.pack?.burgs || [];
   const context = createCityScaleContext(cities, burgs);
-  const targets = cityIds ? new Set(cityIds) : null;
-  for (const city of cities) {
-    if (!city || city.removed || (targets && !targets.has(city.id))) continue;
+  for (const city of cityIds ? cityIds.map(id => cities[id]) : cities) {
+    if (!city || city.removed) continue;
     const burg = findCityBurg(map, city);
     const scale = deriveCityScale(city, context, burg);
     city.group = scale;
@@ -156,8 +155,9 @@ export function refreshCityScaleVisuals(map, {cityIds = null} = {}) {
   return context;
 }
 
-export function captureCityScaleVisualSnapshot(map) {
-  return (map?.settlements?.cities || []).filter(Boolean).map(city => {
+export function captureCityScaleVisualSnapshot(map, ids = null) {
+  const cities = map?.settlements?.cities || [];
+  return (ids ? ids.map(id => cities[id]) : cities).filter(Boolean).map(city => {
     const burg = findCityBurg(map, city);
     return {
       cityId: city.id,
@@ -169,11 +169,8 @@ export function captureCityScaleVisualSnapshot(map) {
 }
 
 export function restoreCityScaleVisualSnapshot(map, snapshot) {
-  const cityById = new Map((map?.settlements?.cities || [])
-    .filter(Boolean)
-    .map(city => [Number(city.id), city]));
   for (const item of snapshot || []) {
-    const city = cityById.get(Number(item.cityId));
+    const city = map?.settlements?.cities?.[item.cityId];
     if (city) restoreCityScaleVisual(city, item.city);
     const burg = map?.pack?.burgs?.[item.burgId] || findCityBurg(map, city);
     if (burg && item.burg) restoreCityScaleVisual(burg, item.burg);

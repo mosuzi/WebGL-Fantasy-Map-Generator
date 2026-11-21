@@ -19,8 +19,7 @@ try{
  unwrap(await api.data.importMap(JSON.stringify(oldDocument),{confirm:true}));
  const text=unwrap(await api.data.exportAll({includeText:true})).text;unwrap(await api.data.importMap(text,{confirm:true}));
  const history=a.map.pack.states[0].diplomacy.some(item=>JSON.stringify(item).includes('赔款历史原文 123'));
- const unknown=!a.cityGuidance.read(a.map.settlements.cities.find(Boolean).id).known;
- return{clean:!clean.defaultPrevented,dirty:dirty.defaultPrevented&&styleDirty,history,unknown,cells:a.map.grid.cells.i.length};});
- for(const name of ['clean','dirty','history','unknown']){checks.push({name,pass:result[name]});assert.ok(result[name],name);}
+ return{clean:!clean.defaultPrevented,dirty:dirty.defaultPrevented&&styleDirty,history,cells:a.map.grid.cells.i.length};});
+ for(const name of ['clean','dirty','history']){checks.push({name,pass:result[name]});assert.ok(result[name],name);}
  assert.ok(result.cells>99000);checks.push({name:'100k旧逻辑JSON回读',pass:true,cells:result.cells});
 }finally{console.log(JSON.stringify({checks},null,2));await fs.writeFile(path.join(process.env.TEMP,'batch-persistence-final.json'),JSON.stringify({checks},null,2));await browser.close();}

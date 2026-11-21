@@ -11,7 +11,8 @@ import {
 import {namebaseRenameAffected, newObjectAffected, objectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
-import {createCityPopulationTransaction, CITY_POPULATION_REPLICA_PATHS} from "./city-population-transaction.js";
+import {createCityPopulationTransaction} from "./city-population-transaction.js";
+import {withCityLocalUpdates} from "./city-local-updates.js";
 import {createChineseNameGenerator} from "../generator/names.js";
 
 const CITY_POPULATION_EFFECTS = Object.freeze({
@@ -152,20 +153,18 @@ export function createDeleteCityCommand(cityId, {label = "删除城市"} = {}) {
   };
 }
 
-export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口", faultInjector, recalculated = false} = {}) {
+export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口", faultInjector} = {}) {
   const normalizedCityId = normalizeCityId(cityId);
 
-  return {
+  return withCityLocalUpdates({
     label: `${label} #${normalizedCityId}`,
-    cityUpdateGuidance: {cityId: normalizedCityId, attribute: "population", recalculated, reason: recalculated ? "重算人口" : "编辑人口"},
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_POPULATION_EFFECTS,
       affected: objectAffected(OBJECT_KIND.CITY, normalizedCityId)
     },
-    getReplicaPaths: () => CITY_POPULATION_REPLICA_PATHS,
     ...createCityPopulationTransaction(normalizedCityId, nextPopulation, {faultInjector})
-  };
+  }, () => [normalizedCityId], {followPopulation: false});
 }
 
 export function createSyncCityOwnerToCellCommand(cityId, {label = "同步城市归属"} = {}) {

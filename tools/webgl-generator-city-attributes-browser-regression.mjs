@@ -177,18 +177,20 @@ async function verifyDevelopment(id) {
       routes: JSON.stringify(map.settlements.routes), military: JSON.stringify(map.politics.states.map(state => state?.military))};
   }, id);
   const before = await read();
-  assert.match(await button("贸易中心").getAttribute("title"), /重算时生效/);
+  assert.match(await button("贸易中心").getAttribute("title"), /经济产出/);
   await button("贸易中心").click();
   const changed = await read();
   assert.notEqual(changed.plaza, before.plaza);
-  assert.deepEqual({...changed, plaza: before.plaza, mirrorPlaza: before.mirrorPlaza}, before, "属性必须延迟影响派生数据");
+  assert.notEqual(changed.product, before.product);
+  assert.equal(changed.routes, before.routes);
+  assert.equal(changed.military, before.military);
   await page.evaluate(async id => {
     const result = await window.webglGeneratorApi.edit.cities.setPopulation(id, 543.21);
     if (!result.ok) throw new Error(JSON.stringify(result.error));
   }, id);
   await button("调整人口").click();
   const dialog = panel.locator(".city-population-controls");
-  await dialog.getByRole("button", {name: "按条件重算人口", exact: true}).click();
+  await dialog.getByRole("button", {name: "采用潜在人口", exact: true}).click();
   const regenerated = await read();
   assert.notEqual(regenerated.population, 543.21);
   await page.evaluate(async () => {const result = await window.webglGeneratorApi.history.undo(); if (!result.ok) throw new Error(JSON.stringify(result.error));});
@@ -196,7 +198,7 @@ async function verifyDevelopment(id) {
   await page.evaluate(async () => {const result = await window.webglGeneratorApi.history.redo(); if (!result.ok) throw new Error(JSON.stringify(result.error));});
   assert.equal((await read()).population, regenerated.population);
   const historyCount = await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo);
-  await dialog.getByRole("button", {name: "按条件重算人口", exact: true}).click();
+  assert.equal(await dialog.getByRole("button", {name: "采用潜在人口", exact: true}).count(), 0);
   assert.equal((await read()).population, regenerated.population, "重复重算不复利");
   assert.equal(await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo), historyCount);
   const results = [];
@@ -212,7 +214,7 @@ async function verifyDevelopment(id) {
     results.push(kind);
   }
   await select(id);
-  return {deferred: true, potentialPopulation: regenerated.population, repeatNoop: true, regeneration: results};
+  return {localUpdates: true, potentialPopulation: regenerated.population, repeatNoop: true, regeneration: results};
 }
 
 async function roundtrip(id, key, label) {

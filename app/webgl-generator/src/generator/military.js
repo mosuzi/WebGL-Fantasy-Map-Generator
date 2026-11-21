@@ -431,8 +431,15 @@ function getUrbanTroops(pack, state, burg, unit, alert, random, policy) {
   const cultureModifier = burg.culture === state.culture ? 1 : 0.55;
   const supplyModifier = getStateSupplyModifier(state, unit.type);
   const population = burg.population || 0;
-  const variance = random.range(0.78, 1.28);
+  const variance = random ? random.range(0.78, 1.28) : 1;
   return round(population * unit.urban * 420 * alert * stateModifier * terrainModifier * capitalModifier * civilizationModifier * ratioModifier * cultureModifier * supplyModifier * variance);
+}
+
+export function cityRecruitmentPotential(pack, burg) {
+  const state = pack?.states?.[burg?.state];
+  if (!burg || !state?.militaryPolicy) return 0;
+  return MILITARY_UNITS.reduce((sum, unit) =>
+    sum + getUrbanTroops(pack, state, burg, unit, state.alert ?? 1, null, state.militaryPolicy), 0);
 }
 
 function getRuralTroops(pack, state, cell, unit, alert, random, policy) {
@@ -546,6 +553,16 @@ function buildMilitaryPolicy({state, burgsForState, diplomacyPressure, resourceP
     diplomacyPressure: round(diplomacyPressure, 3),
     resourcePressure: round(resourcePressure, 3)
   };
+}
+
+export function editedRecruitmentTargets(state, pack) {
+  const previous = state.militaryPolicy;
+  if (!previous) return null;
+  const burgsForState = state.civilizationType && validUnitRatios(previous.unitRatios) ? []
+    : (pack.burgs || []).filter(burg => burg?.i && !burg.removed && burg.state === state.i);
+  const policy = buildMilitaryPolicy({state, burgsForState, alert: state.alert || 1,
+    diplomacyPressure: previous.diplomacyPressure ?? 1, resourcePressure: previous.resourcePressure ?? 1});
+  return {populationPeople: policy.populationPeople, desiredTroops: policy.desiredTroops, capTroops: policy.capTroops, finalTroops: policy.finalTroops};
 }
 
 function buildDefaultUnitRatios(state, burgsForState, dominantCivilization) {

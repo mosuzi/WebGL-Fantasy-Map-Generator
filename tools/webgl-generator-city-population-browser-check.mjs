@@ -47,7 +47,7 @@ export async function verifyCityPopulation(page, panel, select) {
     assert.equal(await history(), count);
   }
   await page.evaluate(() => document.dispatchEvent(new CustomEvent("webgl-generator-runtime-operation", {detail: {busy: true}})));
-  assert.equal(await input.isDisabled(), true); assert.equal(await panel.getByRole("button", {name: "按条件重算人口", exact: true}).isDisabled(), true);
+  assert.equal(await input.isDisabled(), true);
   await page.evaluate(() => document.dispatchEvent(new CustomEvent("webgl-generator-runtime-operation", {detail: {busy: false}})));
   const otherId = await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities.find(c => c && !c.removed && c.id !== id).id, id);
   await select(otherId); assert.equal(await panel.locator(".city-population-controls [role=status]").count(), 0);
@@ -82,7 +82,7 @@ export async function verifyCityPopulation(page, panel, select) {
   }
   await select(id);
   const current = await read();
-  await panel.getByRole("button", {name: "按条件重算人口", exact: true}).click();
+  await panel.getByRole("button", {name: "采用潜在人口", exact: true}).click();
   await page.waitForFunction(id => window.__webglGeneratorApp.map.settlements.cities[id].population !== 54.322, id);
   const recalculated = await read();
   assert.notEqual(recalculated.states[recalculated.state].urban, current.states[current.state].urban);

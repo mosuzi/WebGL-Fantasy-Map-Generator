@@ -38,11 +38,10 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     moveCityId: null,
     movePreview: null,
     relocationVersion: 0,
+    localRowEdit: null,
     version: 0
   });
   const panelCallbacks = {
-    readUpdateGuidance: id => callbacks.readUpdateGuidance?.(id),
-    onOpenUpdateDomain: domain => callbacks.onOpenUpdateDomain?.(domain),
     onFilter: value => {
       panelState.filter = value;
       updatePanelListPreferences(documentRef, CITY_PANEL_ID, {filter: value}, CITY_LIST_DEFAULTS);
@@ -177,7 +176,8 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       manager.open("city-panel");
       lazyPanel.load();
     },
-    update(map, selection, history) {
+    update(map, selection, history, cityIds = null) {
+      panelState.localRowEdit = cityIds?.length && panelState.map === map ? {version: panelState.version + 1, cityIds} : null;
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;

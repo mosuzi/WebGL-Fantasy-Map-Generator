@@ -59,14 +59,13 @@
   </section>
 
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
-  <CityUpdateGuidance v-if="selected" :city-id="selected.id" :read="callbacks.readUpdateGuidance" @open="callbacks.onOpenUpdateDomain" />
 
   <section v-if="selected" class="city-population-controls" aria-label="城市人口编辑">
     <form @submit.prevent="applyPopulation(false)">
       <label>人口（人）<input ref="populationInput" v-model="populationDraft" aria-label="城市人口（人）" aria-keyshortcuts="Enter" title="按回车或离开输入框保存人口" type="number" min="0" max="1000000000" step="1" :disabled="populationDisabled" @input="populationEnterValue = null" @blur="applyPopulationOnBlur" @keydown.enter="applyPopulationOnEnter" @compositionstart="populationComposing = true" @compositionend="populationComposing = false" /></label>
-      <UiButton variant="secondary" :disabled="populationDisabled" @pointerdown.prevent @click="applyPopulation(true)">按条件重算人口</UiButton>
+      <UiButton v-if="selected.population !== populationPotential" variant="secondary" :disabled="populationDisabled" @pointerdown.prevent @click="applyPopulation(true)">采用潜在人口</UiButton>
     </form>
-    <span>潜在人口：{{ formatPopulationValue(populationPotential) }}，不限制手工人口。输入后按回车或离开输入框保存并同步所属地区人口；经济、道路和军队需另行重算。</span>
+    <span>潜在人口 {{ formatPopulationValue(populationPotential) }}</span>
     <span v-if="populationFeedback" role="status">{{ populationFeedback }}</span>
   </section>
 
@@ -118,8 +117,8 @@
 import {Delete, Document, EditPen, MagicStick, Picture, Plus, Rank, RefreshLeft, Switch, User} from "@element-plus/icons-vue";
 import {computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch} from "vue";
 import {readCityAttributeActions} from "../../../runtime/city-attribute-commands.js";
-import CityUpdateGuidance from "./CityUpdateGuidance.vue";
 import {estimateCityPopulationPotential} from "../../../generator/city-development.js";
+import {cityRecruitmentPotential} from "../../../generator/military.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -194,9 +193,14 @@ const lastCitySelect = {
   id: null,
   at: 0
 };
+let lastMetricsVersion = -1, lastMetricsMap = null, lastMetrics = null;
 const metrics = computed(() => {
-  props.state.version;
-  return buildCityMetrics(props.state.map);
+  const {map, version, localRowEdit} = props.state;
+  const incremental = map === lastMetricsMap && version === lastMetricsVersion + 1 && localRowEdit?.version === version;
+  lastMetrics = buildCityMetrics(map, incremental ? lastMetrics : null, incremental ? localRowEdit.cityIds : []);
+  lastMetricsVersion = version;
+  lastMetricsMap = map;
+  return lastMetrics;
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "city-panel", kind: "city", rows: visibleRows});
@@ -296,6 +300,7 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.type},
   {label: "人口", value: formatPopulationValue(selected.value.population)},
+  {label: "征募潜力", value: formatNumberValue(cityRecruitmentPotential(props.state.map.pack, props.state.map.pack.burgs[selected.value.burgId])) + " 人"},
   {label: "标记", value: selected.value.flags},
   {label: "资源区域", value: formatNumberValue(selected.value.resourceCells)},
   {label: "资源种类", value: selected.value.resourceGoodNames || "无"},
@@ -328,10 +333,14 @@ watch(() => selected.value?.id, id => {
 });
 watch(() => selected.value?.silhouette, syncVisualDraft);
 
-function buildCityMetrics(map) {
+function buildCityMetrics(map, previous = null, cityIds = []) {
   const scaleContext = createCityScaleContext(map?.settlements?.cities, map?.pack?.burgs);
+  const changed = new Set(cityIds);
+  const oldRows = previous && new Map(previous.rows.map(row => [row.id, row]));
   const rows = cityRows(map).map(city => {
     const burg = findBurgForCity(map, city);
+    const old = oldRows?.get(city.id);
+    if (old && !changed.has(city.id) && old.scale === deriveCityScale(city, scaleContext, burg)) return old;
     const stateId = numberOrFallback(city.state, burg?.state, 0);
     const provinceId = numberOrFallback(city.province, null, 0);
     const packCell = numberOrFallback(city.packCell, burg?.cell, null);

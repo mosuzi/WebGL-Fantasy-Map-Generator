@@ -1,6 +1,6 @@
 import {createRandom} from "./random.js";
 import {cityDevelopmentEffects} from "./city-development.js";
-import {collectCityPower} from "./city-power.js";
+import {cityPowerContribution, collectCityPower} from "./city-power.js";
 import {applySuitabilityOverrides, captureSuitabilityBase, restoreSuitabilityBase} from "./suitability.js";
 import {getGovernmentEffects} from "./governments.js";
 import {defaultGoodDisplayProperties, defaultMarketDisplayProperties} from "./economy-display-properties.js";
@@ -1098,18 +1098,22 @@ function applyMarketDemandDiagnostics(pack, markets, goods, lockedMarketIds = ne
 }
 
 function marketGoodDemand(good, base) {
+  const consumerBase = Math.sqrt(Math.max(0, base.rural)) * 1.15 + Number(base.urban || 0) * 2.4 + Number(base.burgs || 0) * 0.18 + 0.35;
+  return round(Math.max(0.05, consumerBase * marketDemandFactor(good)), 2);
+}
+
+function marketDemandFactor(good) {
   const coverage = good.demandCoverage || {};
   const urbanCoverage = Number(coverage.urban ?? 0.36);
   const ruralCoverage = Number(coverage.rural ?? 0.28);
-  const consumerBase = Math.sqrt(Math.max(0, base.rural)) * 1.15 + Number(base.urban || 0) * 2.4 + Number(base.burgs || 0) * 0.18 + 0.35;
   const typeFactor = good.distribution && !good.recipes?.length ? 1.08 : good.recipes?.length ? 0.82 : 1;
-  return round(Math.max(0.05, consumerBase * (0.25 + urbanCoverage * 0.58 + ruralCoverage * 0.34) * typeFactor), 2);
+  return (0.25 + urbanCoverage * 0.58 + ruralCoverage * 0.34) * typeFactor;
 }
 
-function applyPricePropagationDiagnostics(pack, markets, deals, goods, lockedMarketIds = new Set()) {
+function applyPricePropagationDiagnostics(pack, markets, deals, goods, lockedMarketIds = new Set(), existingFlows = null) {
   const validMarkets = (markets || []).filter(Boolean);
   const goodsList = (goods || []).filter(Boolean);
-  const flows = buildTradeFlowByMarketGood(pack, deals);
+  const flows = existingFlows || buildTradeFlowByMarketGood(pack, deals);
   const metadata = {
     records: 0,
     marketsWithSignals: 0,
@@ -1234,6 +1238,77 @@ function tradePartyMarketId(pack, type, id) {
   return 0;
 }
 
+export function editedMarketBalances(pack, market, populationDelta, dealChanges) {
+  const goods = (pack.goods || []).filter(Boolean);
+  const next = {...market, goods: structuredClone(market.goods)};
+  const flows = new Map();
+  const summary = {demand: 0, supply: 0, shortage: 0, surplus: 0};
+  for (const good of goods) {
+    const record = next.goods[good.i];
+    if (!record) continue;
+    const demand = round(Math.max(0.05, record.demand + populationDelta * 2.4 * marketDemandFactor(good)), 2);
+    const gap = round(record.supply - demand, 2);
+    Object.assign(record, {demand, gap, shortage: Math.max(0, -gap), surplus: Math.max(0, gap)});
+    for (const key of Object.keys(summary)) summary[key] = round(summary[key] + record[key], 2);
+    flows.set(flowKey(market.i, good.i), {inUnits: record.tradeInUnits || 0, outUnits: record.tradeOutUnits || 0,
+      inValue: record.tradeInValue || 0, outValue: record.tradeOutValue || 0});
+  }
+  for (const {deal, delta} of dealChanges) {
+    const flow = flows.get(flowKey(market.i, deal.good));
+    if (!flow) continue;
+    for (const [side, party] of [["in", "buyer"], ["out", "seller"]]) {
+      if (tradePartyMarketId(pack, deal[party + "Type"], deal[party]) !== market.i) continue;
+      flow[side + "Units"] += delta;
+      flow[side + "Value"] += round(deal.units * deal.price, 2) - round((deal.units - delta) * deal.price, 2);
+    }
+  }
+  applyPricePropagationDiagnostics(pack, [next], [], goods, new Set(), flows);
+  return {goods: next.goods, demandSummary: {...summary, gap: round(summary.supply - summary.demand, 2)}, priceSummary: next.priceSummary};
+}
+
+// 全图榜单只汇总市场已缓存的条目，无需重新遍历地块、定价或生成交易。
+export function summarizeMarketBalances(pack) {
+  const demand = {totalDemand: 0, totalSupply: 0, shortage: 0, surplus: 0, shortageMarkets: 0};
+  const prices = {records: 0, marketsWithSignals: 0, priceRisers: 0, priceFallers: 0, maxDelta: 0};
+  const shortages = new Map(), risers = [], fallers = [];
+  let totalDelta = 0;
+  for (const market of pack.markets || []) {
+    const summary = market?.demandSummary;
+    if (!summary) continue;
+    demand.totalDemand += summary.demand;
+    demand.totalSupply += summary.supply;
+    demand.shortage += summary.shortage;
+    demand.surplus += summary.surplus;
+    if (summary.shortage > 0) demand.shortageMarkets++;
+    if (market.priceSummary?.pressureGoods) prices.marketsWithSignals++;
+    for (const good of pack.goods || []) {
+      const row = good && market.goods?.[good.i];
+      if (!row) continue;
+      if (row.shortage) shortages.set(good.i, (shortages.get(good.i) || 0) + row.shortage);
+      if (!Number.isFinite(row.priceDelta)) continue;
+      const delta = row.priceDelta;
+      prices.records++;
+      totalDelta += delta;
+      prices.maxDelta = Math.max(prices.maxDelta, Math.abs(delta));
+      if (Math.abs(delta) <= 0.01) continue;
+      const item = {market: market.i, marketName: market.name, good: good.i, name: good.name || `good-${good.i}`,
+        delta, effectivePrice: row.effectivePrice, localPrice: row.localPrice};
+      (delta > 0 ? risers : fallers).push(item);
+    }
+  }
+  for (const key of ["totalDemand", "totalSupply", "shortage", "surplus"]) demand[key] = round(demand[key], 2);
+  demand.balance = round(demand.totalSupply - demand.totalDemand, 2);
+  demand.shortageGoods = shortages.size;
+  demand.topShortages = [...shortages].map(([good, value]) => ({good, name: pack.goods[good]?.name || `good-${good}`, shortage: round(value, 2)}))
+    .sort((a, b) => b.shortage - a.shortage || a.good - b.good).slice(0, 8);
+  prices.priceRisers = risers.length;
+  prices.priceFallers = fallers.length;
+  prices.topRisers = risers.sort((a, b) => b.delta - a.delta || a.market - b.market || a.good - b.good).slice(0, 8);
+  prices.topFallers = fallers.sort((a, b) => a.delta - b.delta || a.market - b.market || a.good - b.good).slice(0, 8);
+  prices.averageDelta = round(totalDelta / Math.max(1, prices.records), 3);
+  return {demand, pricePropagation: prices};
+}
+
 function ensureMarketGoodFlow(flows, marketId, goodId) {
   const key = flowKey(marketId, goodId);
   let flow = flows.get(key);
@@ -1313,14 +1388,14 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
     const localGood = selectMarketDealGood(localMarket, rawGoods, burg.i, 0, rawGoods[(burg.i * 7) % rawGoods.length]);
     const localGoodId = pack.cells.good?.[burg.cell] || localGood.good.i;
     if (shouldCreateLocalProduction(burg.i, localProductionRate)) {
-      burg.production.push({goodId: localGoodId, units: round((1 + (burg.population || 0) * 0.25) * development)});
+      burg.production.push({goodId: localGoodId, units: productionUnits(burg, development)});
     }
 
     for (let index = 0; index < 7; index++) {
       const good = manufacturedGoods[(burg.i * 5 + index * 11) % manufacturedGoods.length];
       burg.production.push({
         goodId: good.i,
-        units: round((0.6 + (burg.population || 0) * 0.08 + index * 0.05) * development),
+        units: productionUnits(burg, development, index),
         recipe: productionRecipe(good)
       });
     }
@@ -1371,9 +1446,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
       if (deal) burg.production.push({dealId: deal.i});
     }
 
-    const baseProduct = calculateBurgProduct(burg, dealProductWeight);
-    burg.product = round(baseProduct * development);
-    burg.treasury = round((baseProduct * 0.35 + (burg.population || 0) * 0.5) * development);
+    Object.assign(burg, burgOutput(burg, dealProductWeight, development));
   }
 
   for (let marketIndex = 0; marketIndex < markets.length; marketIndex++) {
@@ -1476,6 +1549,24 @@ function getMarketTradeLinks(markets, options) {
 
 function getMarketToBurgDealCount(pack, options) {
   return isSparseSmallArchipelago(pack, options) ? 10 : 15;
+}
+
+function productionUnits(burg, development, recipeIndex = null) {
+  const population = Number(burg.population) || 0;
+  return round((recipeIndex === null ? 1 + population * 0.25 : 0.6 + population * 0.08 + recipeIndex * 0.05) * development);
+}
+
+function burgOutput(burg, dealProductWeight, development) {
+  const base = calculateBurgProduct(burg, dealProductWeight);
+  return {product: round(base * development), treasury: round((base * 0.35 + (burg.population || 0) * 0.5) * development)};
+}
+
+export function editedBurgOutput(burg, options) {
+  const development = cityDevelopmentEffects(burg).economy;
+  let recipeIndex = 0;
+  const production = burg.production.map(record => record?.goodId
+    ? {...record, units: productionUnits(burg, development, record.recipe ? recipeIndex++ : null)} : record);
+  return {production, ...burgOutput(burg, getDealProductWeight(options), development)};
 }
 
 function calculateBurgProduct(burg, dealProductWeight) {
@@ -1730,13 +1821,38 @@ function politicalAverages(groups, cityPower) {
   return {
     population: average(groups.map(group => Number(group?.rural || 0) + Number(group?.urban || 0))),
     area: average(groups.map(group => Number(group?.area || group?.cells || 0))),
-    burgs: average(groups.map(group => cityPower.get(group.i)?.count || 0)),
+    burgs: average(groups.map(group => cityPower ? cityPower.get(group.i)?.count || 0 : Number(group.burgs) || 0)),
     economy: average(groups.map(group => {
       const population = Number(group?.rural || 0) + Number(group?.urban || 0);
       const base = Number(group?.treasury || 0) || population * 0.2;
       return base + Number(group?.markerEconomicPotential || 0);
     }))
   };
+}
+
+// 只读取所辖城镇的既有连接；缩放基准使用已有行政统计。
+export function editedPoliticalPower(pack, kind, group) {
+  const groups = (kind === "state" ? pack.states : pack.provinces).filter(item => item?.i && !item.removed);
+  let settlementDevelopment = 0;
+  for (const burg of pack.burgs || []) {
+    if (!burg?.i || burg.removed || Number(burg[kind] ?? pack.cells[kind]?.[burg.cell]) !== group.i) continue;
+    let connections = 0;
+    for (const id of Object.values(pack.cells.routes?.[burg.cell] || {})) {
+      const route = pack.routes?.[id];
+      if (!route || route.removed) continue;
+      const type = route.group || route.type;
+      if (type === "roads" || type === "road") connections |= 1;
+      if (type === "trails" || type === "trail") connections |= 2;
+      if (type === "searoutes" || type === "searoute") connections |= 4;
+    }
+    settlementDevelopment += cityPowerContribution(burg, connections);
+  }
+  const population = Number(group.rural || 0) + Number(group.urban || 0);
+  const result = {...group};
+  applyPoliticalPowerFields(result, politicalAverages(groups), {kind, population, settlementDevelopment,
+    treasury: kind === "state" ? Number(group.treasury || 0) : population * 0.2, area: Number(group.area || group.cells || 0)});
+  return Object.fromEntries(["resourcePower", "economicPower", "populationPower", "territoryPower", "settlementPower", "powerScore", "militarySupply"]
+    .map(key => [key, result[key]]));
 }
 
 function applyPoliticalPowerFields(group, averages, context) {

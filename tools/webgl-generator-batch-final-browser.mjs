@@ -15,11 +15,19 @@ try {
  let profiler;
  if(mode==='large-profile'){profiler=await context.newCDPSession(page);await profiler.send('Profiler.enable');await profiler.send('Profiler.start');}
  if(mode==='guidance') {
-  report.guidance=await page.evaluate(async()=>{const a=window.__webglGeneratorApp,api=window.webglGeneratorApi,c=a.map.settlements.cities.find(c=>c&&!c.capital&&c.state>0),old=a.map.settlements.cities.find(item=>item?.burgId===a.map.politics.states[c.state].capital).id;const r=await api.edit.states.setCapital(c.state,c.id,{confirm:true});if(!r.ok||r.data.executed===false)throw Error(JSON.stringify(r));const changed=[a.cityGuidance.read(c.id),a.cityGuidance.read(old)];await api.history.undo();const undo=a.cityGuidance.read(c.id);await api.history.redo();a.panels.city.open(a.map,a.selection,a.editHistory.getStats());a.panels.city.setSelectedCityId(c.id);return {cityId:c.id,changed,undo};});
-  assert.ok(report.guidance.changed.every(g=>g.known&&g.pending.includes('economy')));assert.equal(report.guidance.undo.known,false);
-  await page.getByRole('button',{name:'查看经济与国力操作',exact:true}).click();
-  assert.ok(await page.locator('.floating-panel[data-panel-id="economy-panel"]').isVisible());
-  report.guidance.openedEconomy=true;
+  report.capital=await page.evaluate(async()=>{
+    const a=window.__webglGeneratorApp,api=window.webglGeneratorApi;
+    const c=a.map.settlements.cities.find(c=>c&&!c.capital&&c.state>0);
+    const old=a.map.pack.burgs[a.map.politics.states[c.state].capital].cityId;
+    const pair=()=>[c.id,old].map(id=>Boolean(a.map.settlements.cities[id].capital));
+    const r=await api.edit.states.setCapital(c.state,c.id,{confirm:true});
+    if(!r.ok||r.data.executed===false)throw Error(JSON.stringify(r));
+    const changed=pair();await api.history.undo();const undo=pair();await api.history.redo();
+    a.panels.city.open(a.map,a.selection,a.editHistory.getStats());a.panels.city.setSelectedCityId(c.id);
+    return {changed,undo,redo:pair()};
+  });
+  assert.deepEqual(report.capital,{changed:[true,false],undo:[false,true],redo:[true,false]});
+  assert.equal(await page.getByRole('button',{name:'查看经济与国力操作',exact:true}).count(),0);
  }else if(mode==='trade') {
   report.tradeParties=await page.evaluate(()=>{const a=window.__webglGeneratorApp,p=a.map.pack,party=(type,id)=>type==='burg'?p.burgs[id]:p.burgs[p.markets.find(m=>m?.i===id)?.centerBurgId];const d=p.deals.find(d=>d&&party(d.sellerType,d.seller)?.cell!==party(d.buyerType,d.buyer)?.cell);if(!d)throw Error('缺少跨端点交易');a.panels.economy.open(a.map,a.selection,a.editHistory.getStats());a.panels.economy.setSelectedDealId(d.i);return {id:d.i,from:party(d.sellerType,d.seller)?.cell,to:party(d.buyerType,d.buyer)?.cell};});
   await page.getByRole('button',{name:'检查现有路网',exact:true}).waitFor();

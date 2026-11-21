@@ -1,4 +1,5 @@
 import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
+import {withCityLocalUpdates} from "./city-local-updates.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {getStateFullName} from "../generator/names.js";
@@ -18,7 +19,7 @@ const STATE_CAPITAL_EFFECTS = Object.freeze({
   selection: "refresh",
   runtimeStats: true,
   pickPanel: true,
-  derived: Object.freeze(["state-capital", "labels", "object-panels"])
+  derived: Object.freeze(["state-capital", "point-layers", "city-role-labels", "labels", "object-panels"])
 });
 
 const PROVINCE_COLOR_EFFECTS = Object.freeze({
@@ -196,15 +197,29 @@ export function createSetObjectNoteCommand(object, body, {name = ""} = {}) {
   };
 }
 
-export function createSetStateCapitalCommand(stateId, nextBurgId) {
+const stateCapitalKeys = ["capital", "center", "gridCenter", "religion"];
+const cityCapitalKeys = ["capital", "group"];
+
+export function createSetStateCapitalCommand(stateId, nextBurgId, {updateCityOutputs = true} = {}) {
   const normalizedStateId = Number(stateId);
   const normalizedBurgId = Number(nextBurgId);
   let previous = null;
 
-  return {
+  let changedIds = [];
+  const command = {
     label: `更换国家 #${normalizedStateId} 首都`,
     domain: OBJECT_KIND.STATE,
-    cityUpdateGuidance: {attribute: "capital", reason: "更换首都", cityIds: []},
+    getReplicaPaths() {
+      if (!previous) return [];
+      return [
+        ...capitalFieldPaths(`politics.states.${normalizedStateId}`, previous.state, stateCapitalKeys),
+        ...capitalFieldPaths(`pack.states.${normalizedStateId}`, previous.packCapitalFields, stateCapitalKeys),
+        ...[previous.previousCity, previous.nextCity].filter(Boolean).flatMap(({cityId, burgId, city, burg}) => [
+          ...capitalFieldPaths(`settlements.cities.${cityId}`, city, cityCapitalKeys),
+          ...capitalFieldPaths(`pack.burgs.${burgId}`, burg, cityCapitalKeys)
+        ])
+      ];
+    },
     effects: {
       ...STATE_CAPITAL_EFFECTS,
       affected: [
@@ -214,8 +229,9 @@ export function createSetStateCapitalCommand(stateId, nextBurgId) {
     },
     apply(context) {
       previous ??= readStateCapitalSnapshot(context.map, normalizedStateId, normalizedBurgId);
-      this.cityUpdateGuidance.cityIds = [normalizedBurgId, previous.previousBurgId]
+      changedIds = [normalizedBurgId, previous.previousBurgId]
         .map(id => findCityByBurg(context.map, id)?.id).filter(Number.isInteger);
+      this.effects.affected = [...objectAffected(OBJECT_KIND.STATE, normalizedStateId), ...changedIds.flatMap(id => objectAffected(OBJECT_KIND.CITY, id))];
       writeStateCapital(context.map, normalizedStateId, normalizedBurgId);
     },
     revert(context) {
@@ -228,6 +244,8 @@ export function createSetStateCapitalCommand(stateId, nextBurgId) {
       return !state || !city || city.state !== normalizedStateId || Number(state.capital) === normalizedBurgId;
     }
   };
+  return updateCityOutputs ? withCityLocalUpdates(command, map => [normalizedBurgId, map.politics?.states?.[stateId]?.capital]
+    .map(id => findCityByBurg(map, id)?.id).filter(Number.isInteger)) : command;
 }
 
 export function createSetProvinceColorCommand(provinceId, color, {beforeColor = null, label = "省份颜色"} = {}) {
@@ -490,6 +508,23 @@ function writeCityName(map, cityId, name, burgName = name) {
   if (burg) burg.name = burgName;
 }
 
+function snapshotCapitalFields(record, keys) {
+  return record ? Object.fromEntries(keys.filter(key => Object.hasOwn(record, key)).map(key => [key, record[key]])) : null;
+}
+
+function restoreCapitalFields(record, fields, keys) {
+  if (!record || !fields) return;
+  for (const key of keys) {
+    if (Object.hasOwn(fields, key)) record[key] = fields[key];
+    else delete record[key];
+  }
+}
+
+function capitalFieldPaths(root, fields, keys) {
+  if (!fields) return [];
+  return keys.every(key => Object.hasOwn(fields, key)) ? keys.map(key => root + "." + key) : [root];
+}
+
 function readStateCapitalSnapshot(map, stateId, nextBurgId) {
   const state = map?.politics?.states?.[stateId];
   if (!state) throw new Error(`找不到国家 #${stateId}`);
@@ -501,13 +536,9 @@ function readStateCapitalSnapshot(map, stateId, nextBurgId) {
     stateId,
     previousBurgId,
     nextBurgId,
-    state: {
-      capital: state.capital,
-      center: state.center,
-      gridCenter: state.gridCenter,
-      religion: state.religion
-    },
+    state: snapshotCapitalFields(state, stateCapitalKeys),
     previousCity: snapshotCityAndBurg(map, previousCity),
+    packCapitalFields: snapshotCapitalFields(map.pack?.states?.[stateId], stateCapitalKeys),
     nextCity: snapshotCityAndBurg(map, nextCity)
   };
 }
@@ -539,12 +570,16 @@ function writeStateCapital(map, stateId, nextBurgId) {
   state.center = nextBurg.cell;
   state.gridCenter = map.pack?.cells?.g?.[nextBurg.cell] ?? nextCity.cell;
   state.religion = map.pack?.cells?.religion?.[nextBurg.cell] ?? state.religion;
+  const mirror = map.pack?.states?.[stateId];
+  if (mirror && mirror !== state) for (const key of stateCapitalKeys) mirror[key] = state[key];
 }
 
 function restoreStateCapital(map, snapshot) {
   const state = map?.politics?.states?.[snapshot.stateId];
   if (!state) throw new Error(`找不到国家 #${snapshot.stateId}`);
-  Object.assign(state, snapshot.state);
+  restoreCapitalFields(state, snapshot.state, stateCapitalKeys);
+  const mirror = map.pack?.states?.[snapshot.stateId];
+  if (mirror !== state) restoreCapitalFields(mirror, snapshot.packCapitalFields, stateCapitalKeys);
   restoreCityAndBurg(map, snapshot.previousCity);
   restoreCityAndBurg(map, snapshot.nextCity);
 }
@@ -555,25 +590,17 @@ function snapshotCityAndBurg(map, city) {
   return {
     cityId: city.id,
     burgId: city.burgId,
-    city: {
-      capital: city.capital,
-      group: city.group,
-      provincial: city.provincial
-    },
-    burg: burg ? {
-      capital: burg.capital,
-      group: burg.group,
-      state: burg.state
-    } : null
+    city: snapshotCapitalFields(city, cityCapitalKeys),
+    burg: snapshotCapitalFields(burg, cityCapitalKeys)
   };
 }
 
 function restoreCityAndBurg(map, snapshot) {
   if (!snapshot) return;
   const city = map?.settlements?.cities?.[snapshot.cityId];
-  if (city) Object.assign(city, snapshot.city);
+  restoreCapitalFields(city, snapshot.city, cityCapitalKeys);
   const burg = map?.pack?.burgs?.[snapshot.burgId];
-  if (burg && snapshot.burg) Object.assign(burg, snapshot.burg);
+  restoreCapitalFields(burg, snapshot.burg, cityCapitalKeys);
 }
 
 function findRiver(map, riverId) {

@@ -6,7 +6,6 @@ const GROUPS = [
   ["culture", "society.cultures", "pack.cultures"],
   ["religion", "society.religions", "pack.religions"]
 ];
-export const CITY_POPULATION_REPLICA_PATHS = ["settlements.cities", "settlements.metadata", "pack.burgs", ...GROUPS.flatMap(([, ...paths]) => paths)];
 
 export function createCityPopulationTransaction(cityId, value, {faultInjector} = {}) {
   const number = value == null || typeof value === "boolean" || String(value).trim() === "" ? NaN : Number(value);
@@ -20,6 +19,12 @@ export function createCityPopulationTransaction(cityId, value, {faultInjector} =
     return {city, burg};
   }
   return {
+    getReplicaPaths() {
+      if (!after) return [];
+      const item = after.visuals[0];
+      return [...before.fields.map(({path, exists}) => exists ? path : path.slice(0, path.lastIndexOf("."))),
+        `settlements.cities.${item.cityId}`, `pack.burgs.${item.burgId}`];
+    },
     isNoop({map}) {
       const {city, burg} = target(map);
       return city.population === population && burg.population === population;
@@ -32,7 +37,7 @@ export function createCityPopulationTransaction(cityId, value, {faultInjector} =
       for (const [index, [, ...roots]] of GROUPS.entries()) {
         for (const root of roots) if (get(map, `${root}.${owners[index]}`)) paths.push(`${root}.${owners[index]}.urban`);
       }
-      before = capture(map, paths);
+      before = capture(map, paths, cityId);
       try {
         city.population = burg.population = population;
         const totals = GROUPS.map(() => 0);
@@ -53,9 +58,9 @@ export function createCityPopulationTransaction(cityId, value, {faultInjector} =
         });
         map.settlements.metadata ||= {};
         Object.assign(map.settlements.metadata, {totalPopulation: Number(totalPopulation.toFixed(9)), maxPopulation});
-        refreshCityScaleVisuals(map);
+        refreshCityScaleVisuals(map, {cityIds: [cityId]});
         faultInjector?.();
-        after = capture(map, paths);
+        after = capture(map, paths, cityId);
       } catch (error) {restore(map, before); throw error;}
     },
     revert({map}) {
@@ -71,13 +76,13 @@ function owner(map, city, burg, key) {
   return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 function get(root, path) {return path.split(".").reduce((value, key) => value?.[key], root);}
-function capture(map, paths) {
+function capture(map, paths, cityId) {
   return {
     fields: paths.map(path => {
       const keys = path.split("."), key = keys.pop(), parent = get(map, keys.join("."));
       return {path, exists: Object.hasOwn(parent, key), value: structuredClone(parent[key])};
     }),
-    visuals: captureCityScaleVisualSnapshot(map)
+    visuals: captureCityScaleVisualSnapshot(map, [cityId])
   };
 }
 function restore(map, snapshot) {

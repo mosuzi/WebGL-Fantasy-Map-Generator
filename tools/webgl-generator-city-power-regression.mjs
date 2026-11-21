@@ -53,7 +53,7 @@ delete map.pack.states[state].settlementPower; delete map.politics.states[state]
 const score = map.politics.states[state].powerScore;
 createSetCityAttributeCommand(city.id, "citadel", !city.citadel).apply({map});
 createSetCityPopulationCommand(city.id, city.population + 20).apply({map});
-assert.equal(map.politics.states[state].powerScore, score, "修改属性和人口不得立即重算国力");
+assert.notEqual(map.politics.states[state].powerScore, score, "修改属性和人口即时更新所属国力");
 const before = structuredClone(map), history = new EditHistory();
 history.execute(createRebuildEconomyCommand(), {map});
 assert.equal(history.getStats().undo, 1);
@@ -64,4 +64,4 @@ history.undo({map}); assert.deepEqual(map, before);
 history.redo({map}); assert.deepEqual(map, after);
 const restored = parseMapDocument(stringifyMapDocument(createMapDocument(map))).map;
 assert.equal(restored.politics.states[state].settlementPower, map.politics.states[state].settlementPower);
-console.log(JSON.stringify({ok: true, factors: 9, diminishing: 3, deduplicatedRoutes: true, protected: true, deferred: true, history: true, persistence: true}));
+console.log(JSON.stringify({ok: true, factors: 9, diminishing: 3, deduplicatedRoutes: true, protected: true, localUpdates: true, history: true, persistence: true}));
