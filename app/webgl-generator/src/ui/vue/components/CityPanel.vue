@@ -212,7 +212,7 @@ async function applyPopulation(recalculate, people) {
   try {
     const result = await (recalculate ? props.callbacks.onPopulationRecalculate?.(id) : props.callbacks.onPopulationChange?.(id, value));
     await nextTick();
-    if (sameObjectId(selected.value?.id, id)) populationFeedback.value = result?.message || "人口未改变。";
+    if (sameObjectId(selected.value?.id, id)) populationFeedback.value = result?.executed ? "" : result?.message || "";
   } catch {
     if (sameObjectId(selected.value?.id, id)) populationFeedback.value = "人口更新失败，请稍后重试。";
   } finally {populationPending.value = false;}
@@ -424,7 +424,7 @@ async function handleAttributeChange(action) {
   try {
     const result = await props.callbacks.onAttributeChange?.(cityId, action.key, action.key === "capital" || !action.active);
     if (!sameObjectId(selected.value?.id, cityId)) return;
-    attributeFeedback.value = result?.message || (result?.executed ? `已${action.active ? "取消" : "设置"}${action.label}` : "属性未改变。");
+    if (!result?.executed) attributeFeedback.value = result?.error?.message || result?.message || "";
   } catch {
     if (sameObjectId(selected.value?.id, cityId)) attributeFeedback.value = "属性设置失败，请稍后重试。";
   } finally {

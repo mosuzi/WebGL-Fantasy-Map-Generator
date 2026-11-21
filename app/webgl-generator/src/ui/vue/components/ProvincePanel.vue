@@ -48,7 +48,7 @@
 
     <template #capital>
       <div class="province-capital-reassessment">
-        <p class="province-capital-reassessment__intro">先生成只读预览；确认时会校验预览指纹，并以一条历史原子更新省会。</p>
+        <p class="province-capital-reassessment__intro">预览各省的候选城市，确认后更新省会。</p>
         <div class="province-capital-reassessment__actions">
           <UiButton variant="secondary" @click="callbacks.onPreviewCapitalReassessment('selected')">预览当前省份</UiButton>
           <UiButton variant="secondary" @click="callbacks.onPreviewCapitalReassessment('all')">预览全部未锁省份</UiButton>

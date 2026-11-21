@@ -192,7 +192,7 @@ const outletPreviewMessage = computed(() => {
 });
 const patchPreviewMessage = computed(() => {
   const preview = props.state.patchPreview;
-  if (!preview) return "先选择修正方向和半径，再到地图上选择中心。预览不会写入历史。";
+  if (!preview) return "先选择修正方向和半径，再到地图上选择中心。";
   if (!preview.valid) return `${preview.code || "invalid"}：${preview.reason || "局部修正无效"}`;
   return `可以应用；影响 ${formatNumber(preview.packCells?.length || 0)} 个地貌区域、${formatNumber(preview.gridCells?.length || 0)} 个地图区域；目标水体 #${preview.packTargetFeature}`;
 });

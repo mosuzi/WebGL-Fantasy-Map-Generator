@@ -46,6 +46,24 @@ const actualAdapters = (await readdir(adaptersDir)).filter(name => name.endsWith
 assert.deepEqual([...matrix.adapters].sort(), actualAdapters, "面板适配层矩阵未精确覆盖正式文件");
 assert.equal(actualAdapters.length, 30, "正式面板适配文件数量漂移");
 
+const copySources = [
+  ...actualPanels.map(file => path.join(componentsDir, file)),
+  ...actualAdapters.map(file => path.join(adaptersDir, file)),
+  ...["app.js", "delete-impact.js"].map(file => path.join(root, "app/webgl-generator/src/runtime", file))
+];
+const undoReminders = [
+  /[，；。](?:成功后|应用后)?可(?:以|通过历史)?撤销/,
+  /可通过(?:一次)?撤销恢复|可使用撤销恢复|可用撤销\s*\/\s*重做恢复/,
+  /一次预览\s*\/\s*一条历史|进入同一撤销历史|执行可撤销细分/
+];
+for (const file of copySources) {
+  const source = await readFile(file, "utf8");
+  for (const pattern of undoReminders) {
+    const match = source.match(pattern);
+    assert.ok(!match, `${path.basename(file)} 含重复的撤销说明「${match?.[0]}」`);
+  }
+}
+
 const loadingFiles = new Set();
 for (const source of matrix.loadingSources) {
   assert.ok(source.context && source.policy, `${source.id} 缺少用户情境或反馈策略`);

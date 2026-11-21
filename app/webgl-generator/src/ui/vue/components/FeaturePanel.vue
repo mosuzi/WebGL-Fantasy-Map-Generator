@@ -147,9 +147,9 @@ const topologyBannerKind = computed(() => {
 });
 const topologyBannerMessage = computed(() => {
   const inspection = props.state.topologyInspection;
-  if (!inspection) return "应用时会自动检查水陆连通、城市、河流、港口和路线；成功后可撤销。";
+  if (!inspection) return "应用时会自动检查水陆连通、城市、河流、港口和路线。";
   if (!inspection.valid) return playerTopologyError(inspection.code);
-  return "所选范围可以安全修改；应用后可通过撤销恢复。";
+  return "所选范围可以安全修改。";
 });
 const formattedTopologyInspection = computed(() => JSON.stringify(props.state.topologyInspection, null, 2));
 

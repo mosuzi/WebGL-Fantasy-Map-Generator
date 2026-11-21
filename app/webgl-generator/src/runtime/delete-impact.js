@@ -83,7 +83,7 @@ export function formatDeleteImpactSummary(preview) {
 export function formatDeleteConfirmation(preview) {
   const ids = preview.deleteIds.slice(0, 12).map(id => `#${id}`).join("、");
   const suffix = preview.deleteIds.length > 12 ? ` 等 ${preview.deleteIds.length} 项` : "";
-  return `确认执行破坏性操作？\n\n${preview.summary}\n对象：${ids}${suffix}\n\n确认后可通过一次撤销恢复。`;
+  return `确认执行破坏性操作？\n\n${preview.summary}\n对象：${ids}${suffix}`;
 }
 
 export function requestDeleteConfirmation(preview, confirmFn) {

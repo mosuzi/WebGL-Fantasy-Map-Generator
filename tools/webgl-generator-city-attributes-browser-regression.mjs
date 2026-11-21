@@ -113,8 +113,9 @@ try {
     await select(candidate.id);
     await button("要塞").focus();
     const keyboardBefore = await snapshot();
+    const pressedBefore = await button("要塞").getAttribute("aria-pressed");
     await page.keyboard.press("Space");
-    await page.waitForFunction(id => document.querySelector('.city-attribute-feedback')?.textContent.includes("可撤销"), candidate.id);
+    await panel.locator(`button[aria-label="要塞"][aria-pressed="${pressedBefore !== "true"}"]`).waitFor();
     assert.notDeepEqual(await snapshot(), keyboardBefore, "空格键须激活图标按钮");
     await button("撤销").click();
     assert.deepEqual(await snapshot(), keyboardBefore);
@@ -224,6 +225,7 @@ async function roundtrip(id, key, label) {
   await button(label).click();
   await page.waitForFunction(({id, key, active}) => Boolean(window.__webglGeneratorApp.map.settlements.cities[id][key]) !== active, {id, key, active});
   assert.equal(await button(label).getAttribute("aria-pressed"), String(!active));
+  assert.equal(await panel.locator(".city-attribute-feedback").count(), 0, `${label} 成功后不应占用额外的提示行`);
   const after = await snapshot();
   assert.equal(Boolean(after.burgs[await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities[id].burgId, id)][key]), !active);
   assert.equal(await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo), count + 1);

@@ -186,7 +186,7 @@
     GPU 预览 {{ state.globalToolPreview.rendererPreview.cells }} cells / {{ state.globalToolPreview.rendererPreview.triangleCount }} triangles / {{ state.globalToolPreview.rendererPreview.buildMs }} ms
   </p>
   <UiButton class="height-global-apply" variant="secondary" :disabled="!state.active || !state.globalToolPreview?.valid" @click="callbacks.onGlobalToolApply?.()">应用全局预览</UiButton>
-  <p class="height-action-help">预览与应用都作用于当前“全部 / 仅陆地 / 仅水域”范围，并进入同一撤销历史。</p>
+  <p class="height-action-help">预览与应用都作用于当前“全部 / 仅陆地 / 仅水域”范围。</p>
   </div>
 
   <section v-if="debugEnabled" class="height-transform-panel" aria-labelledby="height-selection-title">
@@ -344,7 +344,6 @@
   <section class="height-transform-panel" aria-labelledby="height-program-title">
     <div class="height-transform-heading">
       <strong id="height-program-title">多步骤地形模板</strong>
-      <span>一次预览 / 一条历史</span>
     </div>
     <UiSelectField
       label="模板程序"
@@ -1022,7 +1021,7 @@ const activePreviewState = computed(() => {
   if (!current) return null;
   return {
     title: current[1],
-    message: current[0]?.notice || "地图上的紫色预览尚未写入历史，可应用或退出。"
+    message: current[0]?.notice || "紫色区域为预览范围。"
   };
 });
 
@@ -1049,7 +1048,6 @@ const visibleSummaryMetrics = computed(() => {
     {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
     {label: "最近影响", value: formatNumber(props.state.lastAffected, unitPreferences.value)},
     {label: "当前均高", value: current ? formatHeight(current.average, unitPreferences.value) : "-"},
-    {label: "历史", value: props.state.history ? `可撤销 ${props.state.history.undo} / 可重做 ${props.state.history.redo}` : "无"}
   ];
 });
 const transformOperandConfig = computed(() => {

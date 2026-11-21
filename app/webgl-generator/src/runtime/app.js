@@ -871,7 +871,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     const command = createSetCityPopulationCommand(cityId, population);
     const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}, throwOnError: false});
     updateEditingInteractionLock(state, documentRef);
-    return {...execution, message: execution.error ? "人口更新失败，请重新选择城市后重试。" : execution.executed ? "人口已更新，所属地区统计已同步，可撤销。" : "人口未改变。"};
+    return execution.error ? {...execution, message: "人口更新失败，请重新选择城市后重试。"} : execution;
   }
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onPopulationChange: changeCityPopulation,
@@ -1704,14 +1704,14 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       const command = createSetCityPopulationCommand(cityId, population, {label: "采用潜在人口"});
       const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}, throwOnError: false});
       updateEditingInteractionLock(state, documentRef);
-      return {...execution, message: execution.error ? "人口重算失败，请重新选择城市后重试。" : execution.executed ? "人口已重算，所属地区统计已同步，可撤销。" : "人口未改变。"};
+      return execution.error ? {...execution, message: "人口重算失败，请重新选择城市后重试。"} : execution;
     },
     onAttributeChange: (cityId, key, enabled) => {
       if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return {executed: false, message: "当前还有操作正在进行，请稍后再试。"};
       const command = createSetCityAttributeCommand(cityId, key, enabled);
       const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}, throwOnError: false});
       updateEditingInteractionLock(state, documentRef);
-      return {...execution, message: execution.error?.message || (execution.executed ? `${command.label}，可撤销。` : "属性未改变。")};
+      return execution;
     },
     onSyncOwnerToCell: cityId => {
       const context = {map: state.map};
@@ -6885,7 +6885,7 @@ function deleteNamebaseViaAction(state, documentRef, baseId, options = {}, confi
     requiresConfirm: Boolean(base),
     impactLevel: "medium",
     summary: base ? `删除用户名称库“${name}”。` : "未找到可删除的用户名称库。",
-    confirmationMessage: `确定删除用户名称库“${name}”？确认后仍可通过一次撤销恢复。`
+    confirmationMessage: `确定删除用户名称库“${name}”？`
   };
   if (options.inspectOnly === true) return namebaseInspectionResult(state, preview);
   if (preview.requiresConfirm && options.confirm !== true) {
@@ -6927,7 +6927,7 @@ function clearNamebasesViaApi(state, documentRef, options = {}, confirmation = "
     requiresConfirm: users.length > 0,
     impactLevel: "high",
     summary: `清空 ${users.length} 个用户名称库。`,
-    confirmationMessage: `确定清空 ${users.length} 个用户名称库？确认后仍可通过一次撤销恢复。`
+    confirmationMessage: `确定清空 ${users.length} 个用户名称库？`
   };
   if (options.inspectOnly === true) return namebaseInspectionResult(state, preview);
   if (preview.requiresConfirm && options.confirm !== true) {
@@ -7936,7 +7936,7 @@ function importFmgCellsGeoViaApi(state, documentRef, command, options = {}) {
   const summary = command.getSummary?.() || {};
   const reset = state.map.metadata?.geoImportDerivedRefresh || {};
   const sourceLabel = options.source === "ui" ? "" : "通过 API ";
-  setFileOperationStatus(documentRef, `已${sourceLabel}从原版 Cells GEO 导入地形并重置非 GEO 数据：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells；军事 ${reset.militaryRegiments || 0}，资源点 ${reset.resourceMarkers || 0}，地区 ${reset.zones || 0}，可撤销。`);
+  setFileOperationStatus(documentRef, `已${sourceLabel}从原版 Cells GEO 导入地形并重置非 GEO 数据：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells；军事 ${reset.militaryRegiments || 0}，资源点 ${reset.resourceMarkers || 0}，地区 ${reset.zones || 0}。`);
   return {
     mode: "fmg-cells-terrain",
     imported: true,
@@ -7997,7 +7997,7 @@ function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
     state.panels.measurement?.open(state.map, state.editHistory.getStats());
     locateMeasurement(state, {...selected, pointCount: selected.points?.length || 0}, documentRef);
   }
-  setFileOperationStatus(documentRef, `GEO 数据已${sourceLabel}导入为 ${imported.length} 个测量对象，可撤销；来源 Feature ${payload.featureCount} 个。`);
+  setFileOperationStatus(documentRef, `GEO 数据已${sourceLabel}导入为 ${imported.length} 个测量对象；来源 Feature ${payload.featureCount} 个。`);
   return {
     mode: "measurements",
     imported: true,
@@ -10131,7 +10131,7 @@ function deleteNotesBatchViaApi(state, documentRef, noteIds, options = {}) {
     requiresConfirm: noteIds.length > 0,
     impactLevel: "high",
     summary: `批量删除 ${noteIds.length} 条备注。`,
-    confirmationMessage: `确定批量删除 ${noteIds.length} 条备注？确认后可通过一次撤销恢复。`
+    confirmationMessage: `确定批量删除 ${noteIds.length} 条备注？`
   };
   if (options.inspectOnly === true) return namebaseInspectionResult(state, preview);
   if (preview.requiresConfirm && options.confirm !== true) throw createDeleteConfirmationRequiredError(preview);
@@ -10797,7 +10797,7 @@ export function applyFeatureTopologyViaApi(state, documentRef, options = {}, run
       const featureId = Number(topologyResult?.selectionTarget?.id);
       if (Number.isInteger(featureId) && featureId > 0) targetState.panels?.feature?.setSelectedFeatureId?.(featureId);
     },
-    status: "已完成海岸修改，可通过撤销恢复。",
+    status: "已完成海岸修改。",
     noopStatus: "海岸没有变化。",
     throwOnError: false
   });
@@ -12381,8 +12381,8 @@ function clearMilitaryBattleEventsViaApi(state, documentRef, target, options = {
     impactLevel: "high",
     summary: eventIds?.length ? `清空筛选出的 ${eventIds.length} 条战斗事件。` : "清空当前军团的全部战斗事件。",
     confirmationMessage: eventIds?.length
-      ? `确定清空筛选出的 ${eventIds.length} 条战斗事件？确认后可通过一次撤销恢复。`
-      : "确定清空当前军团的全部战斗事件？确认后可通过一次撤销恢复。"
+      ? `确定清空筛选出的 ${eventIds.length} 条战斗事件？`
+      : "确定清空当前军团的全部战斗事件？"
   };
   if (options.inspectOnly === true) return namebaseInspectionResult(state, preview);
   if (preview.requiresConfirm && options.confirm !== true) throw createDeleteConfirmationRequiredError(preview);

@@ -414,7 +414,6 @@
           </UiActionDock>
           <UiButton id="delete-user-visual-theme" variant="danger" @click="requestDeleteVisualTheme">删除用户主题</UiButton>
         </div>
-        <p class="visual-theme-editor-note">颜色修改进入编辑历史，可用撤销 / 重做恢复；纹理、字体和高级滤镜不在本轮范围。</p>
       </section>
       <UiSegmented class="view-mode-segmented" label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
       <div class="preference-toggle-grid">

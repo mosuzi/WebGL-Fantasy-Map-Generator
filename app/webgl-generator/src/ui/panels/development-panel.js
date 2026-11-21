@@ -309,7 +309,7 @@ export function createDevelopmentPanel(documentRef, manager) {
       return;
     }
     gridInspection = null;
-    updateGridRefinementStatus(`已细分为 ${result.data.target.cells} cells；可使用撤销恢复`, "success");
+    updateGridRefinementStatus(`已细分为 ${result.data.target.cells} 个地块。`, "success");
   }
 
   function updateGridRefinementButton(enabled) {
@@ -346,7 +346,7 @@ function createDevelopmentPanelBody(documentRef, callbacks) {
 function gridRefinementSection(documentRef, callbacks) {
   const wrapper = documentRef.createElement("div");
   wrapper.className = "grid-refinement-controls";
-  const description = paragraph(documentRef, "grid-refinement-description", "仅用于现有地图的受控拓扑细分；先预检，再执行一条可撤销事务。");
+  const description = paragraph(documentRef, "grid-refinement-description", "先预检当前地图，再应用细分。");
   const target = documentRef.createElement("input");
   target.id = "grid-refinement-target";
   target.type = "number";
@@ -358,7 +358,7 @@ function gridRefinementSection(documentRef, callbacks) {
   const actions = documentRef.createElement("div");
   actions.className = "development-panel-toolbar";
   const inspect = actionButton(documentRef, "grid-refinement-inspect", "预检网格细分");
-  const apply = actionButton(documentRef, "grid-refinement-apply", "执行可撤销细分");
+  const apply = actionButton(documentRef, "grid-refinement-apply", "应用细分");
   apply.disabled = true;
   inspect.addEventListener("click", callbacks.onInspectGrid);
   apply.addEventListener("click", callbacks.onApplyGrid);

@@ -34,7 +34,7 @@ for (const method of ["population.applyAdjustment", "population.transfer"]) {
   assert.match(consoleSource, new RegExp(`"${method.replace(".", "\\.")}": \\{[^\\n]*async: true`), `${method} 未声明为异步正式入口`);
 }
 for (const token of ["onAdjustmentDelta", "onInspectAdjustment", "onApplyAdjustment", "onTransferTarget", "onInspectTransfer", "onApplyTransfer", "historyActions"]) assert(controllerSource.includes(token), `人口 panel controller 缺少 ${token}`);
-for (const text of ["区域人口增减", "人口增减量", "应用单次调整", "区域人口转移", "目标区域", "预检转移", "确认转移", "目标容量", "可通过历史撤销"]) assert(panelSource.includes(text), `人口面板缺少“${text}”`);
+for (const text of ["区域人口增减", "人口增减量", "应用单次调整", "区域人口转移", "目标区域", "查看转移影响", "确认转移", "目标容量"]) assert(panelSource.includes(text), `人口面板缺少“${text}”`);
 
 const dynamic = await testDynamicRuntime();
 console.log(JSON.stringify({ok: true, methodCounts: {total: 329, edit: 179}, dynamic}, null, 2));

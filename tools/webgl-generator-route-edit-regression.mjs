@@ -86,7 +86,7 @@ assert.match(panelSource, /regenerationPending\.value = true[\s\S]*await regener
 assert.match(panelSource, /disabled: regenerationActionBusy\.value/, "路线专用入口没有在本地请求或共享 runtime operation 期间禁用");
 assert.match(panelSource, /webgl-generator-runtime-operation[\s\S]*handleRuntimeOperationChanged/, "路线专用入口没有订阅共享 runtime operation busy 状态");
 assert.match(panelSource, /regenerationFeedbackMessage\("routes"[\s\S]*debugModeEnabled\(\)/, "路线专用入口没有复用普通 / 调试双模式错误文案");
-assert.match(panelSource, /routeTopologyTransition\(before, after\)[\s\S]*可以撤销/, "路线专用入口成功终态没有展示前后拓扑摘要与撤销提示");
+assert.match(panelSource, /regenerationMessage\.value = [^\n]*routeTopologyTransition\(before, after\)/, "路线重算应显示修改前后的路线和段数");
 assert.match(consoleSource, /routes\.inspectEdit[\s\S]*routes\.update/, "控制台 API 缺少路线预检或更新方法");
 assert.match(pickingSource, /map\?\.settlements\?\.routes[\s\S]*Array\.isArray\(route\?\.points\)/, "路线 picking 未读取编辑后的 points");
 

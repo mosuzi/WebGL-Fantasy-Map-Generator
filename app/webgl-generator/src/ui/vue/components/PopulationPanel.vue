@@ -178,7 +178,7 @@ const adjustmentFeedback = computed(() => {
   return {
     kind: "selected",
     title: "人口调整已提交",
-    message: `已更新 ${formatNumber(result.result?.packCells || 0)} 个人口区域和 ${formatNumber(result.result?.cities || 0)} 个城市，可通过历史撤销。`
+    message: `已更新 ${formatNumber(result.result?.packCells || 0)} 个人口区域和 ${formatNumber(result.result?.cities || 0)} 个城市。`
   };
 });
 const transferFeedback = computed(() => {
@@ -199,7 +199,7 @@ const transferFeedback = computed(() => {
   return {
     kind: "selected",
     title: "人口转移已提交",
-    message: `已守恒转移 ${formatPopulationValue(result.result?.amount || 0)}，可通过历史撤销。`
+    message: `已守恒转移 ${formatPopulationValue(result.result?.amount || 0)}。`
   };
 });
 

@@ -336,7 +336,7 @@ async function handleRouteRegeneration() {
     }
     const after = routeTopologySummary(props.state.map);
     regenerationStatus.value = "success";
-    regenerationMessage.value = `${regenerationFeedbackMessage("routes", response, {debug: debugModeEnabled()})}${routeTopologyTransition(before, after)}${response.data?.executed === false ? "" : "；可以撤销。"}`;
+    regenerationMessage.value = `${regenerationFeedbackMessage("routes", response, {debug: debugModeEnabled()})}${routeTopologyTransition(before, after)}`;
   } catch (error) {
     settleRegenerationFailure(error, requestId);
   } finally {
