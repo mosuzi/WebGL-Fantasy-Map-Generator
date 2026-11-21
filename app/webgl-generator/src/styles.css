@@ -10508,10 +10508,15 @@ input.ui-switch-native {
 
 .ui-key-value-grid--metric {
   --ui-key-value-min: 112px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 16px;
 }
 
 .ui-key-value-grid--detail {
   --ui-key-value-min: 150px;
+  container-type: inline-size;
 }
 
 .ui-key-value-grid--compact {
@@ -10534,6 +10539,25 @@ input.ui-switch-native {
 .ui-key-value-grid--detail .ui-key-value-item.is-wide,
 .ui-key-value-grid--compact .ui-key-value-item.is-wide {
   grid-column: span 2;
+}
+
+.ui-key-value-grid--metric > .ui-key-value-item {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: 100%;
+}
+
+.ui-key-value-grid--metric > .ui-key-value-item > .ui-key-value-label {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.ui-key-value-grid:is(.ui-key-value-grid--detail, .ui-key-value-grid--compact) > .ui-key-value-item {
+  display: grid;
+  grid-template-columns: fit-content(46%) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 5px;
 }
 
 .ui-key-value-label {
@@ -10596,7 +10620,7 @@ input.ui-switch-native {
 .population-panel-summary,
 .zone-panel-summary {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-key-value-min)), 1fr));
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .state-panel-controls,
@@ -10621,7 +10645,7 @@ input.ui-switch-native {
 .feature-panel-controls,
 .population-panel-controls,
 .zone-panel-controls {
-  margin: 10px 0 8px;
+  margin: 6px 0;
 }
 
 .zone-panel-regeneration {
@@ -10751,6 +10775,7 @@ input.ui-switch-native {
 .object-details-list,
 .economy-panel-diagnostic-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-key-value-min)), 1fr));
+  gap: 3px 12px;
 }
 
 .vue-feature-panel-root {
@@ -10814,8 +10839,8 @@ input.ui-switch-native {
 .measurement-panel-details,
 .government-panel-details,
 .zone-panel-details {
-  margin: 10px 0;
-  padding-top: 10px;
+  margin: 6px 0;
+  padding-top: 6px;
   border-top: 1px solid var(--panel-border);
 }
 
@@ -10923,7 +10948,7 @@ input.ui-switch-native {
 }
 
 .economy-detail-highlights {
-  --ui-key-value-cell-padding: 7px 8px;
+  --ui-key-value-cell-padding: 3px 6px;
   --ui-key-value-cell-border: 1px solid var(--panel-border);
   --ui-key-value-cell-bg: var(--panel-surface);
   --ui-key-value-label-size: 10px;
@@ -10945,6 +10970,12 @@ input.ui-switch-native {
 .economy-detail-section-grid .ui-key-value-item:last-child {
   border-bottom: 0;
   padding-bottom: 0;
+}
+
+@container (max-width: 319px) {
+  .ui-key-value-grid--detail > .ui-key-value-item.is-wide {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 520px) {

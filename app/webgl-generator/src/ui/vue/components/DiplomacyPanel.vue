@@ -120,7 +120,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
-import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {formatListCount, formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId, toIntegerId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -241,13 +241,12 @@ onMounted(() => {
 onBeforeUnmount(() => matrixCenterController.cancel());
 
 const summaryMetrics = computed(() => [
-  {label: "主体", value: metrics.value.subjectName},
-  {label: "关系", value: formatNumber(metrics.value.rows.length)},
+  {label: "关系", value: formatListCount(visibleRows.value.length, metrics.value.rows.length)},
   {label: "盟友", value: formatNumber(metrics.value.counts.Ally || 0)},
   {label: "宿敌", value: formatNumber(metrics.value.counts.Rival || 0)},
   {label: "战争", value: formatNumber(metrics.value.counts.Enemy || 0)},
   {label: "附庸", value: formatNumber(metrics.value.counts.Vassal || 0)},
-  {label: "已选", value: formatNumber(selectedRelationRows.value.length)},
+  ...(selectedRelationRows.value.length ? [{label: "已选", value: formatNumber(selectedRelationRows.value.length)}] : []),
   {label: "历史", value: formatNumber(metrics.value.history)}
 ]);
 
@@ -293,12 +292,7 @@ const filteredHistoryRows = computed(() => {
 const relationHistoryPreview = computed(() => {
   return filteredHistoryRows.value.slice(-4).reverse();
 });
-const relationHistoryLabel = computed(() => {
-  const total = diplomacyChronicleRows.value.length;
-  if (historyFilterMode.value === "all") return `全部 ${formatNumber(total)}`;
-  if (historyFilterMode.value === "subject") return `主体 ${formatNumber(subjectHistoryRows.value.length)} / 全部 ${formatNumber(total)}`;
-  return `当前关系 ${formatNumber(relationHistoryRows.value.length)} / 全部 ${formatNumber(total)}`;
-});
+const relationHistoryLabel = computed(() => formatListCount(filteredHistoryRows.value.length, diplomacyChronicleRows.value.length));
 const historyFilterMode = computed(() => {
   const mode = props.state.historyScope;
   return mode === "subject" || mode === "all" ? mode : "selected";

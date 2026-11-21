@@ -168,7 +168,7 @@ import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
-import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {formatListCount, formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {buildStateCapitalOptions} from "../../state-capital-options.js";
@@ -300,15 +300,11 @@ const stateActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
-  {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
-  {label: "删除", value: props.state.deleteMode ? "等待点击" : "关闭"},
-  {label: "国家", value: formatNumber(metrics.value.total)},
+  {label: "国家", value: formatListCount(visibleRows.value.length, metrics.value.total)},
   {label: "国力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)},
-  {label: "目标国家", value: formatStateName(props.state.map, props.state.targetStateId)},
-  {label: "影响", value: formatNumber(props.state.lastAffected)}
+  ...(props.state.active ? [{label: "目标国家", value: formatStateName(props.state.map, props.state.targetStateId)}] : []),
+  ...(props.state.lastAffected ? [{label: "影响", value: formatNumber(props.state.lastAffected)}] : []),
 ]);
 
 const detailRows = computed(() => selected.value ? [

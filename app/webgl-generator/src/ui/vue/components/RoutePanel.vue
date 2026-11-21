@@ -81,7 +81,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
-import {formatDistance, formatNumber} from "../../display-units.js";
+import {formatListCount, formatDistance, formatNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {regenerationFeedbackMessage, regenerationLoadingMessage} from "../../regeneration-user-copy.js";
 import {normalizeRouteRegenerationError, normalizeRouteRegenerationResponse, routeTopologySummary} from "../../route-regeneration-state.js";
@@ -178,8 +178,7 @@ const routeListActions = computed(() => [
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 
 const summaryMetrics = computed(() => [
-  {label: "路线", value: formatNumberValue(rows.value.length)},
-  {label: "筛选", value: formatNumberValue(visibleRows.value.length)},
+  {label: "路线", value: formatListCount(visibleRows.value.length, rows.value.length)},
   {label: "总长度", value: formatRouteLength(totalLength.value)},
   {label: "资源路线", value: formatNumberValue(rows.value.filter(row => row.resourceCells > 0).length)},
   {label: "海路", value: formatNumberValue(rows.value.filter(row => row.type === "searoute").length)}

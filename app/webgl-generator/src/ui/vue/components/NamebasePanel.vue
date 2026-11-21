@@ -181,7 +181,7 @@ import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, ref, watch} from "vue";
 import {createNamebaseGeneratedExamples} from "../../../generator/namebase-store.js";
-import {formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -288,11 +288,11 @@ const namebaseListActions = computed(() => [
 const selectedSourceFingerprint = computed(() => (selected.value?.source || []).join("\u0000"));
 const previewExamplesLabel = computed(() => generatedExamples.value.length ? generatedExamples.value.join("、") : selected.value?.examplesLabel || "无样例");
 const summaryMetrics = computed(() => [
-  {label: "词池", value: formatNumber(rows.value.length)},
+  {label: "词池", value: formatListCount(visibleRows.value.length, rows.value.length)},
   {label: "样本", value: formatNumber(rows.value.reduce((sum, row) => sum + row.samples, 0))},
   {label: "唯一样本", value: formatNumber(rows.value.reduce((sum, row) => sum + row.uniqueSamples, 0))},
   {label: "重复", value: formatNumber(rows.value.reduce((sum, row) => sum + row.duplicateSamples, 0))},
-  {label: "已选", value: formatNumber(selectedNamebaseRows.value.length)}
+  ...(selectedNamebaseRows.value.length ? [{label: "已选", value: formatNumber(selectedNamebaseRows.value.length)}] : []),
 ]);
 const bindingInvalidEntries = computed(() => props.state.bindingStatus?.invalid || []);
 const bindingInvalidLabel = computed(() => bindingInvalidEntries.value.map(item => `${item.label} -> ${item.id}`).join("；"));

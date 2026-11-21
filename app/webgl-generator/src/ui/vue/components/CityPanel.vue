@@ -108,7 +108,7 @@ import {
   deriveCityScale,
   resolveCityVisual
 } from "../../../runtime/city-visuals.js";
-import {formatHeight, formatNumber, formatPopulation, populationUnitsToPeople, peopleToPopulationUnits} from "../../display-units.js";
+import {formatListCount, formatHeight, formatNumber, formatPopulation, populationUnitsToPeople, peopleToPopulationUnits} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -236,15 +236,11 @@ const cityActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
-  {label: "删除", value: props.state.deleteMode ? "等待点击" : "关闭"},
-  {label: "移动", value: props.state.moveMode ? "等待拖动" : "关闭"},
-  {label: "城市", value: formatNumberValue(metrics.value.total)},
+  {label: "城市", value: formatListCount(visibleRows.value.length, metrics.value.total)},
   {label: "首都", value: formatNumberValue(metrics.value.capitals)},
   {label: "港口", value: formatNumberValue(metrics.value.ports)},
   {label: "资源城镇", value: formatNumberValue(metrics.value.resourceCities)},
   {label: "人口", value: formatPopulationValue(metrics.value.totalPopulation)},
-  {label: "筛选", value: formatNumberValue(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [

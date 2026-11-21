@@ -59,7 +59,7 @@ import {
   measurementDistance
 } from "../../../runtime/measurement-objects.js";
 import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "../../../runtime/measurement-route-fit.js";
-import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
@@ -131,11 +131,10 @@ const measurementListActions = computed(() => [
 const totalDistance = computed(() => rows.value.reduce((sum, row) => sum + row.distance, 0));
 const totalArea = computed(() => rows.value.reduce((sum, row) => sum + row.area, 0));
 const summaryMetrics = computed(() => [
-  {label: "测量", value: formatNumber(rows.value.length)},
+  {label: "测量", value: formatListCount(visibleRows.value.length, rows.value.length)},
   {label: "总长度", value: formatDistanceValue(totalDistance.value)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},
-  {label: "已选", value: formatNumber(selectedMeasurementRows.value.length)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)}
+  ...(selectedMeasurementRows.value.length ? [{label: "已选", value: formatNumber(selectedMeasurementRows.value.length)}] : []),
 ]);
 const detailRows = computed(() => selected.value ? [
   {label: "名称", value: selected.value.name,

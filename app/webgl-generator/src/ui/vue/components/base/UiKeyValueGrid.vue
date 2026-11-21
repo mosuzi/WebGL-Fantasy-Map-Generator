@@ -88,7 +88,7 @@ function normalizeItem(item, index) {
 function shouldUseWideCell(item, value) {
   if (item?.wide === true) return true;
   if (item?.wide === false || !props.autoWide || props.variant === "metric") return false;
-  return String(value).length >= props.wideValueLength || /[；,，、/]/.test(String(value));
+  return value.length >= props.wideValueLength || (value.length > 10 && /[；，、/]/.test(value));
 }
 
 function formatCellText(value, fallback) {

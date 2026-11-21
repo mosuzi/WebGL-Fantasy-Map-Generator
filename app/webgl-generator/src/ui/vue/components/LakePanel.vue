@@ -108,7 +108,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
-import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -204,10 +204,9 @@ const lakeListActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "湖泊", value: formatNumber(rows.value.length)},
+  {label: "湖泊", value: formatListCount(visibleRows.value.length, rows.value.length)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},
   {label: "水域区域", value: formatNumber(totalCells.value)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [

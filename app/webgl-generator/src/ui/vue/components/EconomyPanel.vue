@@ -21,7 +21,7 @@
       </label>
     </div>
     <div class="economy-trade-query-summary">
-      <span>{{ tradeQuerySummary }}</span>
+      <span v-if="hasActiveTradeQuery">{{ tradeQuerySummary }}</span>
       <UiButton variant="secondary" :disabled="!hasActiveTradeQuery" @click="clearTradeQuery">清空全部筛选</UiButton>
     </div>
   </section>
@@ -251,7 +251,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
-import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
@@ -443,7 +443,7 @@ const tradeQueryOptions = computed(() => {
 });
 const activeStructuredQueryCount = computed(() => Object.values(tradeQuery).filter(value => String(value ?? "").trim()).length);
 const hasActiveTradeQuery = computed(() => activeStructuredQueryCount.value > 0 || Boolean(String(props.state.filter || "").trim()));
-const tradeQuerySummary = computed(() => `组合条件 ${activeStructuredQueryCount.value} 项${props.state.filter ? "，含自由文本" : ""}；匹配 ${formatNumber(metrics.value.dealQueryCount)} / ${formatNumber(metrics.value.summary.deals)} 笔交易`);
+const tradeQuerySummary = computed(() => `组合条件 ${activeStructuredQueryCount.value} 项${props.state.filter ? "，含自由文本" : ""}`);
 const goodDisplayDraft = reactive({visible: true, color: "#d7a84f", icon: "●", label: ""});
 const marketDisplayDraft = reactive({name: "", color: "#4f9cc9"});
 
@@ -471,15 +471,15 @@ watch(
 );
 
 const summaryMetrics = computed(() => [
-  {label: "商品", value: formatNumber(metrics.value.summary.goods)},
-  {label: "市场", value: formatNumber(metrics.value.summary.markets)},
-  {label: "交易", value: formatNumber(metrics.value.summary.deals)},
+  {label: "商品", value: formatListCount(props.state.tab === "goods" ? filteredGoodRows.value.length : metrics.value.summary.goods, metrics.value.summary.goods)},
+  {label: "市场", value: formatListCount(props.state.tab === "markets" ? filteredMarketRows.value.length : metrics.value.summary.markets, metrics.value.summary.markets)},
+  {label: "交易", value: formatListCount(props.state.tab === "deals" ? metrics.value.dealQueryCount : metrics.value.summary.deals, metrics.value.summary.deals)},
   {label: "资源点", value: formatNumber(metrics.value.summary.resourceMarkers)},
   {label: "总库存", value: formatNumber(metrics.value.summary.stock)},
   {label: "供需缺口", value: formatNumber(metrics.value.summary.shortage)},
   {label: "价格信号", value: formatNumber(metrics.value.summary.priceSignals)},
   {label: "交易额", value: formatNumber(metrics.value.summary.tradeValue)},
-  {label: "已选", value: formatNumber(selectedEconomyRows.value.length)},
+  ...(selectedEconomyRows.value.length ? [{label: "已选", value: formatNumber(selectedEconomyRows.value.length)}] : []),
 ]);
 
 const economyDetail = computed(() => {

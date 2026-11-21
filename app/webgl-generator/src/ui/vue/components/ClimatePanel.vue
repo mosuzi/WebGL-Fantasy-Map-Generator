@@ -90,7 +90,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
-import {formatNumber as formatDisplayNumber, formatPrecipitation} from "../../display-units.js";
+import {formatListCount, formatNumber as formatDisplayNumber, formatPrecipitation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
@@ -198,6 +198,7 @@ const formattedResult = computed(() => JSON.stringify({
 }, null, 2));
 
 const summaryMetrics = computed(() => [
+  {label: "温度带", value: formatListCount(visibleRows.value.length, metrics.value.rows.length)},
   {label: "温度范围", value: `${formatTemperature(metrics.value.temperatureMin)} .. ${formatTemperature(metrics.value.temperatureMax)}`},
   {label: "平均温度", value: formatTemperature(metrics.value.avgTemp)},
   {label: "降水范围", value: `${formatPrecipitationValue(metrics.value.precipitationMin)} .. ${formatPrecipitationValue(metrics.value.precipitationMax)}`},

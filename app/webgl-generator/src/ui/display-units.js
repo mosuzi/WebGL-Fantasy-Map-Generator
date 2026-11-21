@@ -246,6 +246,11 @@ export function formatPlainNumber(value, {maximumFractionDigits = 1} = {}) {
   return numeric.toLocaleString("zh-CN", {maximumFractionDigits});
 }
 
+export function formatListCount(matched, total) {
+  const denominator = formatPlainNumber(total);
+  return matched === total ? denominator : `${formatPlainNumber(matched)} / ${denominator}`;
+}
+
 export function formatNumber(value, preferences = {}, {maximumFractionDigits = 1, minimumCompactValue = null} = {}) {
   const units = normalizeUnitPreferences(preferences);
   const numeric = Number(value);

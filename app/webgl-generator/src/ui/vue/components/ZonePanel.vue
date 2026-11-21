@@ -74,7 +74,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
-import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -186,7 +186,7 @@ const zoneListActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "地区", value: formatNumber(rows.value.length)},
+  {label: "地区", value: formatListCount(visibleRows.value.length, rows.value.length)},
   {label: "可见", value: formatNumber(visibleCount.value)},
   {label: "涉及区域", value: formatNumber(totalCells.value)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},

@@ -101,7 +101,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
-import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {formatListCount, formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -204,6 +204,7 @@ const transferFeedback = computed(() => {
 });
 
 const summaryMetrics = computed(() => [
+  {label: "统计范围", value: formatListCount(visibleRows.value.length, metrics.value.rows.length)},
   {label: "总人口", value: formatPopulationValue(metrics.value.population)},
   {label: "乡村", value: formatPopulationValue(metrics.value.rural)},
   {label: "城市", value: formatPopulationValue(metrics.value.urban)},

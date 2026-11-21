@@ -113,7 +113,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
-import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {formatListCount, formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -224,7 +224,7 @@ watch(() => props.state.suitabilityActive, active => {
 });
 
 const summaryMetrics = computed(() => [
-  {label: "群系", value: formatNumber(metrics.value.total)},
+  {label: "群系", value: formatListCount(visibleRows.value.length, metrics.value.total)},
   {label: "陆地区域", value: formatNumber(metrics.value.landCells)},
   {label: "适居区域", value: formatNumber(metrics.value.positiveSuitabilityCells)},
   {label: "有人口区域", value: formatNumber(metrics.value.positivePopulationCells)},

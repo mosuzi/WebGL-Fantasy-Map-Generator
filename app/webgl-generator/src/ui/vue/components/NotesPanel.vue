@@ -87,7 +87,7 @@ import OrphanNoteRescue from "./OrphanNoteRescue.vue";
 import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 import {noteRenameTargetKind} from "../../../runtime/notes-rename-target.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
-import {formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiButton from "./base/UiButton.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -160,11 +160,10 @@ const notesListActions = computed(() => [
   {key: "delete-batch", label: deleteTargetRows.value.length > 1 ? `批量删除已选 ${formatNumber(deleteTargetRows.value.length)}` : "删除选中备注", icon: Delete, disabled: !deleteTargetRows.value.length}
 ]);
 const summaryMetrics = computed(() => [
-  {label: "备注", value: formatNumber(rows.value.length)},
+  {label: "备注", value: formatListCount(visibleRows.value.length, rows.value.length)},
   {label: "可定位", value: formatNumber(rows.value.filter(row => !row.orphan).length)},
   {label: "孤儿备注", value: formatNumber(rows.value.filter(row => row.orphan).length)},
-  {label: "已选", value: formatNumber(selectedNoteRows.value.length)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)}
+  ...(selectedNoteRows.value.length ? [{label: "已选", value: formatNumber(selectedNoteRows.value.length)}] : []),
 ]);
 const detailRows = computed(() => selected.value ? [
   {label: "正文", value: selected.value.body || "空备注",

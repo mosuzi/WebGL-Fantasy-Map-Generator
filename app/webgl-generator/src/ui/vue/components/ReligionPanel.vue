@@ -132,7 +132,7 @@ import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiTreeDisplayPanel from "./base/UiTreeDisplayPanel.vue";
-import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {formatListCount, formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -233,14 +233,13 @@ const expansionPreviewText = computed(() => {
 });
 
 const summaryMetrics = computed(() => [
-  {label: "宗教", value: formatNumber(metrics.value.total)},
+  {label: "宗教", value: formatListCount(visibleRows.value.length, metrics.value.total)},
   {label: "根系", value: formatNumber(metrics.value.roots)},
   {label: "分支宗教", value: formatNumber(metrics.value.derived)},
   {label: "层级", value: formatNumber(metrics.value.maxDepth)},
   {label: "人口", value: formatPopulationValue(metrics.value.population)},
   {label: "城市", value: formatNumber(metrics.value.cities)},
-  {label: "归属笔刷", value: props.state.assignmentActive ? "启用" : "关闭"},
-  {label: "本次影响", value: formatNumber(props.state.lastAffected || 0)},
+  ...(props.state.lastAffected ? [{label: "本次影响", value: formatNumber(props.state.lastAffected || 0)}] : []),
 ]);
 
 const detailRows = computed(() => selected.value ? [

@@ -69,7 +69,7 @@ import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSegmented from "./base/UiSegmented.vue";
-import {formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -172,10 +172,9 @@ const markerListActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "标记", value: formatNumber(metrics.value.total)},
+  {label: "标记", value: formatListCount(visibleRows.value.length, metrics.value.total)},
   {label: "资源点", value: formatNumber(metrics.value.resources)},
   {label: "资源潜力", value: formatNumber(metrics.value.resourcePotential)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [

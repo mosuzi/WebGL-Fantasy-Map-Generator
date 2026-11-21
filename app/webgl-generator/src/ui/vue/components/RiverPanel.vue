@@ -85,7 +85,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
-import {estimateRiverRunoffFlowRange, formatArea, formatDistance, formatNumber as formatDisplayNumber, formatPrecipitation, formatRiverFlow as formatDisplayRiverFlow, formatRiverRunoffFlowRange, riverFluxToCubicMetersPerSecond} from "../../display-units.js";
+import {formatListCount, estimateRiverRunoffFlowRange, formatArea, formatDistance, formatNumber as formatDisplayNumber, formatPrecipitation, formatRiverFlow as formatDisplayRiverFlow, formatRiverRunoffFlowRange, riverFluxToCubicMetersPerSecond} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -169,10 +169,9 @@ const riverListActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "河流", value: formatNumber(rows.value.length)},
+  {label: "河流", value: formatListCount(visibleRows.value.length, rows.value.length)},
   {label: "总长度", value: formatLength(totalLength.value)},
   {label: "最大流量", value: formatRiverFlow(maxFlux.value)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [

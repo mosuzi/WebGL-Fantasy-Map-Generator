@@ -75,7 +75,7 @@ import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import {LABEL_TARGET_KIND} from "../../../runtime/object-kinds.js";
 import {resolveLabelLayout} from "../../../runtime/label-layout-registry.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
-import {formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
@@ -136,12 +136,11 @@ const labelManagementActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "标签", value: formatNumber(rows.value.length)},
+  {label: "标签", value: formatListCount(visibleRows.value.length, rows.value.length)},
   {label: "城市", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CITY).length)},
   {label: "国家", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.STATE).length)},
   {label: "省份", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.PROVINCE).length)},
   {label: "手工", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CUSTOM).length)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [

@@ -1045,8 +1045,7 @@ const visibleSummaryMetrics = computed(() => {
   if (debugEnabled.value) return summaryMetrics.value;
   const current = props.state.currentHeightStats;
   return [
-    {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
-    {label: "最近影响", value: formatNumber(props.state.lastAffected, unitPreferences.value)},
+    ...(props.state.lastAffected ? [{label: "最近影响", value: formatNumber(props.state.lastAffected, unitPreferences.value)}] : []),
     {label: "当前均高", value: current ? formatHeight(current.average, unitPreferences.value) : "-"},
   ];
 });

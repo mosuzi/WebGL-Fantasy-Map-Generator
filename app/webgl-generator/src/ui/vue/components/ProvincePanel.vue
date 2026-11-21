@@ -115,7 +115,7 @@ import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
-import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {formatListCount, formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -199,15 +199,11 @@ const provinceListActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
-  {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
-  {label: "删除", value: props.state.deleteMode ? "等待点击" : "关闭"},
-  {label: "省份", value: formatNumber(metrics.value.total)},
+  {label: "省份", value: formatListCount(visibleRows.value.length, metrics.value.total)},
   {label: "实力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)},
-  {label: "目标省份", value: formatProvinceName(props.state.map, props.state.selectedProvinceId)},
-  {label: "影响", value: formatNumber(props.state.lastAffected)}
+  ...(props.state.active ? [{label: "目标省份", value: formatProvinceName(props.state.map, props.state.selectedProvinceId)}] : []),
+  ...(props.state.lastAffected ? [{label: "影响", value: formatNumber(props.state.lastAffected)}] : []),
 ]);
 
 const detailRows = computed(() => selected.value ? [

@@ -74,7 +74,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
-import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
@@ -154,7 +154,7 @@ const topologyBannerMessage = computed(() => {
 const formattedTopologyInspection = computed(() => JSON.stringify(props.state.topologyInspection, null, 2));
 
 const summaryMetrics = computed(() => [
-  {label: "地貌单元", value: formatNumber(metrics.value.total)},
+  {label: "地貌单元", value: formatListCount(visibleRows.value.length, metrics.value.total)},
   {label: "陆地", value: formatNumber(metrics.value.land)},
   {label: "水域", value: formatNumber(metrics.value.water)},
   {label: "湖泊", value: formatNumber(metrics.value.lakes)},

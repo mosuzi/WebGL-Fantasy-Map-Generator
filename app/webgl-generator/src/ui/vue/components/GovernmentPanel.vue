@@ -91,7 +91,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
-import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {formatListCount, formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareListValues} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -203,13 +203,12 @@ const canApplyBatchGovernment = computed(() => Boolean(
 ));
 
 const summaryMetrics = computed(() => [
-  {label: "政体", value: formatNumber(metrics.value.governments.length)},
+  {label: "政体", value: formatListCount(visibleGovernmentRows.value.length, metrics.value.governments.length)},
   {label: "国家", value: formatNumber(metrics.value.totalStates)},
   {label: "主流政体", value: metrics.value.dominantGovernmentLabel},
   {label: "共和系", value: formatNumber(metrics.value.familyCounts.republic || 0)},
   {label: "君主系", value: formatNumber((metrics.value.familyCounts.monarchy || 0) + (metrics.value.familyCounts.autocracy || 0))},
-  {label: "筛选", value: formatNumber(visibleGovernmentRows.value.length)},
-  {label: "已选国家", value: formatNumber(selectedGovernmentStateRows.value.length)},
+  ...(selectedGovernmentStateRows.value.length ? [{label: "已选国家", value: formatNumber(selectedGovernmentStateRows.value.length)}] : []),
 ]);
 
 const detailRows = computed(() => selectedGovernment.value ? [

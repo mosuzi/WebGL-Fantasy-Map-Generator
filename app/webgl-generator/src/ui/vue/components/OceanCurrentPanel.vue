@@ -36,6 +36,7 @@
 </template>
 
 <script setup>
+import {formatListCount} from "../../display-units.js";
 import {RefreshLeft} from "@element-plus/icons-vue";
 import {computed, ref} from "vue";
 import UiButton from "./base/UiButton.vue";
@@ -93,7 +94,7 @@ const algorithmLabel = computed(() => {
   return algorithm;
 });
 const summaryMetrics = computed(() => [
-  {label: "主要洋流", value: rows.value.length},
+  {label: "主要洋流", value: formatListCount(visibleRows.value.length, rows.value.length)},
   {label: "暖流", value: warmCount.value},
   {label: "寒流", value: coldCount.value},
   {label: "模型", value: algorithmLabel.value}

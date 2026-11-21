@@ -424,7 +424,7 @@ import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
-import {formatMilitary, formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatMilitary, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -601,13 +601,11 @@ const battleEventImportActions = Object.freeze([
 const battleEventDisplayToggleLabel = computed(() => showAllSelectedBattleEvents.value ? "收起最近" : `展开全部 ${formatNumber(selectedFilteredBattleEvents.value.length)}`);
 const battleEventCountLabel = computed(() => {
   if (!selectedBattleEventTotal.value) return "暂无";
-  if (selectedFilteredBattleEvents.value.length === selectedBattleEventTotal.value) return `${formatNumber(selectedBattleEventTotal.value)} 条`;
-  return `${formatNumber(selectedFilteredBattleEvents.value.length)} / ${formatNumber(selectedBattleEventTotal.value)} 条`;
+  return `${formatListCount(selectedFilteredBattleEvents.value.length, selectedBattleEventTotal.value)} 条`;
 });
 const battleEventScopeMetrics = computed(() => [
-  {label: "当前军团", value: `${formatNumber(selectedBattleEventTotal.value)} 条`},
-  {label: "当前筛选", value: `${formatNumber(selectedFilteredBattleEvents.value.length)} 条`},
-  {label: "当前显示", value: `${formatNumber(selectedBattleEvents.value.length)} 条`},
+  ...(selectedBattleEvents.value.length < selectedFilteredBattleEvents.value.length
+    ? [{label: "当前显示", value: `${formatNumber(selectedBattleEvents.value.length)} 条`}] : []),
   {label: "导出范围", value: `${battleEventExportScopeLabel(eventExportScope.value)} ${formatNumber(exportBattleEventRows.value.length)} 条`}
 ]);
 const clearFilteredBattleEventsLabel = computed(() => selectedFilteredBattleEvents.value.length ? `清空筛选 ${formatNumber(selectedFilteredBattleEvents.value.length)}` : "清空筛选");
@@ -646,14 +644,13 @@ const militaryActions = computed(() => [
 
 const summaryMetrics = computed(() => [
   {label: "国家", value: formatNumber(metrics.value.states.length)},
-  {label: "军团", value: formatNumber(metrics.value.rows.length)},
+  {label: "军团", value: formatListCount(visibleRows.value.length, metrics.value.rows.length)},
   {label: "总兵力", value: formatMilitaryValue(metrics.value.troops)},
   {label: "舰队", value: formatNumber(metrics.value.fleets)},
   {label: "战报链", value: formatNumber(metrics.value.campaigns)},
   {label: "战线", value: formatNumber(metrics.value.fronts)},
   {label: "记录", value: formatNumber(allBattleEvents.value.length)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)},
-  {label: "已选", value: formatNumber(selectedRegimentRows.value.length)},
+  ...(selectedRegimentRows.value.length ? [{label: "已选", value: formatNumber(selectedRegimentRows.value.length)}] : []),
 ]);
 
 const militaryDossierGroups = computed(() => selected.value ? [

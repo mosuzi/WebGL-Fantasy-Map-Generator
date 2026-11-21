@@ -34,7 +34,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
-import {formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatListCount, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -83,7 +83,7 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedEmblemId));
 
 const summaryMetrics = computed(() => [
-  {label: "对象", value: formatNumber(metrics.value.total)},
+  {label: "对象", value: formatListCount(visibleRows.value.length, metrics.value.total)},
   {label: "有纹章", value: formatNumber(metrics.value.withCoa)},
   {label: "缺失", value: formatNumber(metrics.value.missing)},
   {label: "国家", value: formatNumber(metrics.value.states)},

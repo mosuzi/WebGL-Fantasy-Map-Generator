@@ -90,13 +90,18 @@ try {
         if (width === 560) {
           const filter = panel.locator(".ui-filter-input input").first();
           const renameButton = panel.getByRole("button", {name: "按名称库重命名筛选结果", exact: true});
+          const count = panel.locator(".ui-key-value-grid--metric .ui-key-value-item")
+            .filter({has: page.getByText(name === "city" ? "城市" : "国家", {exact: true})}).locator("strong");
+          const total = await count.innerText();
           assert.ok(await renameButton.isEnabled());
           await filter.fill("不存在的城国名称123456");
           await panel.getByText(name === "state" ? "没有匹配的国家" : "没有匹配的城市", {exact: true}).waitFor();
           assert.ok(await renameButton.isDisabled());
+          assert.equal(await count.innerText(), "0 / " + total);
           await filter.fill("");
           await panel.locator(".object-table-wrap tr[data-row-key]").first().waitFor();
           assert.ok(await renameButton.isEnabled());
+          assert.equal(await count.innerText(), total);
         }
       }
       if (name === "diplomacy" && width === 560) {
@@ -119,7 +124,7 @@ try {
 
 async function verifyVirtualCityList(page, panel) {
   const wrap = panel.locator(".object-table-wrap");
-  const countText = await panel.locator(".city-panel-summary .ui-key-value-item").filter({has: page.getByText("筛选", {exact: true})}).locator("strong").innerText();
+  const countText = await panel.locator(".city-panel-summary .ui-key-value-item").filter({has: page.getByText("城市", {exact: true})}).locator("strong").innerText();
   const total = Number(countText.replaceAll(",", ""));
   assert.ok(total > 120, "须覆盖虚拟城市列表");
   const touch = await page.context().newCDPSession(page);
