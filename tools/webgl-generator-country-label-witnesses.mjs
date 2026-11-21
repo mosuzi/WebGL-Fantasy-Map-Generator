@@ -86,21 +86,22 @@ try {
         for (const size of sizes) {
           const maxBias = size < row.size && checkSide ? Math.min(0.12, oldBias - 0.13) : oldBias - 0.09;
           const count = Array.from(name).length;
-          const shapes = count === 1 ? [[1, 0, 0]] : [[1, 0, 0], [style.letterSpacing, 0, 0], [1, -0.65, 0],
-            [1, 0.65, 0], [style.letterSpacing, 0, 1.5], [1, 0, 2.4], [size * 0.4, -0.9, 0], [size * 0.4, 0.9, 0]];
+          const shapes = count === 1 ? [[1, 0]] : [[1, 0], [style.letterSpacing, 0], [1, -0.65],
+            [1, 0.65], [style.letterSpacing + size * 0.25, 0], [style.letterSpacing + size * 0.5, 0],
+            [size * 0.4, -0.9], [size * 0.4, 0.9]];
           for (const degrees of count === 1 ? [0] : options) {
             const rotation = degrees < -45 ? degrees + 180 : degrees > 135 ? degrees - 180 : degrees;
-            for (const [spacing, bend, gap] of shapes) {
+            for (const [spacing, bend] of shapes) {
               const layout = createPoliticalLabelGlyphLayout(name, {...style, fontSize: size}, {
                 upright: true, targetKind: "state", rotation, extraSpacing: spacing - Math.max(2.4, style.letterSpacing),
-                bend: bend * size, splitAt: Math.ceil(count / 2), extraGap: gap * size
+                bend: bend * size
               });
               const dx = layout.glyphs.reduce((sum, g) => sum + g.x, 0) / count / sx;
               const dy = layout.glyphs.reduce((sum, g) => sum + g.y, 0) / count / sy;
               const site = candidates.find(({x, y}) => (!checkSide || bias(x + dx, y + dy) <= maxBias)
                 && boxesAt(layout, x, y, size) && (!checkSide || fitsCities(layout, x, y)));
               if (site) {
-                witness = {name, size, rotation, spacing, bend, gap, ...site, bias: bias(site.x + dx, site.y + dy)};
+                witness = {name, size, rotation, spacing, bend, ...site, bias: bias(site.x + dx, site.y + dy)};
                 break;
               }
             }

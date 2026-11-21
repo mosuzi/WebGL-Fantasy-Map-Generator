@@ -165,10 +165,30 @@ const bankLabel = placeHomelandLabel({
     site.x + box.left - margin, site.y + box.top - margin, site.x + box.right + margin, site.y + box.bottom + margin)
 });
 assert.equal(bankLabel.glyphs.map(g => g.character).join(""), "东岚部盟");
-assert.ok(!bankLabel.collides && bankLabel.glyphs[1].box.right < 80 && bankLabel.glyphs[2].box.left > 105);
+assert.ok(bankLabel.candidateIndex > 0 && bankLabel.spacing === 2.4, "岸上能排下全称时应先用正常字距");
+
+// Two glyphs fit on the left shore and only one on the right. The water
+// falls inside 帝国 rather than at the suffix boundary.
+const across = placeHomelandLabel({
+  item: {...bayItem, x: 0, y: 0, text: "赵帝国", state: {name: "赵"}, resolvedStyle: {fontSize: 20}},
+  screen: {x: 0, y: 0}, sx: 1, sy: 1, scale: 1, sites: [{x: 27, y: 0}, {x: 73, y: 0}],
+  banks: [{x: 57, y: 0, gap: 4}], obstacles: [], peers: [], padding: 0,
+  fits: (box, margin, {x, y}) => {
+    const left = x + box.left - margin, right = x + box.right + margin;
+    return y + box.top - margin >= -16 && y + box.bottom + margin <= 16
+      && ((left >= -1 && right <= 55) || (left >= 59 && right <= 87));
+  }
+});
+assert.equal(across.glyphs.map(g => g.character).join(""), "赵帝国");
+assert.equal(across.splitAt, 2);
+assert.equal(across.fontSize, 20);
+const [zhao, di, guo] = across.glyphs;
+assert.ok(di.box.right < 55 && guo.box.left > 59);
+assert.ok(across.spacing > 2.4 && across.spacing <= 2.4 + across.fontSize / 2);
+assert.ok(Math.abs((di.x - zhao.x) - (guo.x - di.x)) < 0.01, "跨湾单行应逐字等距");
 const gapLabel = resolvePoliticalLabelPlacement({
-  item: {...politicalItem, text: "湾", resolvedStyle: {fontSize: 9}}, locked: true, screen: bankLabel.anchor,
-  peers: [{...bankLabel.box, parts: bankLabel.glyphs.map(g => g.box)}], viewport: {width: 200, height: 140}
+  item: {...politicalItem, text: "湾", resolvedStyle: {fontSize: 4}}, locked: true, screen: {x: 57, y: 0},
+  peers: [{...across.box, parts: across.glyphs.map(g => g.box)}], viewport: {width: 200, height: 140}
 });
 assert.equal(gapLabel.collides, false, "上一国家国名的字间水面应允许放置其它标签");
 // A single-cell country still has a two-dimensional interior. Its principal
@@ -190,9 +210,10 @@ assert.ok(Math.abs(inlandName.anchor.x - 40) < 5 && Math.abs(inlandName.anchor.y
 const label = {text:"燕王国", state:{name:"燕"}, targetId:71, resolvedStyle:{fontSize:20}, rotation:90, x:0, y:0};
 const place = (overrides={}) => placeHomelandLabel({item:{...label}, screen:{x:0,y:0}, sx:1,sy:1, scale:1,
   fits:()=>true, obstacles:[],peers:[],padding:0,...overrides});
-const linear = place();
+const linear = place({banks: [{x: 0, y: 0, gap: 1}]});
 assert.ok(linear.glyphs.every(g => g.angle === 0 && Math.abs(g.x) < 0.01));
 assert.equal(linear.glyphs.map(g=>g.character).join(""),label.text);
+assert.deepEqual(linear.glyphs.map(g => g.y), [-22.4, 0, 22.4], "直排国名和后缀使用相同的正常字距");
 for (const axis of [-72, 108]) {
   const {glyphs} = place({item:{...label, rotation:axis}});
   assert.ok(glyphs[0].y < glyphs.at(-1).y && glyphs[0].x > glyphs.at(-1).x, "倾斜竖排应从上往下读");

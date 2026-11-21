@@ -15,13 +15,13 @@ export function automaticPoliticalLabelOrder(items = []) {
   ));
 }
 
-export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "province", rotation = 0, bend = 0, extraSpacing = 0, upright = false, splitAt = 0, extraGap = 0} = {}) {
+export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "province", rotation = 0, bend = 0, extraSpacing = 0, upright = false} = {}) {
   const characters = Array.from(String(text || ""));
   if (!characters.length) return {glyphs: [], box: emptyBox(), spacing: 0, bend: 0, rotation: 0};
   const fontSize = positive(style?.fontSize, targetKind === "state" ? 30 : 18);
   const spacing = Math.max(finite(style?.letterSpacing), targetKind === "state" ? STATE_MIN_LETTER_SPACING : PROVINCE_MIN_LETTER_SPACING) + extraSpacing;
   const advances = characters.map(character => upright ? fontSize : characterAdvance(character, fontSize));
-  const totalWidth = advances.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, characters.length - 1) + extraGap;
+  const totalWidth = advances.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, characters.length - 1);
   const halfSpan = Math.max(fontSize / 2, totalWidth / 2);
   const glyphHeight = fontSize * 1.28 + labelDecorationSize(style);
   const baseRadians = finite(rotation) * Math.PI / 180;
@@ -41,14 +41,12 @@ export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "prov
     const bounds = upright ? uprightInkBox(x, y, fontSize, style) : rotatedGlyphBox(x, y, width, glyphHeight, angle);
     box = unionBoxes(box, bounds);
     cursor += advances[index] + spacing;
-    if (index + 1 === splitAt) cursor += extraGap;
     return {character, x: round(x), y: round(y), angle: round(angle), width: round(width), height: round(glyphHeight), box: roundBox(bounds)};
   });
   return {
     glyphs,
     box: roundBox(box || emptyBox()),
     spacing: round(spacing),
-    splitAt,
     bend: round(bend),
     rotation: round(rotation)
   };
@@ -128,15 +126,6 @@ function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
       const fontSize = size * factor;
       const margin = Math.max(2, fontSize * 0.12);
       const inside = (layout, site) => fits(emptyBox(), 0, site) && layout.glyphs.every(glyph => fits(glyph.box, margin, site));
-      // Keep a compact two-bank name when the channel is at a word boundary.
-      if (upright && banks.length && name !== short) {
-        // A small reduction can keep both words on their banks without
-        // moving the whole name into a less representative coastal strip.
-        for (const bankSize of [fontSize, fontSize * 0.94]) {
-          const bank = bankLabelLayout({name, short, fontSize: bankSize, item, sx, sy, rotation, banks, fits, axisScale});
-          if (bank) return {...bank, fontSize: bankSize, candidateIndex: -1 - bank.bankIndex};
-        }
-      }
       for (const lines of variants) {
         const layout = homelandLineLayout(lines, item.resolvedStyle, fontSize, rotation, upright);
         candidateIndex++;
@@ -149,6 +138,10 @@ function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
           inland.x = (left + right) / 2;
           if (inside(layout, inland)) return {layout, site: inland, fontSize, candidateIndex};
         }
+      }
+      if (upright && banks.length && name !== short) {
+        const bank = bankLabelLayout({name, fontSize, style: item.resolvedStyle, sx, sy, rotation, banks, fits, axisScale, margin});
+        if (bank) return {...bank, fontSize};
       }
     }
   }
@@ -174,11 +167,11 @@ function splitHomelandName(name, short) {
   return breaks.sort((a, b) => a.score - b.score)[0]?.lines;
 }
 
-function homelandLineLayout(lines, style, fontSize, rotation, upright) {
+function homelandLineLayout(lines, style, fontSize, rotation, upright, extraSpacing = 0) {
   const angle = rotation * Math.PI / 180;
   const cos = Math.cos(angle), sin = Math.sin(angle);
   const diagonal = upright ? 1 / Math.max(Math.abs(cos), Math.abs(sin)) : 1;
-  const options = {targetKind: "state", upright, rotation, extraSpacing: fontSize * (diagonal - 1)};
+  const options = {targetKind: "state", upright, rotation, extraSpacing: fontSize * (diagonal - 1) + extraSpacing};
   const glyphs = [];
   let box = null;
   const fittedStyle = homelandStyleAtSize(style, fontSize);
@@ -199,48 +192,21 @@ function homelandStyleAtSize(style, fontSize) {
   return {...style, fontSize, strokeWidth: finite(style.strokeWidth) * ratio};
 }
 
-function bankLabelLayout({name, short, fontSize, item, sx, sy, rotation, banks, fits, axisScale}) {
-  const count = Array.from(name).length;
-  const stemLength = Array.from(short).length;
-  let splitAt = Math.ceil(count / 2);
-  if (name !== short && name.startsWith(short)) splitAt = stemLength;
-  else if (name !== short && name.endsWith(short)) splitAt = count - stemLength;
-  const spacing = Math.max(STATE_MIN_LETTER_SPACING, finite(item.resolvedStyle.letterSpacing));
-  const radians = rotation * Math.PI / 180;
-  // Centre the word break over the channel, even if the two groups differ in length.
-  const groupOffset = (count / 2 - splitAt) * (fontSize + spacing);
-  const maxGap = (Math.min(splitAt, count - splitAt) === 1 ? 2 : 4) * fontSize;
-  const cos = Math.cos(radians), sin = Math.sin(radians);
-  const style = homelandStyleAtSize(item.resolvedStyle, fontSize);
-  const options = {targetKind: "state", upright: true, rotation};
-  const chars = Array.from(name);
-  const groups = [chars.slice(0, splitAt), chars.slice(splitAt)].map(part => ({
-    halfWidth: (part.length * fontSize + (part.length - 1) * spacing) / 2,
-    glyphs: createPoliticalLabelGlyphLayout(part.join(""), style, options).glyphs
-  }));
-  const margin = Math.max(2, fontSize * 0.12);
-  for (const [bankIndex, bank] of banks.entries()) {
-    const channel = bank.gap * axisScale;
-    if (channel >= maxGap) continue;
-    const offsetSite = along => ({x: bank.x + along * cos / sx, y: bank.y + along * sin / sy});
-    // Each bank constrains only its own word. Find its first inland fit
-    // independently; four preset pairs of insets can miss a narrow strip.
-    const firstFit = (group, direction) => {
-      const limit = Math.min(2 * fontSize, maxGap - channel);
-      for (let inset = margin; inset <= limit; inset += 1) {
-        const site = offsetSite(direction * (channel / 2 + group.halfWidth + inset));
-        if (group.glyphs.every(g => fits(g.box, margin, site))) return inset;
+function bankLabelLayout({name, fontSize, style, sx, sy, rotation, banks, fits, axisScale, margin}) {
+  // Try the smallest tracking first. Any adjacent pair may straddle the water.
+  for (const extraEm of [0, 0.125, 0.25, 0.375, 0.5]) {
+    const layout = homelandLineLayout([name], style, fontSize, rotation, true, fontSize * extraEm);
+    const {glyphs} = layout;
+    for (const [bankIndex, bank] of banks.entries()) {
+      if (bank.gap * axisScale >= fontSize + layout.spacing) continue;
+      for (let i = 1; i < glyphs.length; i++) {
+        const a = glyphs[i - 1], b = glyphs[i];
+        const site = {x: bank.x - (a.x + b.x) / (2 * sx), y: bank.y - (a.y + b.y) / (2 * sy)};
+        if (glyphs.every(glyph => fits(glyph.box, margin, site))) {
+          return {layout: {...layout, splitAt: i}, site, candidateIndex: -1 - bankIndex};
+        }
       }
-      return Infinity;
-    };
-    const left = firstFit(groups[0], -1);
-    if (!Number.isFinite(left)) continue;
-    const right = firstFit(groups[1], 1);
-    const gap = channel + left + right;
-    if (gap > maxGap) continue;
-    const site = offsetSite(groupOffset + (right - left) / 2);
-    const layout = createPoliticalLabelGlyphLayout(name, style, {...options, splitAt, extraGap: Math.max(0, gap - spacing)});
-    if (layout.glyphs.every(g => fits(g.box, margin, site))) return {layout, site, bankIndex};
+    }
   }
   return null;
 }

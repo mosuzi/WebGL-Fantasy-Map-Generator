@@ -83,14 +83,15 @@ try {
           const box = glyph.getBoundingClientRect();
           return {x: box.left + box.width / 2, y: box.top + box.height / 2};
         });
-        let waterInWordBreak = false, pickedWater = false;
-        if (centers.length === 4) {
-          const [, left, right] = centers;
+        const steps = [];
+        let pickedWater = false;
+        for (let i = 1; i < centers.length; i++) {
+          const left = centers[i - 1], right = centers[i];
+          steps.push(Math.hypot(right.x - left.x, right.y - left.y));
           for (let step = 1; step < 32; step++) {
             const x = left.x + (right.x - left.x) * step / 32, y = left.y + (right.y - left.y) * step / 32;
             const cell = renderer.pickCellClientPoint(x, y)?.gridCell;
             if (cell == null || map.grid.cells.h[cell] >= 20) continue;
-            waterInWordBreak = true;
             const picked = renderer.pickLabel(x, y);
             if (picked?.targetKind === "state" && picked.targetId === item.targetId) pickedWater = true;
           }
@@ -99,7 +100,7 @@ try {
           id: item.targetId, name: item.text, short: item.state.name, capital: map.pack.burgs[item.state.capital]?.name,
           cells: cells.size, visible: item.visible, text: item.glyphNodes.map(glyph => glyph.textContent).join(""),
           font: parseFloat(getComputedStyle(item.contentNode).fontSize), scale: renderer.camera.scale, inkInside,
-          centers: centers.map(point => renderer.screenToWorld(point.x, point.y)), waterInWordBreak, pickedWater,
+          centers: centers.map(point => renderer.screenToWorld(point.x, point.y)), steps, pickedWater,
           hitGlyphs: centers.filter(point => {
             const hit = renderer.pickLabel(point.x, point.y);
             return hit?.targetKind === "state" && hit.targetId === item.targetId;
@@ -177,7 +178,9 @@ try {
           assert.ok(cssError < 0.5, JSON.stringify({cssError, view, expected, point}));
         }
         if (focus === "雁门部盟" && initial.capital === "安邑") {
-          assert.ok(view.waterInWordBreak && !view.pickedWater && view.centers[1].x < 354 && view.centers[2].x > 375, JSON.stringify(view));
+          assert.equal(view.steps.length, 3);
+          assert.ok(Math.max(...view.steps) - Math.min(...view.steps) < 0.5, "单行国名与政体之间的字距应与行内一致");
+          assert.equal(view.pickedWater, false, "字间水面不应命中国名");
         }
       }
       const near = await zoom(-1200);
