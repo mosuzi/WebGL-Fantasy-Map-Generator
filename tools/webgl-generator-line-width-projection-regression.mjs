@@ -9,6 +9,8 @@ import {
   withProjectedLineAlpha
 } from "../app/webgl-generator/src/renderer/line-width-projection.js";
 import {pushVariableScreenPolyline} from "../app/webgl-generator/src/renderer/mesh-writer.js";
+import {buildRiverMeshVertices} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
+import {createRiverVisualCurveDescriptor} from "../app/webgl-generator/src/geometry/cubic-path.js";
 
 const map = {metadata: {graphWidth: 1000, graphHeight: 600}};
 const projection = (scale, dpr = 1) => createLineWidthProjection({
@@ -114,8 +116,8 @@ assert.equal(countMatches(rendererSource, /createRiverMeshBuild\(/g), 3, "同步
 assert.doesNotMatch(rendererSource, /width:\s*3\.6|width:\s*2\.6|width:\s*1\.8/, "renderer 不得保留固定 CSS 道路宽度");
 assert.doesNotMatch(rendererSource, /clamp\(sourceLikeWidth \* 6 \+ 1\.1, 1\.1, 9\.5\)/, "renderer 不得保留河流 1.1px floor");
 assert.match(rendererSource, /haloCssPx: ROUTE_SELECTION_HALO_CSS_PX/, "选中路线必须叠加固定 CSS halo");
-assert.match(rendererSource, /pushVariableScreenPolyline\(build\.vertices, build\.context, points, widths, riverRenderColor\(river\), colors\)/, "河流必须把逐点 colors 传入变量宽度 mesh");
-assert.match(rendererSource, /smoothWorldPathWithValues\(points, alphas, LINE_SMOOTHING\.river\)/, "河流 alpha 必须与宽度使用相同 Chaikin 平滑");
+assert.match(rendererSource, /pushVariableScreenPolyline\(build\.vertices, build\.context, points, widths, color, colors\)/, "河流必须把逐点颜色传入河面");
+assert.match(rendererSource, /withProjectedLineAlpha\(color, projected\.alpha\)/, "透明度必须来自平滑和岸宽限制后的实际河宽");
 assert.match(rendererSource, /minWorldWidth:[\s\S]{0,500}?minCssWidth:[\s\S]{0,500}?lod:/, "渲染统计必须包含 world / CSS 宽度与 LOD");
 assert.match(rendererSource, /pickRoute\([\s\S]{0,160}?pickThresholdWorld\(7\)/, "路线 picking 必须保留 7px 屏幕容差");
 assert.match(rendererSource, /pickRiver\([\s\S]{0,160}?pickThresholdWorld\(9\)/, "河流 picking 必须保留 9px 屏幕容差");
@@ -132,6 +134,42 @@ assert.match(rendererSource, /const camera = snapshotCamera\(this\.camera\)[\s\S
 assert.match(rendererSource, /const camera = snapshotCamera\(this\.camera\)[\s\S]{0,300}?buildRiverMeshVerticesAsync/, "异步河流构建必须使用 camera snapshot");
 assert.match(pngSource, /markViewportBuffersDirty\?\.\(\)[\s\S]{0,120}?draw\(\{updateDynamicBuffers: true, updateOverlay: true\}\)/, "PNG 世界范围必须复用 dirty + draw 动态线层路径");
 assert.match(pngSource, /function copyWebglCanvasTo2d[\s\S]{0,400}?renderer\.draw\(\{drawCityIcons: includeCityIcons\}\)/, "PNG 像素读取前必须复用 renderer.draw 并保留城镇实例导出选项");
+
+// Several broad channels crossing a very narrow highland would each drown it
+// if only average spacing, source height or single-river coverage were tested.
+const channel = {points: [[10, 2, 8000], [10, 18, 8000]], cells: [0], sourceWidth: 4, widthFactor: 3};
+const narrow = {
+  metadata: {graphWidth: 20, graphHeight: 20},
+  grid: {metadata: {spacing: 4}, cells: {v: [[0, 1, 2, 3]], h: [96]},
+    vertices: {p: [[9.98, 6], [10.02, 6], [10.02, 14], [9.98, 14]]}},
+  pack: {cells: {}},
+  rivers: {rivers: [{...channel, id: 1}, {...channel, id: 2},
+    {...channel, id: 3, visualCurve: createRiverVisualCurveDescriptor(),
+      points: [[10, 3, 8000], [10, 13, 8000], [10, 13, 8000], [10.01, 4, 8000]]}]}
+};
+for (const [scale, dpr, height] of [[0.5, 1, 200], [8, 1, 200], [8, 2, 200], [2, 2, 100]]) {
+  const mesh = buildRiverMeshVertices(narrow, {scale, offsetX: 0, offsetY: 0},
+    {width: 200 * dpr, height: height * dpr, clientWidth: 200, clientHeight: height});
+  assert.equal(mesh.stats.rivers, 3, "高地仍允许下切河谷");
+  let area = 0;
+  for (let i = 0; i < mesh.vertices.length; i += 18) {
+    let poly = [0, 6, 12].map(j => [10 + mesh.vertices[i+j] * 10 / scale, 10 - mesh.vertices[i+j+1] * 10 / scale]);
+    for (const [axis, limit, direction] of [[0, 9.98, 1], [0, 10.02, -1], [1, 6, 1], [1, 14, -1]]) {
+      poly = poly.flatMap((b, n, ring) => {
+        const a = ring[(n + ring.length - 1) % ring.length];
+        const insideA = direction * (a[axis] - limit) >= 0, insideB = direction * (b[axis] - limit) >= 0;
+        if (insideA === insideB) return insideB ? [b] : [];
+        const t = (limit - a[axis]) / (b[axis] - a[axis]);
+        const cross = a.map((v, j) => v + (b[j] - v) * t);
+        return insideB ? [cross, b] : [cross];
+      });
+    }
+    area += Math.abs(poly.reduce((sum, a, n) => {
+      const b = poly[(n + 1) % poly.length]; return sum + a[0] * b[1] - a[1] * b[0];
+    }, 0)) / 2;
+  }
+  assert.ok(area > 0 && area <= 0.45 * 0.04 * 8 + 1e-5, `河面覆盖高地超限 ${area}`);
+}
 
 console.log(JSON.stringify({
   ok: true,

@@ -177,6 +177,8 @@ import {
   riverWorldWidth,
   withProjectedLineAlpha
 } from "./line-width-projection.js";
+import {createRiverBankBudget, riverGridSpacing} from "./river-banks.js";
+import {lakeOutletBank, riverShorePoints} from "../geometry/river-shores.js";
 
 const MARKER_ICON_MIN_SCALE = 2.15;
 const MARKER_ICON_RELAXED_SCALE = 4.4;
@@ -2866,7 +2868,7 @@ export class PlaceholderMapRenderer {
   refreshRiverPickingIndex(binding = null) {
     if (!this.map) return false;
     assertRendererRetainedResourceBindings(this, {picking: true});
-    const refreshed = refreshRiversInPickingIndex(this.objectPickingIndex, this.map.rivers?.rivers || []);
+    const refreshed = refreshRiversInPickingIndex(this.objectPickingIndex, this.map.rivers?.rivers || [], this.map);
     if (binding) adoptObjectPickingResourceBinding(this, binding);
     return refreshed;
   }
@@ -6154,7 +6156,7 @@ function getObjectBounds(map, object) {
   if (object.kind === OBJECT_KIND.RIVER) {
     const river = map.rivers.rivers.find(item => item.id === object.id);
     if (!isRiverVisibleForRendering(map, river)) return null;
-    const points = river && isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : river?.points;
+    const points = river && (isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : riverShorePoints(map, river));
     return points ? pointsBounds(points, 42) : null;
   }
   if (object.kind === OBJECT_KIND.LAKE) {
@@ -8006,6 +8008,8 @@ export function buildRiverMeshVertices(map, camera, canvas) {
   for (const river of map.rivers.rivers) {
     pushRiverMesh(build, river);
   }
+  build.bankBudget?.apply();
+  for (const path of build.paths) drawRiverPath(build, path);
   return finalizeRiverMeshBuild(build);
 }
 
@@ -8026,6 +8030,19 @@ async function buildRiverMeshVerticesAsync(map, camera, canvas, {yieldToBrowser 
     }
     sliceStartedAt = performance.now();
   }
+  if (!build.stats.aborted) {
+    build.bankBudget?.apply();
+    for (const path of build.paths) {
+      drawRiverPath(build, path);
+      if (performance.now() - sliceStartedAt < sliceMs) continue;
+      await yieldToBrowser();
+      if (!shouldContinue()) {
+        build.stats.aborted = true;
+        break;
+      }
+      sliceStartedAt = performance.now();
+    }
+  }
   return finalizeRiverMeshBuild(build);
 }
 
@@ -8035,10 +8052,14 @@ function createRiverMeshBuild(map, camera, canvas) {
   const hiddenRiverIds = new Set((map.rivers?.rivers || [])
     .filter(river => !isRiverVisibleForRendering(map, river))
     .map(river => Number(river.id ?? river.i)));
+  const spacing = riverGridSpacing(map);
   return {
     map,
     context,
     projection,
+    spacing,
+    bankBudget: null,
+    paths: [],
     hiddenRiverIds,
     viewportBounds: viewportWorldBounds(map, camera, canvas, viewportLineOverscanBackingPx(canvas)),
     vertices: [],
@@ -8053,14 +8074,29 @@ function pushRiverMesh(build, river) {
   }
   const sourcePoints = Array.isArray(river.points) ? river.points.filter(isWorldPoint) : [];
   if (sourcePoints.length < 2) return;
-  if (!worldPathIntersectsBounds(sourcePoints, build.viewportBounds)) {
+  const bank = lakeOutletBank(build.map, river);
+  const shorePoints = riverShorePoints(build.map, river, sourcePoints, bank);
+  if (!worldPathIntersectsBounds(shorePoints, build.viewportBounds)) {
     build.stats.culledRivers++;
     return;
   }
-  const {points, widths, colors} = getRiverRenderPath(river, build.map, build.projection, build.stats, sourcePoints);
-  if (points.length < 2) return;
+  const path = getRiverRenderPath(river, build, shorePoints, bank);
+  if (path.points.length < 2) return;
+  if (!build.paths.length) build.bankBudget = createRiverBankBudget(build.map, build.spacing, build.projection);
+  build.bankBudget?.include(path);
+  build.paths.push(path);
+}
+
+function drawRiverPath(build, {river, points, widths, scales}) {
+  const colors = [], color = riverRenderColor(river);
+  for (let i = 0; i < widths.length; i++) {
+    const projected = projectWorldLineWidth(widths[i] * scales[i], build.projection);
+    recordProjectedWidth(build.stats, projected);
+    widths[i] = projected.backingWidth;
+    colors.push(withProjectedLineAlpha(color, projected.alpha));
+  }
   const before = build.vertices.length;
-  pushVariableScreenPolyline(build.vertices, build.context, points, widths, riverRenderColor(river), colors);
+  pushVariableScreenPolyline(build.vertices, build.context, points, widths, color, colors);
   if (build.vertices.length === before) return;
   build.stats.rivers++;
   build.stats.segments += points.length - 1;
@@ -8099,45 +8135,47 @@ function emptyRiverBuildStats(projection = null) {
   };
 }
 
-function getRiverRenderPath(river, map, projection, stats, sourcePoints = null) {
-  const points = sourcePoints || river.points.filter(isWorldPoint);
+function getRiverRenderPath(river, {map, spacing, stats}, points, bank) {
   const cells = Array.isArray(river.cells) ? river.cells : [];
   const widths = [];
-  const alphas = [];
   let runningFlux = 0;
+  let distance = 0;
 
   for (let index = 0; index < points.length; index++) {
     const cell = sampleRiverCell(cells, index, points.length);
     runningFlux = Math.max(runningFlux, riverPointFlux(points[index], map.pack.cells, cell, river));
-    const projected = projectWorldLineWidth(riverWorldWidth({
+    if (index) distance += Math.hypot(points[index][0] - points[index - 1][0], points[index][1] - points[index - 1][1]);
+    const rawWidth = riverWorldWidth({
       flux: runningFlux,
       pointIndex: index,
       widthFactor: river.widthFactor,
       sourceWidth: river.sourceWidth
-    }), projection);
-    widths.push(projected.backingWidth);
-    alphas.push(projected.alpha);
-    recordProjectedWidth(stats, projected);
+    });
+    // The sill stays narrow across a short isthmus and widens gradually inland.
+    const recovery = bank ? Math.min(1, Math.max(0, (distance / spacing - 3) / 5)) : 1;
+    const limit = spacing * (0.085 + 0.135 * recovery);
+    widths.push(limit / (1 + limit / rawWidth));
     stats.minFlux = Math.min(stats.minFlux, runningFlux);
     stats.maxFlux = Math.max(stats.maxFlux, runningFlux);
   }
 
+  let path;
   if (isSharedCubicCurve(river.visualCurve)) {
-    const sampled = sampleCentripetalCatmullRom(points, {values: widths.map((width, index) => [width, alphas[index]])});
-    const baseColor = riverRenderColor(river);
-    return {
-      points: sampled.points,
-      widths: sampled.values.map(value => value[0]),
-      colors: sampled.values.map(value => withProjectedLineAlpha(baseColor, value[1]))
-    };
+    const sampled = sampleCentripetalCatmullRom(points, {values: widths});
+    path = {points: sampled.points, widths: sampled.values};
+  } else {
+    path = smoothWorldPathWithValues(points, widths, LINE_SMOOTHING.river);
   }
-  const smoothedPath = smoothWorldPathWithValues(points, widths, LINE_SMOOTHING.river);
-  const smoothedAlphas = smoothWorldPathWithValues(points, alphas, LINE_SMOOTHING.river).widths;
-  const baseColor = riverRenderColor(river);
-  return {
-    ...smoothedPath,
-    colors: smoothedAlphas.map(alpha => withProjectedLineAlpha(baseColor, alpha))
-  };
+  // Coincident samples must represent one station for both the budget and mesh.
+  let count = 0;
+  for (let i = 0; i < path.points.length; i++) {
+    const p = path.points[i], previous = path.points[count - 1];
+    if (previous && p[0] === previous[0] && p[1] === previous[1]) continue;
+    path.points[count] = p;
+    path.widths[count++] = Math.max(0, path.widths[i]);
+  }
+  path.points.length = path.widths.length = count;
+  return {...path, river, scales: new Float64Array(count).fill(1)};
 }
 
 function sampleRiverCell(cells, pointIndex, pointsLength) {

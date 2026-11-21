@@ -138,9 +138,9 @@ export function pushVariableScreenPolyline(vertices, context, points, widths, co
   for (let index = 0; index < points.length; index++) {
     const screenPoint = worldToScreenPixel(context, points[index]);
     const previous = screenPoints[screenPoints.length - 1];
-    if (previous && Math.hypot(screenPoint.x - previous.x, screenPoint.y - previous.y) <= 0.5) continue;
+    if (previous && screenPoint.x === previous.x && screenPoint.y === previous.y) continue;
     screenPoints.push(screenPoint);
-    screenWidths.push(widths[index] || widths[widths.length - 1] || 1);
+    screenWidths.push(widths[index] ?? widths[widths.length - 1] ?? 1);
     if (screenColors) screenColors.push(colors[index] || colors[colors.length - 1] || color);
   }
   if (screenPoints.length < 2) return;
@@ -225,7 +225,7 @@ function pushVariableSolidScreenPolyline(vertices, context, screenPoints, widthP
   const right = [];
 
   for (let index = 0; index < screenPoints.length; index++) {
-    const half = Math.max(0.5, widthPxByPoint[index] / 2);
+    const half = Math.max(0, widthPxByPoint[index] / 2);
     const previous = screenPoints[Math.max(0, index - 1)];
     const current = screenPoints[index];
     const next = screenPoints[Math.min(screenPoints.length - 1, index + 1)];
@@ -233,19 +233,9 @@ function pushVariableSolidScreenPolyline(vertices, context, screenPoints, widthP
     const after = normalizeScreenVector(next.x - current.x, next.y - current.y);
     const blended = normalizeScreenVector(before.x + after.x, before.y + after.y);
     const tangent = index === 0 ? after : index === screenPoints.length - 1 ? before : (blended.x || blended.y ? blended : after);
-    const normalBefore = normalForVector(before.x || after.x, before.y || after.y);
-    const normalAfter = normalForVector(after.x || before.x, after.y || before.y);
-    const miter = normalForVector(tangent.x, tangent.y);
-    const dot = Math.max(0.3, Math.abs(miter.x * normalAfter.x + miter.y * normalAfter.y));
-    const length = Math.min(half / dot, half * 2.6);
-    const capShift = index === 0 ? -half : index === screenPoints.length - 1 ? half : 0;
-    const capBase = {
-      x: current.x + tangent.x * capShift,
-      y: current.y + tangent.y * capShift
-    };
-    const normal = index === 0 ? normalAfter : index === screenPoints.length - 1 ? normalBefore : miter;
-    left.push({x: capBase.x + normal.x * length, y: capBase.y + normal.y * length});
-    right.push({x: capBase.x - normal.x * length, y: capBase.y - normal.y * length});
+    const normal = normalForVector(tangent.x, tangent.y);
+    left.push({x: current.x + normal.x * half, y: current.y + normal.y * half});
+    right.push({x: current.x - normal.x * half, y: current.y - normal.y * half});
   }
 
   for (let index = 0; index < left.length - 1; index++) {

@@ -1,5 +1,6 @@
 import {createRenderContext, worldToScreenPixel} from "./render-context.js";
 import {smoothWorldPath} from "./geometry.js";
+import {riverShorePoints} from "../geometry/river-shores.js";
 import {pushScreenPolyline, pushScreenTriangle} from "./mesh-writer.js";
 import {OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {parseDiplomacyRelationIdentity} from "../runtime/diplomacy-relations.js";
@@ -207,7 +208,7 @@ function pushSelectionTarget(vertices, context, selection, locateFlash, override
   const color = overrideColor || locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
   const points = isSharedCubicCurve(river.visualCurve)
     ? sampleCentripetalCatmullRom(river.points).points
-    : smoothWorldPath(river.points, SELECTION_SMOOTHING.river);
+    : smoothWorldPath(riverShorePoints(map, river), SELECTION_SMOOTHING.river);
   pushScreenPolyline(vertices, context, points, color, widthPx);
 }
 

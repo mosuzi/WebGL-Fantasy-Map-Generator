@@ -7,6 +7,9 @@ import {
   drawSelectionMeshBatches
 } from "../app/webgl-generator/src/renderer/selection-layer.js";
 import {drawLandMaskedTriangles, SURFACE_SIDE_ALPHA} from "../app/webgl-generator/src/renderer/surface-side-depth.js";
+import {riverShorePoints} from "../app/webgl-generator/src/geometry/river-shores.js";
+import {buildObjectPickingIndex, pickRiver} from "../app/webgl-generator/src/renderer/picking.js";
+import {buildObjectPickingDto, rebindObjectPickingDto} from "../app/webgl-generator/src/renderer/picking-dto.js";
 
 const map = createFixture();
 const before = structuredClone(map.rivers.rivers[0]);
@@ -59,6 +62,28 @@ const smoothSurface = [SURFACE_SIDE_ALPHA.land, SURFACE_SIDE_ALPHA.land, SURFACE
 assert.deepEqual(maskRiverPixels(hardSurface), [true, true, false, false], "硬岸线必须在最终 surface 交点裁断河流");
 assert.deepEqual(maskRiverPixels(smoothSurface), [true, true, true, false], "平滑岸线移动后河口必须直接跟随最终 surface");
 assert.deepEqual(map.rivers.rivers[0], before, "渲染裁切不得改写河流 canonical 数据");
+
+const outlet = {id: 7, cells: [1, 2], outletKind: "ocean", points: [[1.5, 0.5, 90], [1.8, 0.5, 95]]};
+const isthmus = {
+  metadata: {graphWidth: 3, graphHeight: 1},
+  grid: {points: [[0.5, 0.5], [1.5, 0.5], [2.5, 0.5]], cells: {h: [19, 80, 19], v: [[0,1,5,4],[1,2,6,5],[2,3,7,6]]},
+    vertices: {p: [[0,0],[1,0],[2,0],[3,0],[0,1],[1,1],[2,1],[3,1]]}},
+  pack: {cells: {c: [[1],[0,2],[1]], f: [1,2,3], g: [0,1,2]}, features: [null, {type:"lake", outlet:7}, {type:"island"}, {type:"ocean"}]},
+  rivers: {rivers: [outlet]}
+};
+const original = structuredClone(outlet);
+const shores = riverShorePoints(isthmus, outlet);
+assert.ok(shores[0][0] < 1 && shores[1][0] > 2, "短河必须接上两侧水体");
+assert.deepEqual(shores.map(p => p[2]), [90, 95]);
+assert.deepEqual(outlet, original);
+assert.equal(riverShorePoints(isthmus, {...outlet, controlPoints: [[1.6, 0.7]]}), outlet.points, "手调河道端点必须保留");
+const dto = buildObjectPickingDto(isthmus, {
+  mapIdentity: "river-isthmus", mapRevision: 0, topologyRevision: 0, renderGeneration: 1, renderPreparationId: "river-shores"
+});
+for (const index of [null, buildObjectPickingIndex(isthmus), rebindObjectPickingDto(dto, isthmus)]) {
+  assert.equal(pickRiver(isthmus, index, 1.01, 0.5, 0.005)?.id, 7, "应能在湖岸拾取出水河");
+  assert.equal(pickRiver(isthmus, index, 1.99, 0.5, 0.005)?.id, 7, "应能在海岸拾取河口");
+}
 
 const rendererSource = await readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8");
 const drawSource = sourceBetween(rendererSource, "draw({updateDynamicBuffers", "pickClientPoint(clientX");

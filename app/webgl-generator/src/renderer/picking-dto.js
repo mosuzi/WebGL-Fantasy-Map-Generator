@@ -52,10 +52,19 @@ export function packObjectPickingIndex(index, binding = {}) {
   };
 }
 
+function riverPathsForRebind(map) {
+  const paths = new Map();
+  return river => {
+    if (!paths.has(river)) paths.set(river, riverPickingPoints(river, map));
+    return paths.get(river);
+  };
+}
+
 export function rebindObjectPickingDto(dto, map, expectedBinding = null) {
   const validation = assertPickingDtoShape(dto, expectedBinding);
   validatePickingDto(dto, validation);
   const objects = canonicalPickingObjects(map);
+  const riverPath = riverPathsForRebind(map);
   const buckets = new Map();
   for (let bucketIndex = 0; bucketIndex < dto.bucketIds.length; bucketIndex++) {
     const bucket = {cities: [], markers: [], military: [], routeSegments: [], riverSegments: []};
@@ -63,7 +72,7 @@ export function rebindObjectPickingDto(dto, map, expectedBinding = null) {
     rebindPointReferences(bucket.markers, dto.markers, bucketIndex, objects.markers, "marker");
     rebindPointReferences(bucket.military, dto.military, bucketIndex, objects.military, "military");
     rebindSegmentReferences(bucket.routeSegments, dto.routeSegments, bucketIndex, objects.routes, route => route.points || [], "route");
-    rebindSegmentReferences(bucket.riverSegments, dto.riverSegments, bucketIndex, objects.rivers, riverPickingPoints, "river");
+    rebindSegmentReferences(bucket.riverSegments, dto.riverSegments, bucketIndex, objects.rivers, riverPath, "river");
     buckets.set(dto.bucketIds[bucketIndex], bucket);
   }
   return {
@@ -79,6 +88,7 @@ export function rebindObjectPickingDto(dto, map, expectedBinding = null) {
 export async function rebindObjectPickingDtoInChunks(dto, map, expectedBinding = null, options = {}) {
   const validation = assertPickingDtoShape(dto, expectedBinding);
   const objects = canonicalPickingObjects(map);
+  const riverPath = riverPathsForRebind(map);
   const buckets = new Map();
   const gate = createPickingChunkGate(options);
   assertPointReferenceCounts(dto);
@@ -97,7 +107,7 @@ export async function rebindObjectPickingDtoInChunks(dto, map, expectedBinding =
     await rebindPointReferencesInChunks(bucket.markers, dto.markers, bucketIndex, objects.markers, "marker", gate);
     await rebindPointReferencesInChunks(bucket.military, dto.military, bucketIndex, objects.military, "military", gate);
     await rebindSegmentReferencesInChunks(bucket.routeSegments, dto.routeSegments, bucketIndex, objects.routes, route => route.points || [], "route", routeSegments, gate);
-    await rebindSegmentReferencesInChunks(bucket.riverSegments, dto.riverSegments, bucketIndex, objects.rivers, riverPickingPoints, "river", riverSegments, gate);
+    await rebindSegmentReferencesInChunks(bucket.riverSegments, dto.riverSegments, bucketIndex, objects.rivers, riverPath, "river", riverSegments, gate);
     maxBucketItems = Math.max(maxBucketItems, bucket.cities.length + bucket.markers.length + bucket.military.length + bucket.routeSegments.length + bucket.riverSegments.length);
     buckets.set(bucketId, bucket);
     const pending = gate.checkpoint(bucketIndex + 1, dto.bucketIds.length);

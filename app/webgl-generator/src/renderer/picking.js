@@ -1,4 +1,5 @@
 import {locateGridPoint} from "../geometry/grid-point.js";
+import {riverShorePoints} from "../geometry/river-shores.js";
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {markerPresentationRecords} from "../domains/markers/presentation.js";
@@ -62,7 +63,7 @@ export function buildObjectPickingIndex(map, options = {}) {
   }
 
   for (const river of enabled.has("riverSegments") ? map?.rivers?.rivers || [] : []) {
-    const points = riverPickingPoints(river);
+    const points = riverPickingPoints(river, map);
     for (let index = 0; index < points.length - 1; index++) {
       const a = points[index];
       const b = points[index + 1];
@@ -151,12 +152,12 @@ export function rebuildRoutesInPickingIndex(index, routes) {
   return refreshRoutesInPickingIndex(index, routes, routeIds);
 }
 
-export function refreshRiversInPickingIndex(index, rivers) {
+export function refreshRiversInPickingIndex(index, rivers, map = null) {
   if (!index) return false;
   for (const bucket of index.buckets.values()) bucket.riverSegments = [];
   let riverSegmentCount = 0;
   for (const river of rivers || []) {
-    const points = riverPickingPoints(river);
+    const points = riverPickingPoints(river, map);
     for (let segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex++) {
       addSegmentToBuckets(index.buckets, index.columns, index.rows, index.bucketSize, {
         kind: "river",
@@ -543,14 +544,14 @@ function allRouteSegments(map) {
 
 function allRiverSegments(map) {
   return (map?.rivers?.rivers || []).flatMap(river => {
-    const points = riverPickingPoints(river);
+    const points = riverPickingPoints(river, map);
     return points.slice(0, -1).map((point, index) => ({river, index, a: point, b: points[index + 1]}));
   });
 }
 
-export function riverPickingPoints(river) {
+export function riverPickingPoints(river, map = null) {
   const points = Array.isArray(river?.points) ? river.points : [];
-  return isSharedCubicCurve(river?.visualCurve) ? sampleCentripetalCatmullRom(points).points : points;
+  return isSharedCubicCurve(river?.visualCurve) ? sampleCentripetalCatmullRom(points).points : riverShorePoints(map, river, points);
 }
 
 function militaryRegiments(map) {

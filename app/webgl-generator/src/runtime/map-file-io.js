@@ -19,6 +19,7 @@ import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../genera
 import {normalizeRiverNetwork} from "../generator/river-network.js";
 import {normalizeRiverControlPoints} from "./river-control-points.js";
 import {isSharedCubicCurve, normalizeRiverVisualCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
+import {riverShorePoints} from "../geometry/river-shores.js";
 import {normalizeLakeOverflowDiagnostics} from "../generator/lake-overflow.js";
 import {REGENERATION_LOCK_VERSION, normalizeRegenerationLockStore, validateRegenerationLockStore} from "./regeneration-locks.js";
 import {normalizeZoneMap, resolveZoneContext} from "./zone-context.js";
@@ -2173,7 +2174,7 @@ function routeFeatures(map) {
 
 function riverFeatures(map) {
   return (map.rivers?.rivers || []).map(river => {
-    const visualPoints = isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : river.points;
+    const visualPoints = isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : riverShorePoints(map, river);
     const coordinates = lineCoordinates(visualPoints, map);
     if (coordinates.length < 2) return null;
     const note = readObjectNote(map, {kind: "river", id: river.id});

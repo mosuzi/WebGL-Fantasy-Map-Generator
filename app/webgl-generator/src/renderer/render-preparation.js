@@ -62,7 +62,7 @@ export const RENDER_PREPARATION_LAYERS = Object.freeze([
 ]);
 
 const REGENERATION_RENDER_LAYERS = Object.freeze({
-  features: Object.freeze(["cell-visual", "shore", "state-paths", "province-paths", "political", "surface", "line", "point", "labels", "picking"]),
+  features: Object.freeze(["cell-visual", "shore", "state-paths", "province-paths", "political", "surface", "line", "point", "labels", "river", "picking"]),
   routes: Object.freeze(["point", "labels", "route", "picking"]),
   rivers: Object.freeze(["surface", "point", "river", "picking"]),
   cities: Object.freeze(["point", "labels", "route", "picking"]),

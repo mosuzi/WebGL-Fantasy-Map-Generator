@@ -147,6 +147,7 @@ addFaultBinding.dispose();
 const generated = generatePlaceholderMap({seed: "river-cubic-roundtrip", cellsTarget: 1000, heightmapTemplate: "continents"});
 const generatedRiver = generated.rivers.rivers.find(item => item.points?.length >= 2);
 assert(generatedRiver, "往返夹具没有生成河流");
+const legacyBlob = (await createCompressedMapDocumentBlob({defaultView: globalThis}, createMapDocument(generated, {}))).blob;
 const sourcePoint = generatedRiver.points[Math.floor((generatedRiver.points.length - 1) / 2)];
 const exactPoint = [sourcePoint[0] + 0.23456789, sourcePoint[1] + 0.28765432];
 const roundtripDraft = inspectRiverControlPointAction(generated, generatedRiver.id, {type: "add", point: exactPoint});
@@ -162,9 +163,7 @@ const compressedRestored = (await parseMapDocumentPayload({defaultView: globalTh
 const compressedRiver = compressedRestored.rivers.rivers.find(item => Number(item.id) === Number(generatedRiver.id));
 assert.equal(compressedRiver.visualCurve.kind, descriptor.kind, "共享曲线没有通过 gzip 存档往返");
 assert.equal(compressedRiver.controlPoints.length, 1, "控制点没有通过 gzip 存档往返");
-const legacyMap = createMap();
-const legacyBlob = (await createCompressedMapDocumentBlob({defaultView: globalThis}, createMapDocument(legacyMap, {}))).blob;
-const legacyRestored = (await parseMapDocumentPayload({defaultView: globalThis}, legacyBlob)).map.rivers.rivers[0];
+const legacyRestored = (await parseMapDocumentPayload({defaultView: globalThis}, legacyBlob)).map.rivers.rivers.find(item => item.id === generatedRiver.id);
 assert.equal(legacyRestored.visualCurve, undefined, "旧河流 gzip 存档不得被自动升级为新曲线");
 assert.equal(legacyRestored.controlPoints, undefined, "旧河流 gzip 存档不得凭空增加控制点");
 const expectedVisualPoints = sampleCentripetalCatmullRom(generatedRiver.points).points;

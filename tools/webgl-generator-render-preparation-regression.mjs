@@ -71,6 +71,7 @@ assert.equal(
 
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("routes"), ["cities", "routeSegments"]);
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("rivers"), ["riverSegments"]);
+assert.ok(renderPreparationLayersForRegeneration("features").includes("river"), "湖泊及海岸拓扑变化必须同步河岸");
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("markers"), ["markers"]);
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("military"), ["military"]);
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("military-policy"), ["military"]);
@@ -143,7 +144,9 @@ for (const layer of ["route", "river", "point"]) {
   assert.equal(actual.layers[layer].vertices.length, expected[layer].vertices.length, `${layer} 顶点长度必须一致`);
   assert.equal(byteChecksum(actual.layers[layer].vertices), byteChecksum(expected[layer].vertices), `${layer} 字节指纹必须一致`);
 }
-assert.notEqual(actual.layers.point.vertices.length / 6 % 3, 0, "固定夹具必须覆盖 GL_POINTS 顶点数不是三的倍数的合法正例");
+const singleCity = {metadata: map.metadata, settlements: {metadata: {maxPopulation: 1}, populationPoints: [], cities: [{x: 5, y: 5}]}};
+const pointOnly = await executeRenderPreparationTask({map: singleCity, binding, camera, canvas, layers: ["point"]});
+assert.equal(pointOnly.layers.point.vertices.length / 6, 1, "固定夹具必须覆盖单个 GL_POINTS 顶点的合法正例");
 assert.equal(checkpoints.length, 3, "每个渲染准备阶段必须提供取消检查点");
 assert.doesNotThrow(() => structuredClone(actual), "渲染准备结果必须可 structured clone");
 const transfers = collectRenderPreparationTransfers(actual);
