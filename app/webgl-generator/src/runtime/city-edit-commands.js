@@ -1,3 +1,4 @@
+import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
 import {
   createCityScaleContext,
   defaultCityVisual,
@@ -319,7 +320,7 @@ export function createSetCityNoteCommand(cityId, body, {name = ""} = {}) {
   };
 }
 
-export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名称库重命名城市"} = {}) {
+export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名称库重命名城市", drawSeed = ""} = {}) {
   const targets = uniqueCityIds(cityIds);
   let changes = null;
 
@@ -331,7 +332,7 @@ export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名�
       affected: namebaseRenameAffected(OBJECT_KIND.CITY, targets)
     },
     apply(context) {
-      changes ??= buildCityRenameChanges(context.map, targets);
+      changes ??= buildCityRenameChanges(context.map, targets, drawSeed);
       if (!changes.length) throw new Error("没有可重命名的城市");
       for (const change of changes) writeCityName(context.map, change.id, change.afterName);
     },
@@ -340,7 +341,7 @@ export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名�
       for (const change of changes) restoreCityName(context.map, change);
     },
     isNoop(context) {
-      return !targets.length || !buildCityRenameChanges(context.map, targets).length;
+      return !targets.length || !buildCityRenameChanges(context.map, targets, drawSeed).length;
     },
     getResult() {
       return {renamed: changes?.length || 0, total: targets.length};
@@ -458,17 +459,17 @@ function captureCitySnapshot(map, cityId) {
   };
 }
 
-function buildCityRenameChanges(map, cityIds) {
+function buildCityRenameChanges(map, cityIds, drawSeed) {
   if (!map?.settlements?.cities?.length) return [];
-  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|explicit-city-rename|${map.metadata?.checksum || ""}`, {namebases: map.namebases});
+  const generator = createRenameGenerator(map, "city", drawSeed);
   const changes = [];
   for (const id of cityIds) {
     const city = map.settlements.cities[id];
     if (!city) continue;
     const burg = findBurgForCity(map, city);
-    const afterName = generator.makePlaceName(cityNameOptions(map, city, burg));
     const beforeName = city.name || burg?.name || "";
-    if (!afterName || afterName === beforeName) continue;
+    const afterName = chooseRenameCandidate(beforeName, drawSeed, () => generator.makePlaceName(cityNameOptions(map, city, burg)));
+    if (!afterName) continue;
     changes.push({
       id,
       burgId: city.burgId,

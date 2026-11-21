@@ -1,3 +1,4 @@
+import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {namebaseRenameAffected, objectAffected} from "./edit-command-effects.js";
 import {createChineseNameGenerator} from "../generator/names.js";
@@ -262,7 +263,7 @@ export function createApplyFeaturePatchCommand(options = {}, {label = "局部水
   };
 }
 
-export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名称库重命名湖泊"} = {}) {
+export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名称库重命名湖泊", drawSeed = ""} = {}) {
   const targets = uniqueLakeIds(lakeIds);
   let changes = null;
 
@@ -274,7 +275,7 @@ export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名�
       affected: namebaseRenameAffected(OBJECT_KIND.LAKE, targets)
     },
     apply(context) {
-      changes ??= buildLakeRenameChanges(context.map, targets);
+      changes ??= buildLakeRenameChanges(context.map, targets, drawSeed);
       if (!changes.length) throw new Error("没有可重命名的湖泊");
       for (const change of changes) writeLakeName(context.map, change.id, change.afterName);
     },
@@ -283,7 +284,7 @@ export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名�
       for (const change of changes) writeLakeName(context.map, change.id, change.beforeName);
     },
     isNoop(context) {
-      return !targets.length || !buildLakeRenameChanges(context.map, targets).length;
+      return !targets.length || !buildLakeRenameChanges(context.map, targets, drawSeed).length;
     },
     getResult() {
       return {renamed: changes?.length || 0, total: targets.length};
@@ -1005,17 +1006,17 @@ function round(value, digits = 2) {
   return Math.round((Number(value) || 0) * factor) / factor;
 }
 
-function buildLakeRenameChanges(map, lakeIds) {
+function buildLakeRenameChanges(map, lakeIds, drawSeed) {
   const lakes = map?.pack?.features || [];
   if (!lakes.length) return [];
-  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|explicit-lake-rename|${map.metadata?.checksum || ""}`, {namebases: map.namebases});
+  const generator = createRenameGenerator(map, "lake", drawSeed);
   const changes = [];
   for (const id of lakeIds) {
     const lake = findLake(map, id);
     if (!lake) continue;
-    const afterName = generator.makeLakeName(lakeNameOptions(map, lake));
     const beforeName = lake.name || "";
-    if (!afterName || afterName === beforeName) continue;
+    const afterName = chooseRenameCandidate(beforeName, drawSeed, () => generator.makeLakeName(lakeNameOptions(map, lake)));
+    if (!afterName) continue;
     changes.push({id, beforeName, afterName});
   }
   return changes;

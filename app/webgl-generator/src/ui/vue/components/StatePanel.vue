@@ -4,7 +4,7 @@
   <div class="state-panel-controls list-filter-toolbar">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号 / 首都" @update:model-value="callbacks.onFilter" />
     <div class="list-toolbar-actions">
-      <UiButton variant="secondary" :disabled="!renamableVisibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(renamableVisibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
+      <UiButton class="ui-icon-action" title="按名称库重命名筛选结果" aria-label="按名称库重命名筛选结果" :disabled="!renamableVisibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(renamableVisibleRows.map(row => row.id))"><ElIcon aria-hidden="true"><MagicStick /></ElIcon></UiButton>
       <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成国家</UiButton>
     </div>
   </div>
@@ -210,6 +210,7 @@
 </template>
 
 <script setup>
+import {BrushFilled, Connection, Delete, Document, EditPen, Flag, MagicStick, Notebook, OfficeBuilding, Plus, RefreshLeft, Scissor} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, nextTick, ref, watch} from "vue";
@@ -314,7 +315,7 @@ const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props
 const regenerationLocks = useRegenerationLockSelection({panelId: "state-panel", kind: "state", rows: visibleRows});
 const {selectedRowIds: selectedStateIds} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const renamableVisibleRows = computed(() => visibleRows.value.filter(row => !row.neutral));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.targetStateId));
@@ -352,17 +353,17 @@ const canInspectSplit = computed(() => splitProvinceIds.value.length > 0 && Numb
 const canSubmitTopology = computed(() => Boolean(topologyInspection.value?.valid));
 const topologyPreviewRows = computed(() => topologyInspection.value?.preview?.rows || []);
 const stateActions = computed(() => [
-  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图位置作为首都", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
-  {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
-  {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "government", resultClass: "open-secondary", label: "调整政体", icon: "⚖", panelWidth: 620, disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "province-suffix", resultClass: "open-secondary", label: "调整辖下省份后缀", icon: "缀", panelWidth: 520, disabled: modalActionActive.value || !canDeleteSelected.value || !provinceSuffixOptions.value.length},
-  {key: "capital", resultClass: "open-secondary", label: "设置首都", icon: "♛", disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "merge", resultClass: "open-secondary", label: "合并相邻国家", icon: "⇄", panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
-  {key: "split", resultClass: "open-secondary", label: "按完整省份拆分国家", icon: "⑂", panelWidth: 420, panelHeight: 560, disabled: modalActionActive.value || !canDeleteSelected.value || stateProvinces(props.state.map, selected.value?.id).length < 2}
+  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图位置作为首都", icon: Plus, panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
+  {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: Delete, panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
+  {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: EditPen, panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen, disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: BrushFilled, disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "government", resultClass: "open-secondary", label: "调整政体", icon: OfficeBuilding, panelWidth: 620, disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "province-suffix", resultClass: "open-secondary", label: "调整辖下省份后缀", icon: Notebook, panelWidth: 520, disabled: modalActionActive.value || !canDeleteSelected.value || !provinceSuffixOptions.value.length},
+  {key: "capital", resultClass: "open-secondary", label: "设置首都", icon: Flag, disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document, disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "merge", resultClass: "open-secondary", label: "合并相邻国家", icon: Connection, panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
+  {key: "split", resultClass: "open-secondary", label: "按完整省份拆分国家", icon: Scissor, panelWidth: 420, panelHeight: 560, disabled: modalActionActive.value || !canDeleteSelected.value || stateProvinces(props.state.map, selected.value?.id).length < 2}
 ]);
 
 const summaryMetrics = computed(() => [

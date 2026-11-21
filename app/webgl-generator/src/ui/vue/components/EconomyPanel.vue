@@ -236,6 +236,7 @@
 </template>
 
 <script setup>
+import {Location, RefreshLeft} from "@element-plus/icons-vue";
 import {computed, reactive, watch} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -384,7 +385,7 @@ const visibleGoodRows = computed(() => filteredGoodRows.value.slice(0, ROW_LIMIT
 const visibleMarketRows = computed(() => filteredMarketRows.value.slice(0, ROW_LIMIT));
 const visibleDealRows = computed(() => filteredDealRows.value.slice(0, DEAL_ROW_LIMIT));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const goodColumnWidths = computed(() => tableColumnWidths("goods"));
 const marketColumnWidths = computed(() => tableColumnWidths("markets"));
@@ -488,8 +489,8 @@ const economyDetail = computed(() => {
 });
 const dealLocateTargets = computed(() => selectedDeal.value ? buildDealLocateTargets(selectedDeal.value) : []);
 const dealLocateActions = computed(() => [
-  {key: "deal", label: debugEnabled.value ? `定位交易 #${selectedDeal.value?.id ?? ""}` : "定位交易", icon: "⌖"},
-  ...dealLocateTargets.value.map((item, index) => ({key: `related-${index}`, label: item.label, icon: "⌖"}))
+  {key: "deal", label: debugEnabled.value ? `定位交易 #${selectedDeal.value?.id ?? ""}` : "定位交易", icon: Location},
+  ...dealLocateTargets.value.map((item, index) => ({key: `related-${index}`, label: item.label, icon: Location}))
 ]);
 
 const diagnosticRows = computed(() => [

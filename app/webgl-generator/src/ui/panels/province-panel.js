@@ -126,6 +126,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     onSampleSelection: () => callbacks.onSampleSelection?.(),
     onSampleHover: () => callbacks.onSampleHover?.(),
     onRename: (provinceId, name) => callbacks.onRename?.(provinceId, name),
+    onRenameVisibleFromNamebase: ids => callbacks.onRenameVisibleFromNamebase?.(ids),
     onColorChange: (provinceId, color) => callbacks.onColorChange?.(provinceId, color),
     onNoteChange: (provinceId, body) => callbacks.onNoteChange?.(provinceId, body),
     onPreviewCapitalReassessment: scope => {

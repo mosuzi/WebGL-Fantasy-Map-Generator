@@ -56,6 +56,7 @@
 </template>
 
 <script setup>
+import {Compass, Delete, EditPen, RefreshLeft} from "@element-plus/icons-vue";
 import {computed, nextTick, ref, watch} from "vue";
 import {
   MEASUREMENT_DRAW_AREA,
@@ -117,9 +118,9 @@ const columns = Object.freeze([
 ]);
 
 const measurementActions = Object.freeze([
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen}
 ]);
-const startMeasurementAction = Object.freeze({key: "start", label: "开始测量", icon: "+"});
+const startMeasurementAction = Object.freeze({key: "start", label: "开始测量", icon: Compass});
 
 const rows = computed(() => {
   props.state.version;
@@ -127,7 +128,7 @@ const rows = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const measurementEmptyAction = computed(() => filterEmptyAction.value || startMeasurementAction);
 const measurementEmptyText = computed(() => filterEmptyAction.value ? "没有匹配的测量对象" : "暂无保存的测量对象");
@@ -139,8 +140,8 @@ const measurementExportActions = computed(() => [
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedMeasurementId) || null);
 const measurementListActions = computed(() => [
   startMeasurementAction,
-  {key: "edit", label: "编辑测量形状", icon: "◎", disabled: !selected.value},
-  {key: "delete", label: "删除测量", icon: "×", disabled: !selected.value}
+  {key: "edit", label: "编辑测量形状", icon: EditPen, disabled: !selected.value},
+  {key: "delete", label: "删除测量", icon: Delete, disabled: !selected.value}
 ]);
 const totalDistance = computed(() => rows.value.reduce((sum, row) => sum + row.distance, 0));
 const totalArea = computed(() => rows.value.reduce((sum, row) => sum + row.area, 0));

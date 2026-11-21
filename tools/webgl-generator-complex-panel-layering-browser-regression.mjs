@@ -40,7 +40,7 @@ try {
   await heightPanel.getByRole("group", {name: "高度笔刷作用范围", exact: true}).waitFor();
   await heightPanel.getByText("常用选区", {exact: true}).waitFor();
   await heightPanel.locator("#height-selection-source").waitFor();
-  await heightPanel.getByRole("button", {name: "打开导入工作台", exact: true}).waitFor();
+  await heightPanel.getByRole("button", {name: "导入工作台", exact: true}).waitFor();
   assert.equal(await heightPanel.getByText("选区地形模板", {exact: true}).isVisible(), false, "高度高级能力在首开时可见");
   await heightAdvanced.locator("summary").click();
   await heightPanel.getByText("选区地形模板", {exact: true}).waitFor();

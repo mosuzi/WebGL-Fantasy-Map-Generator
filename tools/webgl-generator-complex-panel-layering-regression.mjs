@@ -17,7 +17,7 @@ for (const label of ["选区地形模板", "多步骤地形模板", "高度区�
 const heightBeforeAdvanced = heightTemplate.slice(0, heightTemplate.indexOf(heightAdvanced));
 const heightAfterAdvanced = heightTemplate.slice(heightTemplate.indexOf(heightAdvanced) + heightAdvanced.length);
 for (const label of ["高度编辑动作", "高度笔刷作用范围", "全局微调", "常用选区", "height-selection-source"]) assert(heightBeforeAdvanced.includes(label), `高度首层缺少 ${label}`);
-assert(heightAfterAdvanced.includes("打开导入工作台"), "高度图导入没有保留在首层");
+assert(heightAfterAdvanced.includes("导入工作台"), "高度图导入没有保留在首层");
 
 const militaryTemplate = templateOf(militarySource);
 const militaryAdvanced = detailsBlock(militaryTemplate, "military-advanced-section");
@@ -59,7 +59,7 @@ function templateOf(source) {
 }
 
 function detailsBlock(source, className) {
-  const start = source.indexOf(`<details class="panel-advanced-section ${className}">`);
+  const start = source.search(new RegExp(`<details[^>]*class="panel-advanced-section ${className}"[^>]*>`));
   assert(start >= 0, `缺少 ${className}`);
   const end = source.indexOf("</details>", start);
   assert(end > start, `${className} 没有闭合`);

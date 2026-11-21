@@ -10,7 +10,7 @@
       class="inheritance-tree-open"
       @click="treePanelOpen = true"
     >
-      打开树状面板
+      宗教谱系
     </ElButton>
   </div>
 
@@ -153,6 +153,7 @@
 </template>
 
 <script setup>
+import {Aim, Brush, BrushFilled, Delete, Document, EditPen, MagicStick, Plus, RefreshLeft, Share} from "@element-plus/icons-vue";
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiColorActionPanel from "./base/UiColorActionPanel.vue";
@@ -232,27 +233,27 @@ const {selectedRowIds: selectedReligionIds} = useVisibleRowSelection(visibleRows
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedReligionId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根宗教"));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
-const defaultReligionEmptyAction = Object.freeze({key: "add", label: "新增空宗教", icon: "+"});
+const defaultReligionEmptyAction = Object.freeze({key: "add", label: "新增空宗教", icon: Plus});
 const religionEmptyAction = computed(() => filterEmptyAction.value || defaultReligionEmptyAction);
 const religionListActions = computed(() => [
-  {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.length)}`, icon: "名", disabled: !visibleRows.value.length},
+  {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.length)}`, icon: MagicStick, disabled: !visibleRows.value.length},
   defaultReligionEmptyAction,
   {
     key: "delete",
     label: "删除宗教并清除归属",
-    icon: "×",
+    icon: Delete,
     disabled: !selected.value
   }
 ]);
 const religionActions = computed(() => [
-  {key: "assign", resultClass: "toggle-canvas-mode", label: props.state.assignmentActive ? "退出宗教归属笔刷" : "编辑宗教归属", icon: "◎", panel: false, active: props.state.assignmentActive},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
-  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: "◐"},
-  {key: "parent", resultClass: "open-secondary", label: "调整继承", icon: "↳"},
-  {key: "expansion", resultClass: "open-secondary", label: "中心与扩张", icon: "⊕"},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
+  {key: "assign", resultClass: "toggle-canvas-mode", label: props.state.assignmentActive ? "退出宗教归属笔刷" : "编辑宗教归属", icon: Brush, panel: false, active: props.state.assignmentActive},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen},
+  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: BrushFilled},
+  {key: "parent", resultClass: "open-secondary", label: "调整继承", icon: Share},
+  {key: "expansion", resultClass: "open-secondary", label: "中心与扩张", icon: Aim},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document}
 ]);
 const assignmentOptions = computed(() => [
   {value: 0, label: "无宗教"},

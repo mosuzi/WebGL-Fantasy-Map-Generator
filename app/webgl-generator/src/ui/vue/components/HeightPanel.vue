@@ -463,7 +463,7 @@
       <h2 id="heightmap-import-title">高度图导入</h2>
       <p>选择灰度图预览地形，确认后生成新地图。</p>
     </div>
-    <UiButton class="heightmap-workbench-open" variant="secondary" @click="openImportWorkbench">打开导入工作台</UiButton>
+    <UiButton class="heightmap-workbench-open" variant="secondary" @click="openImportWorkbench">导入工作台</UiButton>
     <p id="heightmap-import-status" class="file-operation-status" aria-live="polite"></p>
   </section>
 

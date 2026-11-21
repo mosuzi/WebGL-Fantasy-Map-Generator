@@ -1,33 +1,34 @@
 <template>
   <template v-if="state.object">
-    <div class="object-details-title">{{ title }}</div>
+    <div class="object-details-title" aria-live="polite">{{ title }}</div>
     <UiDetailGrid class-name="object-details-list" :rows="detailRowsWithState" />
     <UiTextEditField
       v-if="editing && canRename"
+      ref="nameEditor"
       :model-value="editableName"
       class-name="object-name-editor"
       @apply="callbacks.onRename"
     />
-    <div class="object-details-actions">
-      <UiButton v-if="actionPolicy.canLocate" class="ui-icon-action" title="定位到地图" aria-label="定位到地图" variant="secondary" @click="callbacks.onLocate"><span aria-hidden="true">⌖</span></UiButton>
-      <UiButton v-if="isCity" variant="secondary" @click="callbacks.onOpenCityPanel?.()">打开城市管理</UiButton>
-      <UiButton
-        v-if="canRenameFromNamebase"
-        variant="secondary"
-        title="按当前名称库重命名这个对象"
-        @click="callbacks.onRenameFromNamebase?.()"
-      >
-        名称库改名
+    <div class="object-details-actions" role="group" aria-label="对象操作">
+      <UiButton v-if="actionPolicy.canLocate" class="ui-icon-action" title="定位到地图" aria-label="定位到地图" @click="callbacks.onLocate">
+        <ElIcon aria-hidden="true"><Location /></ElIcon>
       </UiButton>
-      <UiButton v-if="editAction" variant="secondary" @click="handleEditAction">
-        {{ editing && editAction.mode === OBJECT_DETAILS_EDIT_MODE.INLINE_NAME ? editAction.editingLabel : editAction.label }}
+      <UiButton v-if="inlineEdit" class="ui-icon-action" :active="editing" :aria-pressed="editing" :title="editLabel" :aria-label="editLabel" @click="handleEditAction">
+        <ElIcon aria-hidden="true"><EditPen /></ElIcon>
       </UiButton>
+      <UiButton v-if="canRenameFromNamebase" class="ui-icon-action" title="按名称库换名" aria-label="按名称库换名" @click="redrawName">
+        <ElIcon aria-hidden="true"><MagicStick /></ElIcon>
+      </UiButton>
+      <UiButton v-if="isCity" variant="secondary" @click="callbacks.onOpenCityPanel?.()">城市管理</UiButton>
+      <UiButton v-else-if="editAction && !inlineEdit" variant="secondary" @click="handleEditAction">{{ editAction.label }}</UiButton>
     </div>
+    <p v-if="renameMessage" class="object-details-feedback" role="status">{{ renameMessage }}</p>
   </template>
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
+import {EditPen, Location, MagicStick} from "@element-plus/icons-vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -56,6 +57,21 @@ const editing = computed(() => isSameObject(props.state.object, props.state.edit
 const title = computed(() => formatObjectTitle(props.state.object));
 const actionPolicy = computed(() => describeObjectDetailsActions(props.state.object));
 const editAction = computed(() => actionPolicy.value.edit);
+const inlineEdit = computed(() => editAction.value?.mode === OBJECT_DETAILS_EDIT_MODE.INLINE_NAME);
+const editLabel = computed(() => editing.value ? editAction.value?.editingLabel : editAction.value?.label);
+const nameEditor = ref(null);
+const renameMessage = ref("");
+watch([title, () => props.state.object?.kind, () => props.state.object?.id, () => props.state.object?.targetKind, () => props.state.object?.targetId], () => { renameMessage.value = ""; });
+watch(nameEditor, editor => {
+  const input = editor?.$el.querySelector("input");
+  input?.focus();
+  input?.select();
+}, {flush: "post"});
+
+function redrawName() {
+  renameMessage.value = props.callbacks.onRenameFromNamebase?.() || "";
+}
+
 const isCity = computed(() => props.state.object?.kind === OBJECT_KIND.CITY);
 const canRename = computed(() => canRenameObject(props.state.object));
 const canRenameFromNamebase = computed(() => canRenameObjectFromNamebase(props.state.object));
@@ -88,7 +104,7 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
 
 const OBJECT_DETAIL_ROWS = Object.freeze({
   [OBJECT_KIND.CITY]: object => [
-    {label: "类型", value: object.type},
+    ...(object.type && object.type !== "city" ? [{label: "类型", value: {capital: "首都", provincial: "省会", port: "港口"}[object.type] || object.type}] : []),
     {label: "人口", value: formatPopulationValue(object.population)},
     {label: "国家", value: object.state},
     {label: "省份", value: object.province},

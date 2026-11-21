@@ -108,7 +108,7 @@
         :disabled="emptyAction.disabled"
         @click="handleEmptyAction"
       >
-        <span aria-hidden="true">{{ emptyAction.icon || "+" }}</span>
+        <ElIcon aria-hidden="true"><component :is="emptyAction.icon" /></ElIcon>
         <span>{{ emptyAction.label }}</span>
       </button>
     </div>

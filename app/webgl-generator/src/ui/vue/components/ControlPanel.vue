@@ -756,7 +756,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import PngExportPresets from "./PngExportPresets.vue";
 import UiTabs from "./base/UiTabs.vue";
-import {Lock, Setting, Unlock} from "@element-plus/icons-vue";
+import {BrushFilled, Lock, Setting, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
@@ -955,7 +955,7 @@ const visualThemeColorFields = Object.freeze([
   {value: "scaleBarForeground", label: "比例尺前景"},
   {value: "scaleBarBackground", label: "比例尺背景"}
 ]);
-const visualThemeActions = Object.freeze([{key: "color", resultClass: "open-secondary", label: "编辑主题颜色", icon: "◐", panelWidth: 360, panelHeight: 420}]);
+const visualThemeActions = Object.freeze([{key: "color", resultClass: "open-secondary", label: "编辑主题颜色", icon: BrushFilled, panelWidth: 360, panelHeight: 420}]);
 
 const labelStyleTypeOptions = Object.freeze([
   {value: "state", label: "国家名称"},

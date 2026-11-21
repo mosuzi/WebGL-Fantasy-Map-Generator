@@ -898,9 +898,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       else execute();
       updateEditingInteractionLock(state, documentRef);
     },
-    onRenameFromNamebase: object => {
-      renameSelectedObjectFromNamebase(state, documentRef, object);
-    }
+    onRenameFromNamebase: object => renameSelectedObjectFromNamebase(state, documentRef, object)
   });
   state.panels.objectDetails = objectDetailsPanel;
   heightPanel = createHeightPanel(documentRef, panelManager, HeightPanelComponent, {
@@ -1431,7 +1429,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     },
     onRenameVisibleFromNamebase: stateIds => {
       const context = {map: state.map};
-      const command = createRenameStatesFromNamebaseCommand(stateIds);
+      const command = createRenameStatesFromNamebaseCommand(stateIds, {drawSeed: createRandomSeed()});
       const result = executeEditCommand(state, documentRef, command, {
         context,
         refresh: refreshAfterStateEdit,
@@ -1663,7 +1661,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     },
     onRenameVisibleFromNamebase: cityIds => {
       const context = {map: state.map};
-      const command = createRenameCitiesFromNamebaseCommand(cityIds);
+      const command = createRenameCitiesFromNamebaseCommand(cityIds, {drawSeed: createRandomSeed()});
       executeEditCommand(state, documentRef, command, {
         context,
         status: executed => `已按当前名称库重命名 ${executed.getResult?.().renamed || 0} 个城市。`,
@@ -2484,7 +2482,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     },
     onRenameVisibleFromNamebase: riverIds => {
       const context = {map: state.map};
-      const command = createRenameRiversFromNamebaseCommand(riverIds);
+      const command = createRenameRiversFromNamebaseCommand(riverIds, {drawSeed: createRandomSeed()});
       executeEditCommand(state, documentRef, command, {
         context,
         status: executed => `已按当前名称库重命名 ${executed.getResult?.().renamed || 0} 条河流。`,
@@ -2603,7 +2601,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     },
     onRenameVisibleFromNamebase: lakeIds => {
       const context = {map: state.map};
-      const command = createRenameLakesFromNamebaseCommand(lakeIds);
+      const command = createRenameLakesFromNamebaseCommand(lakeIds, {drawSeed: createRandomSeed()});
       executeEditCommand(state, documentRef, command, {
         context,
         status: executed => `已按当前名称库重命名 ${executed.getResult?.().renamed || 0} 个湖泊。`,
@@ -7366,7 +7364,7 @@ function resolveBattleViaApi(state, documentRef, request, options = {}) {
 }
 
 function executeNamedObjectNamebaseRename(state, documentRef, kind, ids, {refresh} = {}) {
-  const command = createRenameNamedObjectsFromNamebaseCommand(kind, ids);
+  const command = createRenameNamedObjectsFromNamebaseCommand(kind, ids, {drawSeed: createRandomSeed()});
   executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     refresh,
@@ -8769,25 +8767,20 @@ function locateObject(state, object, documentRef, locateOptions = {}) {
 
 function renameSelectedObjectFromNamebase(state, documentRef, object) {
   const target = namebaseRenameTargetForObject(object);
-  if (!target) {
-    setFileOperationStatus(documentRef, "当前选中对象不支持按名称库重命名。");
-    return;
-  }
-  const command = createSelectedNamebaseRenameCommand(target);
-  const context = {map: state.map};
-  if (!command) {
-    setFileOperationStatus(documentRef, `当前选中${selectedNamebaseTargetLabel(target)}没有可按名称库更新的名称。`);
-    return;
-  }
+  if (!target || !Number.isInteger(target.id) || target.id < (target.kind === OBJECT_KIND.STATE ? 1 : 0)) return "此对象没有可更换的名称。";
+  const label = `按名称库重命名选中${selectedNamebaseTargetLabel(target)}`;
+  const command = createNamebaseRenameObjectsCommand(target.kind, [target.id], {label, drawSeed: createRandomSeed()});
+  const noChange = "这次没有抽到不同的名称。";
+  const errorMessage = "换名失败，请稍后重试。";
+  if (state.workerAtomicCommitGuard) return "地图正在更新，请稍后再试。";
   const execution = executeEditCommand(state, documentRef, command, {
-    context,
-    noopStatus: () => `当前选中${selectedNamebaseTargetLabel(target)}没有可按名称库更新的名称。`,
-    status: executedCommand => {
-      const result = executedCommand.getResult?.();
-      return `已按当前名称库重命名选中${selectedNamebaseTargetLabel(target)} ${result?.renamed || 0} 个。`;
-    }
+    noopStatus: noChange,
+    errorStatus: errorMessage,
+    throwOnError: false,
+    status: `已${label}。`
   });
   if (execution.executed) updateEditingInteractionLock(state, documentRef);
+  return execution.error ? errorMessage : execution.executed ? "" : noChange;
 }
 
 function namebaseRenameTargetForObject(object) {
@@ -8800,27 +8793,6 @@ function namebaseRenameTargetForObject(object) {
   }
   if (object.kind === OBJECT_KIND.CITY || object.kind === OBJECT_KIND.STATE || object.kind === OBJECT_KIND.RIVER || object.kind === OBJECT_KIND.LAKE) {
     return {kind: object.kind, id: Number(object.id)};
-  }
-  return null;
-}
-
-function createSelectedNamebaseRenameCommand(target) {
-  if (!Number.isInteger(target.id)) return null;
-  if (target.kind === OBJECT_KIND.STATE) {
-    if (target.id <= 0) return null;
-    return createRenameStatesFromNamebaseCommand([target.id], {label: "按名称库重命名选中国家"});
-  }
-  if (target.kind === OBJECT_KIND.CITY) {
-    if (target.id < 0) return null;
-    return createRenameCitiesFromNamebaseCommand([target.id], {label: "按名称库重命名选中城市"});
-  }
-  if (target.kind === OBJECT_KIND.RIVER) {
-    if (target.id < 0) return null;
-    return createRenameRiversFromNamebaseCommand([target.id], {label: "按名称库重命名选中河流"});
-  }
-  if (target.kind === OBJECT_KIND.LAKE) {
-    if (target.id < 0) return null;
-    return createRenameLakesFromNamebaseCommand([target.id], {label: "按名称库重命名选中湖泊"});
   }
   return null;
 }

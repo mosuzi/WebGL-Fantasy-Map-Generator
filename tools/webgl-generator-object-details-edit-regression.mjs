@@ -79,13 +79,13 @@ assert.match(appSource, /OBJECT_KIND\.RIVER[\s\S]*panels\.river[\s\S]*RIVER_EDIT
 assert.match(routePanelSource, /startEditing\(routeId\)[\s\S]*editRequestId\+\+/, "路线面板缺少外部启动编辑请求");
 assert.match(riverPanelSource, /调整河道折线|退出河道折线调整/, "河流面板缺少明确的路径编辑动作");
 assert.doesNotMatch(riverPanelSource, /进入河流编辑/, "河流面板不得保留没有实际动作的伪编辑入口");
-assert.match(detailsSource, /v-if="editAction"/, "对象详情编辑按钮必须受显式能力策略控制");
+assert.match(detailsSource, /v-else-if="editAction && !inlineEdit"/, "对象详情编辑按钮必须受显式能力策略控制");
 assert.doesNotMatch(detailsSource, /function canEditObject/, "对象详情不得恢复默认全部可编辑策略");
-assert.match(detailsSource, /v-if="isCity"[\s\S]*打开城市管理/, "城市对象详情缺少打开城市管理入口");
-assert.match(detailsSource, /object-details-actions-city/, "城市对象详情缺少专属两行动作布局标记");
+assert.match(detailsSource, /v-if="isCity"[\s\S]*城市管理/, "城市对象详情缺少打开城市管理入口");
+assert.match(detailsSource, /<EditPen \/>/, "手工改名应有铅笔图标");
 assert.match(detailsWrapperSource, /onOpenCityPanel: \(\) => callbacks\.onOpenCityPanel\?\.\(panelState\.object\)/, "对象详情包装层没有传递当前城市");
 assert.match(appSource, /onOpenCityPanel: \(\) => \{[\s\S]*kind: OBJECT_KIND\.CITY[\s\S]*setSelectedCityId\(object\.id\)[\s\S]*panels\.city\.open/, "城市对象详情没有复用选中感知的城市管理打开链");
-assert.match(stylesSource, /\.object-details-actions-city\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/, "城市对象详情四个动作没有固定为两列两行");
+assert.ok(stylesSource.includes(".object-details-actions {") && detailsSource.includes("ui-icon-action"), "详情操作共用紧凑布局");
 
 console.log(JSON.stringify({
   ok: true,

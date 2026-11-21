@@ -92,6 +92,7 @@
 </template>
 
 <script setup>
+import {Operation, RefreshLeft, Switch} from "@element-plus/icons-vue";
 import {computed, ref} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -142,8 +143,8 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const populationActions = Object.freeze([
-  {key: "adjustment", resultClass: "open-secondary", label: "区域人口增减", icon: "±", panelWidth: 360, panelHeight: 310},
-  {key: "transfer", resultClass: "open-secondary", label: "区域人口转移", icon: "⇄", panelWidth: 380, panelHeight: 390}
+  {key: "adjustment", resultClass: "open-secondary", label: "区域人口增减", icon: Operation, panelWidth: 360, panelHeight: 310},
+  {key: "transfer", resultClass: "open-secondary", label: "区域人口转移", icon: Switch, panelWidth: 380, panelHeight: 390}
 ]);
 const metrics = computed(() => {
   props.state.version;
@@ -151,7 +152,7 @@ const metrics = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedPopulationId));
 const transferTargets = computed(() => {

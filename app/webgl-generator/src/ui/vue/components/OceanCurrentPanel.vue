@@ -43,6 +43,7 @@
 </template>
 
 <script setup>
+import {RefreshLeft} from "@element-plus/icons-vue";
 import {computed, ref} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -85,7 +86,7 @@ const visibleRows = computed(() => {
   return rows.value.filter(row => `${row.name} ${row.temperatureLabel} ${row.hemisphereLabel}`.toLowerCase().includes(query));
 });
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const regenerationLocks = useRegenerationLockSelection({panelId: "ocean-current-panel", kind: "ocean-current", rows: visibleRows});
 const selected = computed(() => rows.value.find(row => String(row.id) === String(props.state.selectedId)) || null);

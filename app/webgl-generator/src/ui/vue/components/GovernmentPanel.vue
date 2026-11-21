@@ -75,11 +75,12 @@
 
   <div class="government-panel-actions">
     <UiButton id="government-open-diplomacy" variant="secondary" :disabled="!selectedState" @click="callbacks.onOpenDiplomacy?.(selectedState)">外交视角</UiButton>
-    <UiButton variant="secondary" :disabled="!selectedState" @click="callbacks.onOpenState?.(selectedState)">打开国家编辑</UiButton>
+    <UiButton variant="secondary" :disabled="!selectedState" @click="callbacks.onOpenState?.(selectedState)">国家管理</UiButton>
   </div>
 </template>
 
 <script setup>
+import {RefreshLeft} from "@element-plus/icons-vue";
 import {computed, ref, watch} from "vue";
 import {GOVERNMENT_OPTIONS, GOVERNMENT_TYPES} from "../../../generator/governments.js";
 import {GOVERNMENT_FAMILY_LEGEND} from "../../../renderer/color-modes.js";
@@ -161,7 +162,7 @@ const visibleGovernmentRows = computed(() => sortRows(filterGovernmentRows(
   props.state.familyFilter
 ), props.state.sortKey, props.state.sortDir));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const governmentColumnWidths = computed(() => tableColumnWidths("governments"));
 const stateColumnWidths = computed(() => tableColumnWidths("states"));

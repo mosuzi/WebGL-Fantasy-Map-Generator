@@ -445,6 +445,7 @@
 </template>
 
 <script setup>
+import {EditPen, Flag, List, PieChart, Place, RefreshLeft} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, nextTick, reactive, ref, watch} from "vue";
@@ -607,7 +608,7 @@ const regenerationLocks = useRegenerationLockSelection({panelId: "military-panel
 const {selectedRowIds: selectedRegimentIds} = useVisibleRowSelection(visibleRows);
 const selectedRegimentRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const selected = computed(() => findByObjectId(visibleRows.value, props.state.selectedRegimentId) || visibleRows.value[0] || null);
 const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
@@ -677,11 +678,11 @@ const statusEditOptions = computed(() => {
   return options;
 });
 const militaryActions = computed(() => [
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: !selected.value},
-  {key: "status", resultClass: "open-secondary", label: "调整态势", icon: "⇄", disabled: !selected.value},
-  {key: "batchStatus", resultClass: "open-secondary", label: "批量态势", icon: "☷", disabled: !visibleRows.value.length},
-  {key: "station", resultClass: "open-secondary", label: "驻地基地", icon: "⌖", disabled: !selected.value},
-  {key: "ratios", resultClass: "open-secondary", label: "兵种比例", icon: "⚖", panelWidth: 620, panelHeight: 620}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen, disabled: !selected.value},
+  {key: "status", resultClass: "open-secondary", label: "调整态势", icon: Flag, disabled: !selected.value},
+  {key: "batchStatus", resultClass: "open-secondary", label: "批量态势", icon: List, disabled: !visibleRows.value.length},
+  {key: "station", resultClass: "open-secondary", label: "驻地基地", icon: Place, disabled: !selected.value},
+  {key: "ratios", resultClass: "open-secondary", label: "兵种比例", icon: PieChart, panelWidth: 620, panelHeight: 620}
 ]);
 
 const summaryMetrics = computed(() => [

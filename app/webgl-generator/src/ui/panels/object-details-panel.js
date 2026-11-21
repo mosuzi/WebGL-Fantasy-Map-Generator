@@ -58,7 +58,7 @@ export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
         return;
       }
       suppressNextViewOpenFor = null;
-      manager.open("object-details");
+      manager.open("object-details", {focus: !editingObject && !record.panel.contains(documentRef.activeElement)});
     },
     clear() {
       manager.close("object-details");

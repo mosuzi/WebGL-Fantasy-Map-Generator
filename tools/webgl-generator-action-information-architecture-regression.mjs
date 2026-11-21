@@ -50,7 +50,7 @@ for (const [kind, name] of regenerationPanels) {
   assert(appSource.includes(`runtimeActions.generate.regenerate("${kind}", {confirm: true})`), `${name} 没有复用公共重生成 action`);
 }
 
-for (const signature of ["safeActions", "dangerActions", "ui-panel-action-divider", "resolveActionIcon", "ui-panel-danger-action"]) {
+for (const signature of ["safeActions", "dangerActions", "ui-panel-action-divider", ':is="action.icon"', "ui-panel-danger-action"]) {
   assert(actionSource.includes(signature), `统一动作区缺少 ${signature}`);
 }
 assert(buttonSource.includes('props.variant === "danger"'), "公共按钮缺少危险操作样式");

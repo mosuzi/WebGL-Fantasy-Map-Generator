@@ -110,6 +110,7 @@
 </template>
 
 <script setup>
+import {Delete, Document, EditPen, Plus, Refresh, RefreshLeft} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, onBeforeUnmount, onMounted, ref, watch} from "vue";
@@ -169,8 +170,8 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const routeActions = Object.freeze([
-  {key: "edit", resultClass: "open-secondary", label: "编辑路线", icon: "✎"},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
+  {key: "edit", resultClass: "open-secondary", label: "编辑路线", icon: EditPen},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document}
 ]);
 const rows = computed(() => {
   props.state.version;
@@ -214,13 +215,13 @@ const routeEditPreviewMessage = computed(() => {
   return `${preview.changed ? "可以应用" : "没有变化"}；经过 ${formatNumberValue(preview.cells)} 个区域；${formatRouteLength(preview.distance)}${Number.isInteger(waypoint) ? `；途经位置 #${waypoint}` : ""}`;
 });
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const routeListActions = computed(() => [
-  {key: "create", label: props.state.createMode ? "取消绘制路线" : "绘制路线", icon: "+", active: props.state.createMode},
-  {key: "delete-selected", label: `批量删除选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "删", disabled: !selectedRouteRows.value.length},
-  {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value},
-  {key: "regenerate", label: "重算道路", icon: "↻", disabled: regenerationActionBusy.value}
+  {key: "create", label: props.state.createMode ? "取消绘制路线" : "绘制路线", icon: Plus, active: props.state.createMode},
+  {key: "delete-selected", label: `批量删除选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: Delete, disabled: !selectedRouteRows.value.length},
+  {key: "delete", label: "删除路线", icon: Delete, disabled: !selected.value},
+  {key: "regenerate", label: "重算道路", icon: Refresh, disabled: regenerationActionBusy.value}
 ]);
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 

@@ -92,6 +92,7 @@
 </template>
 
 <script setup>
+import {Delete, Document, EditPen, Filter, Plus, RefreshLeft} from "@element-plus/icons-vue";
 import {computed, ref, watch} from "vue";
 import OrphanNoteRescue from "./OrphanNoteRescue.vue";
 import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
@@ -158,7 +159,7 @@ const rows = computed(() => {
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const {selectedRowIds: selectedNoteIds, selectedRows: selectedNoteRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const notesEmptyText = computed(() => filterEmptyAction.value ? "没有匹配的备注" : "暂无备注");
 const notesExportActions = computed(() => [
@@ -167,15 +168,15 @@ const notesExportActions = computed(() => [
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedNoteId) || null);
 const noteActions = computed(() => [
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: !noteRenameTargetKind(selected.value?.object)},
-  {key: "edit", resultClass: "open-secondary", label: "编辑正文", icon: "☰"}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen, disabled: !noteRenameTargetKind(selected.value?.object)},
+  {key: "edit", resultClass: "open-secondary", label: "编辑正文", icon: Document}
 ]);
 const visibleOrphanRows = computed(() => visibleRows.value.filter(row => row.orphan));
 const deleteTargetRows = computed(() => selectedNoteRows.value.length ? selectedNoteRows.value : selected.value ? [selected.value] : []);
 const notesListActions = computed(() => [
-  {key: "create-standalone", label: props.state.createMode ? "取消放置独立备注" : "放置独立备注", icon: "+"},
-  {key: "select-orphans", label: `只选孤儿备注 ${formatNumber(visibleOrphanRows.value.length)}`, icon: "◎", disabled: !visibleOrphanRows.value.length},
-  {key: "delete-batch", label: deleteTargetRows.value.length > 1 ? `批量删除已选 ${formatNumber(deleteTargetRows.value.length)}` : "删除选中备注", icon: "×", disabled: !deleteTargetRows.value.length}
+  {key: "create-standalone", label: props.state.createMode ? "取消放置独立备注" : "放置独立备注", icon: Plus},
+  {key: "select-orphans", label: `只选孤儿备注 ${formatNumber(visibleOrphanRows.value.length)}`, icon: Filter, disabled: !visibleOrphanRows.value.length},
+  {key: "delete-batch", label: deleteTargetRows.value.length > 1 ? `批量删除已选 ${formatNumber(deleteTargetRows.value.length)}` : "删除选中备注", icon: Delete, disabled: !deleteTargetRows.value.length}
 ]);
 watch(() => selected.value?.id, () => { activeAction.value = null; });
 const summaryMetrics = computed(() => [

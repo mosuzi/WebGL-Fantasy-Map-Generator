@@ -1,3 +1,4 @@
+import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {namebaseRenameAffected, objectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
@@ -443,7 +444,7 @@ export function createSetRiverNoteCommand(riverId, body, {name = ""} = {}) {
   };
 }
 
-export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名称库重命名河流"} = {}) {
+export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名称库重命名河流", drawSeed = ""} = {}) {
   const targets = uniqueRiverIds(riverIds);
   let changes = null;
 
@@ -455,7 +456,7 @@ export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名
       affected: namebaseRenameAffected(OBJECT_KIND.RIVER, targets)
     },
     apply(context) {
-      changes ??= buildRiverRenameChanges(context.map, targets);
+      changes ??= buildRiverRenameChanges(context.map, targets, drawSeed);
       if (!changes.length) throw new Error("没有可重命名的河流");
       for (const change of changes) writeRiverName(context.map, change.id, change.afterName);
     },
@@ -464,7 +465,7 @@ export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名
       for (const change of changes) writeRiverName(context.map, change.id, change.beforeName);
     },
     isNoop(context) {
-      return !targets.length || !buildRiverRenameChanges(context.map, targets).length;
+      return !targets.length || !buildRiverRenameChanges(context.map, targets, drawSeed).length;
     },
     getResult() {
       return {renamed: changes?.length || 0, total: targets.length};
@@ -922,17 +923,17 @@ function countPositive(values) {
   return count;
 }
 
-function buildRiverRenameChanges(map, riverIds) {
+function buildRiverRenameChanges(map, riverIds, drawSeed) {
   const rivers = map?.rivers?.rivers || [];
   if (!rivers.length) return [];
-  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|explicit-river-rename|${map.metadata?.checksum || ""}`, {namebases: map.namebases});
+  const generator = createRenameGenerator(map, "river", drawSeed);
   const changes = [];
   for (const id of riverIds) {
     const river = findRiver(map, id);
     if (!river) continue;
-    const afterName = generator.makeRiverName(riverNameOptions(map, river));
     const beforeName = river.name || "";
-    if (!afterName || afterName === beforeName) continue;
+    const afterName = chooseRenameCandidate(beforeName, drawSeed, () => generator.makeRiverName(riverNameOptions(map, river)));
+    if (!afterName) continue;
     changes.push({id, beforeName, afterName});
   }
   return changes;

@@ -79,6 +79,7 @@
 </template>
 
 <script setup>
+import {Document, EditPen, Plus, RefreshLeft, SetUp} from "@element-plus/icons-vue";
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -137,16 +138,16 @@ const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const renameRequestKey = ref(null);
 const labelActions = Object.freeze([
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"},
-  {key: "display", resultClass: "open-secondary", label: "显示布局", icon: "⌖"}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document},
+  {key: "display", resultClass: "open-secondary", label: "显示布局", icon: SetUp}
 ]);
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const {selectedRowIds: selectedLabelKeys} = useVisibleRowSelection(visibleRows, {idKey: "key"});
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
-const defaultLabelEmptyAction = Object.freeze({key: "add", label: "新增标签", icon: "+"});
+const defaultLabelEmptyAction = Object.freeze({key: "add", label: "新增标签", icon: Plus});
 const labelEmptyAction = computed(() => filterEmptyAction.value || defaultLabelEmptyAction);
 const selected = computed(() => rows.value.find(row => row.key === props.state.selectedLabelKey) || null);
 const labelManagementActions = computed(() => [

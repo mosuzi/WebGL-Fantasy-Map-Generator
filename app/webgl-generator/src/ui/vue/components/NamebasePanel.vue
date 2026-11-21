@@ -183,6 +183,7 @@
 </template>
 
 <script setup>
+import {CopyDocument, Delete, Plus, RefreshLeft} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, ref, watch} from "vue";
@@ -282,15 +283,15 @@ const selected = computed(() => findByObjectId(rows.value, props.state.selectedN
 const selectedBuiltinRow = computed(() => selected.value?.builtin === true ? selected.value : null);
 const selectedUserRow = computed(() => isUserNamebaseRow(selected.value) ? selected.value : null);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
-const defaultNamebaseEmptyAction = Object.freeze({key: "create", label: "新建用户库", icon: "+"});
+const defaultNamebaseEmptyAction = Object.freeze({key: "create", label: "新建用户库", icon: Plus});
 const namebaseEmptyAction = computed(() => filterEmptyAction.value || defaultNamebaseEmptyAction);
 const namebaseListActions = computed(() => [
   defaultNamebaseEmptyAction,
-  {key: "copy", label: "复制选中内置库", icon: "⧉", disabled: !selectedBuiltinRow.value},
-  {key: "delete", label: "删除选中用户库", icon: "×", disabled: !selectedUserRow.value},
-  {key: "clear", label: "清空用户库", icon: "⌫", disabled: !userRows.value.length}
+  {key: "copy", label: "复制选中内置库", icon: CopyDocument, disabled: !selectedBuiltinRow.value},
+  {key: "delete", label: "删除选中用户库", icon: Delete, disabled: !selectedUserRow.value},
+  {key: "clear", label: "清空用户库", icon: Delete, disabled: !userRows.value.length}
 ]);
 const selectedSourceFingerprint = computed(() => (selected.value?.source || []).join("\u0000"));
 const previewExamplesLabel = computed(() => generatedExamples.value.length ? generatedExamples.value.join("、") : selected.value?.examplesLabel || "无样例");

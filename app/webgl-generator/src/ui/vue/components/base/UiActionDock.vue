@@ -14,7 +14,7 @@
         circle
         @click="toggleAction(action)"
       >
-        <span aria-hidden="true">{{ action.icon }}</span>
+        <ElIcon aria-hidden="true"><component :is="action.icon" /></ElIcon>
       </ElButton>
     </div>
 

@@ -101,6 +101,7 @@
 </template>
 
 <script setup>
+import {Brush, RefreshLeft, TrendCharts} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, ref, watch} from "vue";
@@ -166,12 +167,12 @@ const metrics = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedBiomeId));
 const biomeActions = Object.freeze([
-  {key: "assign", resultClass: "open-secondary", label: "归属笔刷", icon: "◉"},
-  {key: "suitability", resultClass: "open-secondary", label: "数值适居度", icon: "∿"}
+  {key: "assign", resultClass: "open-secondary", label: "归属笔刷", icon: Brush},
+  {key: "suitability", resultClass: "open-secondary", label: "数值适居度", icon: TrendCharts}
 ]);
 const biomeOptions = computed(() => metrics.value.rows.map(row => ({value: row.id, label: objectLabel(row.name, row.id)})));
 const scopeOptions = Object.freeze([

@@ -82,6 +82,7 @@
 </template>
 
 <script setup>
+import {Delete, Document, EditPen, Picture, Plus, Rank, RefreshLeft} from "@element-plus/icons-vue";
 import {computed, nextTick, reactive, ref, watch} from "vue";
 import {MARKER_TYPE_OPTIONS} from "../../../generator/markers.js";
 import {MARKER_SYMBOL_OPTIONS, resolveMarkerIconVisual} from "../../../renderer/canvas-icon-registry.js";
@@ -179,9 +180,9 @@ const visibleRows = computed(() => sortRows(filterRows(scopedRows.value, props.s
 const regenerationLocks = useRegenerationLockSelection({panelId: "marker-panel", kind: "marker", rows: visibleRows});
 const {selectedRowIds: selectedMarkerIds} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
-const defaultMarkerEmptyAction = Object.freeze({key: "add", label: "放置通用标记", icon: "+"});
+const defaultMarkerEmptyAction = Object.freeze({key: "add", label: "放置通用标记", icon: Plus});
 const markerEmptyAction = computed(() => filterEmptyAction.value || defaultMarkerEmptyAction);
 const activeSelectedMarkerId = computed(() => {
   const selectionId = props.state.selection?.object?.kind === "marker" ? props.state.selection.object.id : null;
@@ -194,14 +195,14 @@ const visualSymbolOptions = computed(() => {
   return [{value: visualDraft.symbol, label: symbolLabel(visualDraft.symbol)}, ...symbolOptions];
 });
 const markerActions = Object.freeze([
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
-  {key: "visual", resultClass: "open-secondary", label: "调整图标", icon: "▣"},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen},
+  {key: "visual", resultClass: "open-secondary", label: "调整图标", icon: Picture},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document}
 ]);
 const markerListActions = computed(() => [
   {...defaultMarkerEmptyAction, active: props.state.editMode === "add", disabled: props.state.editMode === "move"},
-  {key: "move", label: "移动选中对象", icon: "⌖", active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
-  {key: "delete", label: "删除选中对象", icon: "×", disabled: !selected.value || Boolean(props.state.editMode)}
+  {key: "move", label: "移动选中对象", icon: Rank, active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
+  {key: "delete", label: "删除选中对象", icon: Delete, disabled: !selected.value || Boolean(props.state.editMode)}
 ]);
 
 const summaryMetrics = computed(() => [

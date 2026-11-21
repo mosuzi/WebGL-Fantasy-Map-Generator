@@ -94,6 +94,7 @@
 </template>
 
 <script setup>
+import {Brush, Delete, Plus, RefreshLeft, Setting} from "@element-plus/icons-vue";
 import {computed, reactive, ref, watch} from "vue";
 import {ZONE_CREATION_TYPE_OPTIONS} from "../../../runtime/zone-edit-commands.js";
 import {resolveZoneContext, zoneRoleLabel} from "../../../runtime/zone-context.js";
@@ -169,8 +170,8 @@ const patternOptions = Object.freeze([
 ]);
 
 const zoneActions = Object.freeze([
-  {key: "style", resultClass: "open-secondary", label: "调整样式", icon: "▧", panelWidth: 360, panelHeight: 420},
-  {key: "properties", resultClass: "open-secondary", label: "地区属性", icon: "◇", panelWidth: 380, panelHeight: 620}
+  {key: "style", resultClass: "open-secondary", label: "调整样式", icon: Brush, panelWidth: 360, panelHeight: 420},
+  {key: "properties", resultClass: "open-secondary", label: "地区属性", icon: Setting, panelWidth: 380, panelHeight: 620}
 ]);
 
 const sortOptions = Object.freeze([
@@ -209,7 +210,7 @@ const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.f
 const regenerationLocks = useRegenerationLockSelection({panelId: "zone-panel", kind: "zone", rows: visibleRows});
 const {selectedRowIds: selectedZoneIds} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const visibleCount = computed(() => rows.value.filter(row => !row.hidden).length);
 const totalCells = computed(() => rows.value.reduce((sum, row) => sum + row.cells, 0));
@@ -226,8 +227,8 @@ const legendItems = computed(() => {
   }));
 });
 const zoneListActions = computed(() => [
-  {key: "create", label: props.state.createMode ? "取消放置地区" : "放置地区", icon: "+"},
-  {key: "delete", label: "删除选中地区", icon: "×", disabled: !selected.value || props.state.createMode}
+  {key: "create", label: props.state.createMode ? "取消放置地区" : "放置地区", icon: Plus},
+  {key: "delete", label: "删除选中地区", icon: Delete, disabled: !selected.value || props.state.createMode}
 ]);
 
 const summaryMetrics = computed(() => [

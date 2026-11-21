@@ -15,12 +15,13 @@
     <div v-if="hasSearchCriteria && result.pages > 1" class="map-search-pages"><button :disabled="!result.page || busy" @click="page--; run()">上一页</button><span>{{ result.page + 1 }} / {{ result.pages }}</span><button :disabled="result.page + 1 >= result.pages || busy" @click="page++; run()">下一页</button></div>
     <section v-if="detail" class="map-search-detail" aria-label="搜索内容详情">
       <strong>{{ detail.item.name }}</strong><p>{{ detail.item.text }}</p><pre v-if="detail.item.body">{{ detail.item.body }}</pre>
-      <button v-if="detail.locatable" @click="locateSelected">定位到地图</button><p v-else>此内容没有可用位置，可以在此阅读。</p>
+      <UiButton v-if="detail.locatable" class="ui-icon-action" title="定位到地图" aria-label="定位到地图" @click="locateSelected"><ElIcon aria-hidden="true"><Location /></ElIcon></UiButton><p v-else>此内容没有可用位置，可以在此阅读。</p>
     </section>
   </dialog>
 </template>
 
 <script setup>
+import {Location} from "@element-plus/icons-vue";
 import {ref, computed, watch, onBeforeUnmount, nextTick} from "vue";
 import UiButton from "./base/UiButton.vue";
 import {useDebugMode} from "../composables/use-debug-mode.js";

@@ -1,3 +1,4 @@
+import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
 import {GOVERNMENT_BY_KEY, applyStateGovernment, chooseStateGovernment, governmentAllowsSuffix, setStateGovernment} from "../generator/governments.js";
 import {chooseNewStateColor} from "../generator/politics.js";
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
@@ -338,7 +339,7 @@ export function createSetStateProvinceSuffixCommand(stateId, formName, {overwrit
   };
 }
 
-export function createRenameStatesFromNamebaseCommand(stateIds, {label = "按名称库重命名国家"} = {}) {
+export function createRenameStatesFromNamebaseCommand(stateIds, {label = "按名称库重命名国家", drawSeed = ""} = {}) {
   const normalizedStateIds = uniqueStateIds(stateIds);
   let changes = null;
 
@@ -350,7 +351,7 @@ export function createRenameStatesFromNamebaseCommand(stateIds, {label = "按名
       affected: namebaseRenameAffected("state", normalizedStateIds)
     },
     apply(context) {
-      changes ??= buildStateRenameChanges(context.map, normalizedStateIds);
+      changes ??= buildStateRenameChanges(context.map, normalizedStateIds, drawSeed);
       if (!changes.length) throw new Error("没有可重命名的国家");
       for (const change of changes) writeStateNameSnapshot(context.map, change.stateId, change.after);
     },
@@ -359,7 +360,7 @@ export function createRenameStatesFromNamebaseCommand(stateIds, {label = "按名
       for (const change of changes) writeStateNameSnapshot(context.map, change.stateId, change.before);
     },
     isNoop(context) {
-      return !normalizedStateIds.length || !buildStateRenameChanges(context.map, normalizedStateIds).length;
+      return !normalizedStateIds.length || !buildStateRenameChanges(context.map, normalizedStateIds, drawSeed).length;
     },
     getResult() {
       return {renamed: changes?.length || 0, total: normalizedStateIds.length};
@@ -479,10 +480,10 @@ export function applyStateBrushPreview(map, changes, originalPackStates) {
   applyStateChanges(map, normalizeChanges(changes), "after", originalPackStates);
 }
 
-function buildStateRenameChanges(map, stateIds) {
+function buildStateRenameChanges(map, stateIds, drawSeed) {
   const states = map?.politics?.states || [];
   if (!states.length) return [];
-  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|explicit-state-rename|${map.metadata?.checksum || ""}`, {namebases: map.namebases});
+  const generator = createRenameGenerator(map, "state", drawSeed);
   const targets = new Set(stateIds);
   const occupied = new Set(states
     .filter(state => state && !state.removed && !targets.has(normalizeStateId(state.id ?? state.i)))
@@ -494,8 +495,8 @@ function buildStateRenameChanges(map, stateIds) {
     const state = states[stateId];
     if (!state || state.removed || stateId <= 0) continue;
     const before = snapshotStateName(map, stateId);
-    const afterRoot = nextStateRootFromNamebase(map, state, generator, occupied);
-    if (!afterRoot || afterRoot === before.name) continue;
+    const afterRoot = chooseRenameCandidate(before.name, drawSeed, () => nextStateRootFromNamebase(map, state, generator, occupied));
+    if (!afterRoot) continue;
     const after = {
       name: afterRoot,
       fullName: getStateFullName(afterRoot, state.formName),

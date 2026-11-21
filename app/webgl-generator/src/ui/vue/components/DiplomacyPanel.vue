@@ -101,13 +101,7 @@
     <p v-else class="diplomacy-history-empty">当前范围暂无外交历史。</p>
   </section>
 
-  <UiActionDock v-if="selected" host-id="DiplomacyPanel" v-model:active="activeAction" :actions="diplomacyActions">
-    <template #openState>
-      <div class="diplomacy-open-state-panel">
-        <p>{{ selected.name }}</p>
-        <UiButton variant="secondary" @click="callbacks.onOpenState?.(selected)">打开国家面板</UiButton>
-      </div>
-    </template>
+  <UiActionDock v-if="selected" host-id="DiplomacyPanel" v-model:active="activeAction" :actions="diplomacyActions" @select="selectDiplomacyAction">
     <template #relation>
       <div class="diplomacy-relation-panel">
         <div class="diplomacy-relation-heading">
@@ -150,6 +144,7 @@
 </template>
 
 <script setup>
+import {Connection, Flag, RefreshLeft} from "@element-plus/icons-vue";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 const debugEnabled = useDebugMode();
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
@@ -237,7 +232,7 @@ const regenerationLocks = useRegenerationLockSelection({
 const {selectedRowIds: selectedRelationIds} = useVisibleRowSelection(visibleRows);
 const selectedRelationRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const diplomacyExportActions = computed(() => [
   {key: "csv", label: "导出 CSV", disabled: !visibleRows.value.length},
@@ -262,9 +257,15 @@ const matrixCenterController = createSelectionCenterController({
   getTarget: () => matrixWrap.value?.querySelector("td.selected"),
   getViewportInsets: scroller => stickyTableViewportInsets(scroller, scroller?.querySelector?.("thead"))
 });
+function selectDiplomacyAction(key) {
+  if (key !== "openState" || !selected.value) return;
+  activeAction.value = null;
+  props.callbacks.onOpenState?.(selected.value);
+}
+
 const diplomacyActions = Object.freeze([
-  {key: "openState", resultClass: "open-secondary", label: "打开国家", icon: "◎"},
-  {key: "relation", resultClass: "open-secondary", label: "调整关系", icon: "⇄"}
+  {key: "openState", resultClass: "open-other-panel", label: "国家管理", icon: Flag},
+  {key: "relation", resultClass: "open-secondary", label: "调整关系", icon: Connection}
 ]);
 
 watch(matrixSelectionAnchor, () => {

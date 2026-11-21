@@ -82,6 +82,7 @@
 </template>
 
 <script setup>
+import {RefreshLeft} from "@element-plus/icons-vue";
 import {computed} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -145,7 +146,7 @@ const metrics = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedBandId));
 const downstreamCandidates = computed(() => {

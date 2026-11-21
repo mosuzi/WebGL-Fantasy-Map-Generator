@@ -111,6 +111,7 @@
 </template>
 
 <script setup>
+import {Delete, Document, EditPen, MagicStick, Plus, RefreshLeft, Share, FullScreen} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, nextTick, ref, watch} from "vue";
@@ -178,7 +179,7 @@ const regenerationLocks = useRegenerationLockSelection({panelId: "river-panel", 
 const {selectedRowIds: selectedRiverIds} = useVisibleRowSelection(visibleRows);
 const selectedRiverRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
@@ -200,16 +201,16 @@ const draftSummary = computed(() => {
   return `新增控制点 · ${location} · 新长度 ${formatLength(draft.length)}`;
 });
 const riverActions = computed(() => [
-  {key: "path", resultClass: "toggle-canvas-mode", label: props.state.waypointMode ? "退出河道折线调整" : "调整河道折线", icon: "折", panel: false, active: props.state.waypointMode},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
-  {key: "width", resultClass: "open-secondary", label: "调整宽度", icon: "↔"},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
+  {key: "path", resultClass: "toggle-canvas-mode", label: props.state.waypointMode ? "退出河道折线调整" : "调整河道折线", icon: Share, panel: false, active: props.state.waypointMode},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen},
+  {key: "width", resultClass: "open-secondary", label: "调整宽度", icon: FullScreen},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document}
 ]);
 const riverListActions = computed(() => [
-  {key: "create", label: props.state.createMode ? "取消新增河流" : "新增河流", icon: "+", active: props.state.createMode},
-  {key: "rename-visible", label: "按名称库重命名筛选河流", icon: "名", disabled: !visibleRows.value.length},
-  {key: "delete-selected", label: `批量删除选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "删", disabled: !selectedRiverRows.value.length},
-  {key: "delete", label: "删除选中河流及支流", icon: "删", disabled: !selected.value}
+  {key: "create", label: props.state.createMode ? "取消新增河流" : "新增河流", icon: Plus, active: props.state.createMode},
+  {key: "rename-visible", label: "按名称库重命名筛选河流", icon: MagicStick, disabled: !visibleRows.value.length},
+  {key: "delete-selected", label: `批量删除选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: Delete, disabled: !selectedRiverRows.value.length},
+  {key: "delete", label: "删除选中河流及支流", icon: Delete, disabled: !selected.value}
 ]);
 
 const summaryMetrics = computed(() => [

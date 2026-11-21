@@ -27,21 +27,21 @@ const LOCATABLE_KINDS = new Set([
 ]);
 
 const DOMAIN_EDIT_LABELS = Object.freeze({
-  [OBJECT_KIND.STATE]: "打开国家编辑",
-  [OBJECT_KIND.PROVINCE]: "打开省份编辑",
-  [OBJECT_KIND.CULTURE]: "打开文化编辑",
-  [OBJECT_KIND.RELIGION]: "打开宗教编辑",
-  [OBJECT_KIND.ROUTE]: "打开路线编辑",
-  [OBJECT_KIND.RIVER]: "打开河流编辑",
-  [OBJECT_KIND.ZONE]: "打开地区编辑",
-  [OBJECT_KIND.MARKER]: "打开标记编辑",
-  [OBJECT_KIND.NOTE]: "打开备注编辑",
-  [OBJECT_KIND.MEASUREMENT]: "打开测量编辑",
-  [OBJECT_KIND.MILITARY]: "打开军事编辑",
-  [OBJECT_KIND.FEATURE]: "打开地貌编辑",
-  [OBJECT_KIND.OCEAN_CURRENT]: "打开洋流编辑",
-  [OBJECT_KIND.ECONOMY_MARKET]: "打开经济编辑",
-  [OBJECT_KIND.DIPLOMACY_RELATION]: "打开外交编辑"
+  [OBJECT_KIND.STATE]: "国家管理",
+  [OBJECT_KIND.PROVINCE]: "省份管理",
+  [OBJECT_KIND.CULTURE]: "文化管理",
+  [OBJECT_KIND.RELIGION]: "宗教管理",
+  [OBJECT_KIND.ROUTE]: "路线编辑",
+  [OBJECT_KIND.RIVER]: "河流编辑",
+  [OBJECT_KIND.ZONE]: "地区编辑",
+  [OBJECT_KIND.MARKER]: "标记编辑",
+  [OBJECT_KIND.NOTE]: "备注编辑",
+  [OBJECT_KIND.MEASUREMENT]: "测量编辑",
+  [OBJECT_KIND.MILITARY]: "军事编辑",
+  [OBJECT_KIND.FEATURE]: "地貌编辑",
+  [OBJECT_KIND.OCEAN_CURRENT]: "洋流编辑",
+  [OBJECT_KIND.ECONOMY_MARKET]: "经济编辑",
+  [OBJECT_KIND.DIPLOMACY_RELATION]: "外交编辑"
 });
 
 export function describeObjectDetailsActions(object) {
@@ -60,7 +60,7 @@ function describeEditAction(object) {
     if (object.targetKind === LABEL_TARGET_KIND.CITY || object.targetKind === LABEL_TARGET_KIND.STATE) {
       return {mode: OBJECT_DETAILS_EDIT_MODE.INLINE_NAME, label: "编辑名称", editingLabel: "退出名称编辑"};
     }
-    return {mode: OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL, label: "打开标签编辑"};
+    return {mode: OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL, label: "标签编辑"};
   }
   const label = DOMAIN_EDIT_LABELS[object.kind];
   return label ? {mode: OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL, label} : null;

@@ -4,7 +4,7 @@
   <div class="city-panel-controls list-filter-toolbar">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 编号 / 国家 / 省份" @update:model-value="callbacks.onFilter" />
     <div class="list-toolbar-actions">
-      <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(visibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
+      <UiButton class="ui-icon-action" title="按名称库重命名筛选结果" aria-label="按名称库重命名筛选结果" :disabled="!visibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(visibleRows.map(row => row.id))"><ElIcon aria-hidden="true"><MagicStick /></ElIcon></UiButton>
       <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成城镇</UiButton>
     </div>
   </div>
@@ -115,6 +115,7 @@
 </template>
 
 <script setup>
+import {Delete, Document, EditPen, MagicStick, Picture, Plus, Rank, RefreshLeft, Switch, User} from "@element-plus/icons-vue";
 import {computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch} from "vue";
 import {readCityAttributeActions} from "../../../runtime/city-attribute-commands.js";
 import CityUpdateGuidance from "./CityUpdateGuidance.vue";
@@ -201,7 +202,7 @@ const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props
 const regenerationLocks = useRegenerationLockSelection({panelId: "city-panel", kind: "city", rows: visibleRows});
 const {selectedRowIds: selectedCityIds} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const selected = computed(() => {
   props.state.relocationVersion;
@@ -270,14 +271,14 @@ const silhouetteOptions = computed(() => {
   return options;
 });
 const cityActions = computed(() => [
-  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图位置", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || props.state.moveMode},
-  {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || props.state.moveMode},
-  {key: "move", resultClass: "toggle-canvas-mode", label: props.state.moveMode ? "退出移动城市" : "移动城市：在地图上拖动所选城市", icon: "↗", panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !selected.value},
-  {key: "population", resultClass: "direct", label: "调整人口", icon: "#", panel: false, disabled: populationDisabled.value || !selected.value},
-  {key: "owner", resultClass: "open-secondary", label: "同步归属", icon: "⇄", disabled: modalActionActive.value || !selected.value?.canSyncOwner},
-  {key: "visual", resultClass: "open-secondary", label: "调整剪影", icon: "▣", disabled: modalActionActive.value || !selected.value},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !selected.value}
+  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图位置", icon: Plus, panel: false, active: props.state.addMode, disabled: props.state.deleteMode || props.state.moveMode},
+  {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: Delete, panel: false, active: props.state.deleteMode, disabled: props.state.addMode || props.state.moveMode},
+  {key: "move", resultClass: "toggle-canvas-mode", label: props.state.moveMode ? "退出移动城市" : "移动城市：在地图上拖动所选城市", icon: Rank, panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen, disabled: modalActionActive.value || !selected.value},
+  {key: "population", resultClass: "direct", label: "调整人口", icon: User, panel: false, disabled: populationDisabled.value || !selected.value},
+  {key: "owner", resultClass: "open-secondary", label: "同步归属", icon: Switch, disabled: modalActionActive.value || !selected.value?.canSyncOwner},
+  {key: "visual", resultClass: "open-secondary", label: "调整剪影", icon: Picture, disabled: modalActionActive.value || !selected.value},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document, disabled: modalActionActive.value || !selected.value}
 ]);
 
 const summaryMetrics = computed(() => [

@@ -86,6 +86,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     onAdd: () => callbacks.onAdd?.(),
     onDelete: row => callbacks.onDelete?.(cultureObject(row)),
     onRename: (cultureId, name) => callbacks.onRename?.(cultureId, name),
+    onRenameVisibleFromNamebase: ids => callbacks.onRenameVisibleFromNamebase?.(ids),
     onColorChange: (cultureId, color) => callbacks.onColorChange?.(cultureId, color),
     onParentChange: (cultureId, parentId) => callbacks.onParentChange?.(cultureId, parentId),
     onNoteChange: (cultureId, body) => callbacks.onNoteChange?.(cultureId, body),

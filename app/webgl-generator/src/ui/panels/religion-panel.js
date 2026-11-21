@@ -86,6 +86,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     onAdd: () => callbacks.onAdd?.(),
     onDelete: row => callbacks.onDelete?.(religionObject(row)),
     onRename: (religionId, name) => callbacks.onRename?.(religionId, name),
+    onRenameVisibleFromNamebase: ids => callbacks.onRenameVisibleFromNamebase?.(ids),
     onColorChange: (religionId, color) => callbacks.onColorChange?.(religionId, color),
     onParentChange: (religionId, parentId) => callbacks.onParentChange?.(religionId, parentId),
     onNoteChange: (religionId, body) => callbacks.onNoteChange?.(religionId, body),

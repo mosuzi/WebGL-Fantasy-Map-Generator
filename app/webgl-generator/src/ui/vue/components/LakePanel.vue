@@ -103,6 +103,7 @@
 </template>
 
 <script setup>
+import {Brush, Delete, EditPen, MagicStick, Plus, RefreshLeft, Right} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, nextTick, ref, watch} from "vue";
@@ -166,15 +167,15 @@ const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const {selectedRowIds: selectedLakeIds, selectedRows: selectedLakeRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
-  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const totalArea = computed(() => rows.value.reduce((sum, row) => sum + row.area, 0));
 const totalCells = computed(() => rows.value.reduce((sum, row) => sum + row.cells, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
 const lakeActions = Object.freeze([
-  {key: "outlet", resultClass: "open-secondary", label: "编辑湖泊出口", icon: "⇢"},
-  {key: "shore", resultClass: "open-secondary", label: "局部水陆修正", icon: "◒"},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"}
+  {key: "outlet", resultClass: "open-secondary", label: "编辑湖泊出口", icon: Right},
+  {key: "shore", resultClass: "open-secondary", label: "局部水陆修正", icon: Brush},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen}
 ]);
 const patchTargetOptions = Object.freeze([
   {value: "water", label: "扩展为湖泊水域"},
@@ -205,10 +206,10 @@ const patchPreviewMessage = computed(() => {
   return `可以应用；影响 ${formatNumber(preview.packCells?.length || 0)} 个地貌区域、${formatNumber(preview.gridCells?.length || 0)} 个地图区域；目标水体 #${preview.packTargetFeature}`;
 });
 const lakeListActions = computed(() => [
-  {key: "create", label: props.state.createMode ? "取消开挖湖泊" : "开挖湖泊", icon: "+", active: props.state.createMode},
-  {key: "rename-visible", label: "按名称库重命名筛选湖泊", icon: "名", disabled: !visibleRows.value.length},
-  {key: "delete-selected", label: `批量填平选中 ${formatNumber(selectedLakeRows.value.length)}`, icon: "删", disabled: !selectedLakeRows.value.length},
-  {key: "delete", label: "填平并删除选中湖泊", icon: "删", disabled: !selected.value}
+  {key: "create", label: props.state.createMode ? "取消开挖湖泊" : "开挖湖泊", icon: Plus, active: props.state.createMode},
+  {key: "rename-visible", label: "按名称库重命名筛选湖泊", icon: MagicStick, disabled: !visibleRows.value.length},
+  {key: "delete-selected", label: `批量填平选中 ${formatNumber(selectedLakeRows.value.length)}`, icon: Delete, disabled: !selectedLakeRows.value.length},
+  {key: "delete", label: "填平并删除选中湖泊", icon: Delete, disabled: !selected.value}
 ]);
 
 const summaryMetrics = computed(() => [

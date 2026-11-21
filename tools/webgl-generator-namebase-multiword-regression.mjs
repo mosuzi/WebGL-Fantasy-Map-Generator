@@ -62,6 +62,19 @@ for (const panel of ["ProvincePanel.vue", "CulturePanel.vue", "ReligionPanel.vue
 }
 
 const renameMap = createMap(source);
+for (const [kind, key, domain] of [["province", "provinces", "politics"], ["culture", "cultures", "society"], ["religion", "religions", "society"]]) {
+  const detached = structuredClone(renameMap);
+  detached.pack[key] = structuredClone(detached[domain][key]);
+  detached.pack[key][1].name = "旧镜像名称";
+  const previous = structuredClone(detached);
+  const redraw = createRenameNamedObjectsFromNamebaseCommand(kind, [1], {drawSeed: "点换名"});
+  redraw.apply({map: detached});
+  assert.equal(detached.pack[key][1].name, detached[domain][key][1].name);
+  assert.notEqual(detached.pack[key][1].name, previous[domain][key][1].name);
+  redraw.revert({map: detached});
+  assert.deepEqual(detached, previous);
+}
+
 const beforeProvinces = structuredClone(renameMap.politics.provinces);
 const history = new EditHistory();
 const command = createRenameNamedObjectsFromNamebaseCommand("province", [1, 2]);

@@ -12,6 +12,13 @@
 
 列表操作列按“重生成锁、定位”置于末尾并固定右侧，每列与 32px 正方形按钮命中区同宽。表头用图标并保留可访问名称。普通点击单选，Ctrl+点击增减选择，Shift+点击选择连续范围，已选行直接高亮。锁定和定位不触发行选择或双击编辑。
 
+对象详情与列表的定位、手工改名和名称库换名使用居中的 20px SVG，按钮保留操作提示与可访问名称。城市详情在 320px 视口仍能将三个图标和「城市管理」排成一行。涉及这组控件时，构建后可用以下两个浏览器专项复验实际图形、点击效果、撤销和窄屏布局。
+
+~~~powershell
+pnpm run regress:object-details-city-browser
+node tools/webgl-generator-list-controls-browser.mjs
+~~~
+
 ## 提交前检查
 
 ```powershell
