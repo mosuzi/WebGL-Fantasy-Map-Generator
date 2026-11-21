@@ -14,6 +14,7 @@ import {
   inspectGeoImportSource,
   stringifyMapImportDiagnostic
 } from "../app/webgl-generator/src/runtime/map-import-diagnostics.js";
+import {MAP_DOCUMENT_VERSION, MAP_SCHEMA_VERSION} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {normalizeRuntimeOperationError} from "../app/webgl-generator/src/runtime/runtime-operation.js";
 
 const cases = [
@@ -46,8 +47,8 @@ assert.equal(diagnostic.type, MAP_IMPORT_DIAGNOSTIC_TYPE);
 assert.equal(diagnostic.version, 2);
 assert.deepEqual(diagnostic.import, {kind: "map", label: "完整地图", status: "failed"});
 assert.equal(diagnostic.expected.documentType, "webgl-generator-map");
-assert.equal(diagnostic.expected.documentVersion, 4);
-assert.equal(diagnostic.expected.mapSchemaVersion, 4);
+assert.equal(diagnostic.expected.documentVersion, MAP_DOCUMENT_VERSION);
+assert.equal(diagnostic.expected.mapSchemaVersion, MAP_SCHEMA_VERSION);
 assert.equal(diagnostic.file.inferredFormat, "gzip 压缩地图 JSON");
 assert.equal(diagnostic.error.code, "invalid-json");
 assert.ok(formatMapImportDiagnosticLines(diagnostic).some(line => line === "诊断代码：invalid-json"));

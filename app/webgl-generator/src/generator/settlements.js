@@ -1,3 +1,4 @@
+import {settlementLandPoint} from "./settlement-land-point.js";
 import {MinPriorityQueue} from "./priority-queue.js";
 import Delaunator from "../vendor/delaunator.js";
 import {BIOMES} from "./biomes.js";
@@ -124,7 +125,7 @@ function ensureProvinceCityCandidates(grid, pack, politics, settlements, options
         if (!relocationPlan) continue;
         if (!validateCityRelocationPlan(pack, relocationPlan, cityByGrid)) continue;
         for (const step of relocationPlan) {
-          relocateCityToPackCell(pack, step.city, step.packCell, {
+          relocateCityToPackCell(grid, pack, step.city, step.packCell, {
             occupied,
             occupiedGrid,
             cityByGrid,
@@ -283,7 +284,7 @@ function validateCityRelocationPlan(pack, plan, cityByGrid) {
   return true;
 }
 
-function relocateCityToPackCell(pack, city, packCell, {occupied, occupiedGrid, cityByGrid, spacingIndex}) {
+function relocateCityToPackCell(grid, pack, city, packCell, {occupied, occupiedGrid, cityByGrid, spacingIndex}) {
   const burg = pack.burgs?.[city.burgId];
   const oldPackCell = Number(city.packCell);
   const oldGridCell = Number(city.cell);
@@ -293,7 +294,7 @@ function relocateCityToPackCell(pack, city, packCell, {occupied, occupiedGrid, c
   }
 
   if (Number(pack.cells.burg?.[oldPackCell]) === Number(city.burgId)) pack.cells.burg[oldPackCell] = 0;
-  const [x, y] = pack.cells.p?.[packCell] || [Number(city.x) || 0, Number(city.y) || 0];
+  const [x, y] = settlementLandPoint(grid, gridCell, pack.cells.p?.[packCell] || [city.x, city.y]);
   const resources = collectCityResourceContext(pack, packCell);
   const culture = Number(pack.cells.culture?.[packCell] ?? city.culture ?? 0);
   const religion = Number(pack.cells.religion?.[packCell] ?? city.religion ?? 0);
@@ -387,14 +388,14 @@ export function regenerateSettlementsWithinPolitics(grid, features, politics, se
 }
 
 export function inspectRelocatedSettlementPort(grid, pack, packCell, {wasPort = 0, capital = false, burgId = 0, options = {}} = {}) {
-  const point = [...(pack?.cells?.p?.[packCell] || [0, 0])];
+  const point = settlementLandPoint(grid, pack?.cells?.g?.[packCell], [...(pack?.cells?.p?.[packCell] || [0, 0])]);
   if (!wasPort) return {port: 0, source: "none", anchor: point, routePackCell: null, reason: "非港城不会自动升级"};
 
   const riversById = new Map((pack?.rivers || []).filter(Boolean).map(river => [river.i, river]));
   const existingBurg = pack?.burgs?.[burgId] || (pack?.burgs || []).find(burg => Number(burg?.i) === Number(burgId));
   const relocatedBurg = existingBurg ? {...existingBurg, cell: packCell, capital: Number(capital)} : {i: burgId, cell: packCell, capital: Number(capital)};
   const candidate = createSettlementPortCandidate(grid, pack, relocatedBurg, riversById, options);
-  if (candidate) return describeRelocatedPortCandidate(pack, candidate, riversById);
+  if (candidate) return describeRelocatedPortCandidate(grid, pack, candidate, riversById);
   return {port: 0, source: "cleared", anchor: point, routePackCell: null, reason: "目标不再满足港口条件"};
 }
 
@@ -1282,7 +1283,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
   const gridCell = cells.g[packCell];
   if (occupied.has(packCell) || occupiedGrid.has(gridCell)) return null;
 
-  const [x, y] = cells.p[packCell];
+  const [x, y] = settlementLandPoint(grid, gridCell, cells.p[packCell]);
   const burgId = Number.isInteger(flags.burgId) && flags.burgId > 0 ? flags.burgId : burgs.length;
   const cityId = Number.isInteger(flags.cityId) && flags.cityId >= 0 ? flags.cityId : cities.length;
   const state = Number.isInteger(flags.state) ? flags.state : flags.capital ? burgId : grid.cells.state?.[gridCell] ?? 0;
@@ -1396,10 +1397,10 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, optio
 
   for (const candidates of featurePortCandidates.values()) {
     for (const candidate of selectPortCandidates(pack, candidates)) {
-      const {burg, haven, portFeatureId} = candidate;
+      const {burg, portFeatureId} = candidate;
       selectedPortCandidates.push(candidate);
       const city = cities[burg.cityId];
-      const [x, y] = haven === null ? shiftTowardsRiverBank(pack, burg.cell, riversById) : getCloseToEdgePoint(pack, burg.cell, haven);
+      const [x, y] = portLandAnchor(grid, pack, candidate, riversById);
       burg.port = portFeatureId;
       burg.x = x;
       burg.y = y;
@@ -1436,7 +1437,7 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, optio
   for (const burg of burgs) {
     if (!burg?.i || preservedBurgIds.has(Number(burg.i)) || burg.port || !cells.r?.[burg.cell]) continue;
     const city = cities[burg.cityId];
-    const [x, y] = shiftTowardsRiverBank(pack, burg.cell, riversById);
+    const [x, y] = settlementLandPoint(grid, city.cell, shiftTowardsRiverBank(pack, burg.cell, riversById));
     burg.x = x;
     burg.y = y;
     city.x = burg.x;
@@ -1467,10 +1468,15 @@ function createSettlementPortCandidate(grid, pack, burg, riversById, options = {
   return portFeatureId ? {burg, haven: null, portFeatureId: Number(portFeatureId), landFeature, preferred: true, source: "river", harbor: 0} : null;
 }
 
-function describeRelocatedPortCandidate(pack, candidate, riversById) {
+function portLandAnchor(grid, pack, candidate, riversById) {
   const anchor = candidate.haven === null
     ? shiftTowardsRiverBank(pack, candidate.burg.cell, riversById)
     : getCloseToEdgePoint(pack, candidate.burg.cell, candidate.haven);
+  return settlementLandPoint(grid, pack.cells.g[candidate.burg.cell], anchor);
+}
+
+function describeRelocatedPortCandidate(grid, pack, candidate, riversById) {
+  const anchor = portLandAnchor(grid, pack, candidate, riversById);
   return {
     port: candidate.portFeatureId,
     source: candidate.source,
@@ -1781,7 +1787,7 @@ function getCloseToEdgePoint(pack, landCell, waterCell) {
   }
 
   const [x1, y1] = cells.p[waterCell] || cells.p[landCell];
-  return [round(x0 + 0.55 * (x1 - x0), 2), round(y0 + 0.55 * (y1 - y0), 2)];
+  return [round(x0 + 0.4 * (x1 - x0), 2), round(y0 + 0.4 * (y1 - y0), 2)];
 }
 
 function buildGridSettlements(grid, features, politics, riverCells, population, random, options = {}) {

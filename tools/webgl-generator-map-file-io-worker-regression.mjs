@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {readFile} from "node:fs/promises";
+import {MAP_DOCUMENT_VERSION} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {Worker} from "node:worker_threads";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
@@ -64,9 +65,9 @@ const workerImport = await runTaskInWorker({
   input: {kind: "text-chunks", chunks}
 });
 
-assert.equal(directImport.document.version, 4);
-assert.equal(workerImport.result.document.version, 4);
-assert.deepEqual(directImport.upgrade, {needed: true, sourceVersion: 1, targetVersion: 4});
+assert.equal(directImport.document.version, MAP_DOCUMENT_VERSION);
+assert.equal(workerImport.result.document.version, MAP_DOCUMENT_VERSION);
+assert.deepEqual(directImport.upgrade, {needed: true, sourceVersion: 1, targetVersion: MAP_DOCUMENT_VERSION});
 assert.deepEqual(workerImport.result.upgrade, directImport.upgrade, "真实 Worker 丢失升级来源");
 assert.equal(directProgress.some(item => item.stage === "upgrade"), true, "直跑 Worker 未提前发出旧卷整理进度");
 assert.equal(workerImport.progress.some(item => item.stage === "upgrade"), true, "真实 Worker 未提前发出旧卷整理进度");
@@ -86,7 +87,7 @@ const historicalBinaryImport = await runTaskInWorker({
   operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
   input: {kind: "bytes", bytes: new Uint8Array(frozenHistoricalBinary)}
 });
-assert.deepEqual(historicalBinaryImport.result.upgrade, {needed: true, sourceVersion: 2, targetVersion: 4}, "冻结 WEBFMG3 经真实 Worker 后丢失升级来源");
+assert.deepEqual(historicalBinaryImport.result.upgrade, {needed: true, sourceVersion: 2, targetVersion: MAP_DOCUMENT_VERSION}, "冻结 WEBFMG3 经真实 Worker 后丢失升级来源");
 assert.equal(historicalBinaryImport.progress.some(item => item.stage === "upgrade"), true, "冻结 WEBFMG3 经真实 Worker 未提前发出整理进度");
 
 const renderMap = generatePlaceholderMap({seed: "task322-map-file-render", cellsTarget: 1000, graphWidth: 800, graphHeight: 600});

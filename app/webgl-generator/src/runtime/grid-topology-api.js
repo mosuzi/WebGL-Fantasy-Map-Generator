@@ -1,3 +1,4 @@
+import {repairSettlementLandPoints} from "../generator/settlement-land-point.js";
 import {createGenerationSummary} from "../generator/index.js";
 import {extractFeatures} from "../generator/features.js";
 import {buildPack} from "../generator/pack.js";
@@ -191,6 +192,7 @@ function prepareTopologyReplacement(map, nextGrid, context, taskContext = null) 
     },
     unresolvedRouteIds: waterFeatureMigration.unresolvedRouteIds
   });
+  Object.assign(working, repairSettlementLandPoints(working));
   migration.waterFeatures = waterFeatureMigration.report;
   migration.portTopology = portTopology;
   markGridRoutesFresh(working);

@@ -176,7 +176,8 @@ for (const cell of [0, sourceCells, Math.floor(target.grid.points.length / 2), t
   assert.ok(Number.isInteger(pickGridCell(target, point[0], point[1])?.gridCell), `细分后 cell #${cell} 的世界坐标无法被重新拾取`);
 }
 for (const city of target.settlements.cities.filter(Boolean)) {
-  assert.ok(Number.isInteger(pickGridCell(target, city.x, city.y)?.gridCell), `细分后城市 #${city.id} 的位置无法拾取 grid cell`);
+  const hit = pickGridCell(target, city.x, city.y)?.gridCell;
+  assert.ok(Number.isInteger(hit) && target.grid.cells.h[hit] >= 20, `细分后城市 #${city.id} 的中心必须能拾取到陆地`);
 }
 const targetRoundtrip = parseMapDocument(stringifyMapDocument(createMapDocument(target))).map;
 assertSpatialReferences(targetRoundtrip);
@@ -202,7 +203,9 @@ history.redo({map: source});
 assert.equal(source.grid.points.length, 100_000);
 
 const lockedRouteMap = generatePlaceholderMap({seed: "lock-a", cellsTarget: 1_000});
-const lockedRoute = lockedRouteMap.settlements.routes.find(route => route?.id === 25 && route.type === "searoute" && route.from >= 0 && route.to === -1);
+// 取港口到相邻水格的短航段，两端在这个固定地图细分后仍可通航。
+const lockedRoute = lockedRouteMap.settlements.routes.find(route => route?.type === "searoute"
+  && route.from >= 0 && route.to === -1 && route.cells.length === 2);
 assert(lockedRoute, "锁定 partial 海路反例缺失");
 const lockedIdentity = {
   from: lockedRoute.from,

@@ -1,3 +1,4 @@
+import {settlementLandPoint} from "../generator/settlement-land-point.js";
 import {deriveRelocatedSettlement, inspectRelocatedSettlementPort, refreshRelocatedSettlementDerived} from "../generator/settlements.js";
 import {objectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, readObjectNote, restoreObjectNote} from "./object-notes.js";
@@ -70,7 +71,8 @@ export function inspectCityMoveFast(map, cityId, target = {}) {
     portPlacement = {port: 0, source: "error-cleared", anchor: destination.point, routePackCell: null, reason: error?.message || "港口预检失败"};
     warnings.push(`港口预检异常，按失效港口清理：${portPlacement.reason}`);
   }
-  const anchor = oldPort ? normalizedPoint(portPlacement.anchor, destination.point) : [...destination.point];
+  const proposed = oldPort ? normalizedPoint(portPlacement.anchor, destination.point) : destination.point;
+  const anchor = settlementLandPoint(map.grid, destination.gridCell, proposed);
   const port = {
     oldFeature: oldPort,
     feature: Number(portPlacement.port || 0),

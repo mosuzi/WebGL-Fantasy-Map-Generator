@@ -1,3 +1,4 @@
+import {repairSettlementLandPoints} from "../generator/settlement-land-point.js";
 import {readObjectNote} from "./object-notes.js";
 import {markerPresentationCount, markerPresentationRecords} from "../domains/markers/presentation.js";
 import {normalizeVisualThemeDocument} from "../renderer/themes.js";
@@ -51,8 +52,8 @@ import {
 import {migrateLandlessStates} from "./landless-states.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
-export const MAP_DOCUMENT_VERSION = 4;
-export const MAP_SCHEMA_VERSION = 4;
+export const MAP_DOCUMENT_VERSION = 5;
+export const MAP_SCHEMA_VERSION = 5;
 export const PNG_OVERLAY_KEYS = Object.freeze(["labels", "cityIcons", "markers", "military", "measurements", "legend", "scaleBar"]);
 export const GEOJSON_RANGE_MODES = Object.freeze(["full", "viewport", "bbox"]);
 
@@ -89,7 +90,7 @@ export function createMapDocument(map, options = {}, presentation = {}) {
   const display = documentOptions.display;
   delete documentOptions.display;
   const normalizedMap = projectDocumentPresentation(
-    normalizeMapSchema(Number(map.metadata?.schemaVersion) === MAP_SCHEMA_VERSION ? map : migrateLandlessStates(map), {...documentOptions, display}),
+    normalizeMapSchema(prepareMapForExport(map), {...documentOptions, display}),
     documentOptions,
     presentation
   );
@@ -110,6 +111,12 @@ export function createMapDocument(map, options = {}, presentation = {}) {
     options: documentOptions,
     map: normalizedMap
   };
+}
+
+function prepareMapForExport(map) {
+  const version = Number(map.metadata?.schemaVersion || 0);
+  if (version === MAP_SCHEMA_VERSION) return map;
+  return repairSettlementLandPoints(version >= 4 ? map : migrateLandlessStates(map));
 }
 
 function projectDocumentPresentation(map, documentOptions = {}, presentation = {}) {
@@ -1115,7 +1122,8 @@ function migrateMapDocumentStep(document, version, registry) {
 const MAP_DOCUMENT_MIGRATORS = createMapDocumentMigrationRegistry({
   1: migrateMapDocumentV1ToV2,
   2: migrateMapDocumentV2ToV3,
-  3: migrateMapDocumentV3ToV4
+  3: migrateMapDocumentV3ToV4,
+  4: migrateMapDocumentV4ToV5
 });
 
 function migrateMapDocumentV1ToV2(document) {
@@ -1149,6 +1157,12 @@ function migrateMapDocumentV3ToV4(document) {
   const map = migrateLandlessStates(document.map);
   return {...document, version: 4, metadata: {...document.metadata, mapSchemaVersion: 4},
     map: {...map, metadata: {...map.metadata, schemaVersion: 4}}};
+}
+
+function migrateMapDocumentV4ToV5(document) {
+  const map = repairSettlementLandPoints(document.map);
+  return {...document, version: 5, metadata: {...document.metadata, mapSchemaVersion: 5},
+    map: {...map, metadata: {...map.metadata, schemaVersion: 5}}};
 }
 
 function validateCurrentMapDocument(document) {

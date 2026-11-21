@@ -1,3 +1,4 @@
+import {settlementLandPoint} from "../generator/settlement-land-point.js";
 import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
 import {
   createCityScaleContext,
@@ -356,7 +357,7 @@ function addCityAtGridCell(map, gridCell) {
   const province = normalizeOwnerId(map?.pack?.cells?.province?.[packCell] ?? map?.grid?.cells?.province?.[gridCell]);
   const culture = normalizeOwnerId(map?.pack?.cells?.culture?.[packCell] ?? map?.grid?.cells?.culture?.[gridCell]);
   const religion = normalizeOwnerId(map?.pack?.cells?.religion?.[packCell] ?? map?.grid?.cells?.religion?.[gridCell]);
-  const [x, y] = map?.pack?.cells?.p?.[packCell] || [0, 0];
+  const [x, y] = settlementLandPoint(map.grid, gridCell, map.pack.cells.p?.[packCell] || map.grid.points[gridCell]);
   const cityId = nextCityId(map);
   const burgId = nextBurgId(map);
   const population = Math.max(1, roundValue((map?.pack?.cells?.pop?.[packCell] || map?.grid?.cells?.pop?.[gridCell] || 1) + 2, 3));
