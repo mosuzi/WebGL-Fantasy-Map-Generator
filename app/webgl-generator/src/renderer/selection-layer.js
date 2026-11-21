@@ -1,6 +1,7 @@
 import {createRenderContext, worldToScreenPixel} from "./render-context.js";
 import {smoothWorldPath} from "./geometry.js";
 import {riverShorePoints} from "../geometry/river-shores.js";
+import {riverDeltaBranches} from "../geometry/river-deltas.js";
 import {pushScreenPolyline, pushScreenTriangle} from "./mesh-writer.js";
 import {OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {parseDiplomacyRelationIdentity} from "../runtime/diplomacy-relations.js";
@@ -210,6 +211,7 @@ function pushSelectionTarget(vertices, context, selection, locateFlash, override
     ? sampleCentripetalCatmullRom(river.points).points
     : smoothWorldPath(riverShorePoints(map, river), SELECTION_SMOOTHING.river);
   pushScreenPolyline(vertices, context, points, color, widthPx);
+  for (const branch of riverDeltaBranches(map, river)) pushScreenPolyline(vertices, context, branch, color, widthPx * 0.7);
 }
 
 function pushCellFieldSelection(vertices, context, selection, field, fallbackColor, overrideColor) {

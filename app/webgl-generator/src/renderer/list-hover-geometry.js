@@ -5,6 +5,7 @@ import {POLITICAL_OBJECT_FIELD} from "../runtime/object-kinds.js";
 import {compositeConnectorPoints} from "./composite-connectors.js";
 import {smoothWorldPath} from "./geometry.js";
 import {riverShorePoints} from "../geometry/river-shores.js";
+import {riverDeltaBranches} from "../geometry/river-deltas.js";
 import {resolveStateCapitalPackCell} from "./state-label-territory.js";
 
 // Trace each connected component independently so rings that touch at one vertex
@@ -100,7 +101,11 @@ export function listHoverGeometry(map, object, pointForObject) {
   if (kind === "trade-flow" || kind === "diplomacy-relation") points = compositeConnectorPoints(map, object);
   else if (kind === "river") {
     const river = map.rivers.rivers.find(item => item.id === id);
-    if (river) points = isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : smoothWorldPath(riverShorePoints(map, river), {iterations: 1, factor: 0.2});
+    if (river) {
+      const shore = riverShorePoints(map, river);
+      points = isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : smoothWorldPath(shore, {iterations: 1, factor: 0.2});
+      return [points, ...riverDeltaBranches(map, river, shore)].filter(path => path?.length >= 2).map(path => ({points: path, closed: false}));
+    }
   } else if (kind === "route") {
     const route = map.settlements.routes.find(item => item.id === id);
     if (route) points = smoothWorldPath(route.points, {iterations: 1, factor: 0.16});

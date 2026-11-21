@@ -179,6 +179,7 @@ import {
 } from "./line-width-projection.js";
 import {createRiverBankBudget, riverGridSpacing} from "./river-banks.js";
 import {lakeOutletBank, riverShorePoints} from "../geometry/river-shores.js";
+import {riverDeltaBranches} from "../geometry/river-deltas.js";
 
 const MARKER_ICON_MIN_SCALE = 2.15;
 const MARKER_ICON_RELAXED_SCALE = 4.4;
@@ -6157,7 +6158,7 @@ function getObjectBounds(map, object) {
     const river = map.rivers.rivers.find(item => item.id === object.id);
     if (!isRiverVisibleForRendering(map, river)) return null;
     const points = river && (isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : riverShorePoints(map, river));
-    return points ? pointsBounds(points, 42) : null;
+    return points ? pointsBounds(points.concat(...riverDeltaBranches(map, river, points)), 42) : null;
   }
   if (object.kind === OBJECT_KIND.LAKE) {
     return lakeFeatureBounds(map, object.id, 42);
@@ -8076,18 +8077,49 @@ function pushRiverMesh(build, river) {
   if (sourcePoints.length < 2) return;
   const bank = lakeOutletBank(build.map, river);
   const shorePoints = riverShorePoints(build.map, river, sourcePoints, bank);
-  if (!worldPathIntersectsBounds(shorePoints, build.viewportBounds)) {
+  const bounds = build.viewportBounds, mouth = shorePoints.at(-1), margin = 6 * build.spacing;
+  const mouthInView = !bounds || (mouth[0] >= bounds.minX - margin && mouth[0] <= bounds.maxX + margin &&
+    mouth[1] >= bounds.minY - margin && mouth[1] <= bounds.maxY + margin);
+  const branches = mouthInView ? riverDeltaBranches(build.map, river, shorePoints) : [];
+  if (!worldPathIntersectsBounds(shorePoints, bounds) && !branches.some(points => worldPathIntersectsBounds(points, bounds))) {
     build.stats.culledRivers++;
     return;
   }
   const path = getRiverRenderPath(river, build, shorePoints, bank);
   if (path.points.length < 2) return;
   if (!build.paths.length) build.bankBudget = createRiverBankBudget(build.map, build.spacing, build.projection);
+  if (branches.length) addDeltaChannels(build, path, branches);
   build.bankBudget?.include(path);
   build.paths.push(path);
 }
 
-function drawRiverPath(build, {river, points, widths, scales}) {
+function addDeltaChannels(build, path, branches) {
+  const mouthWidth = path.widths.at(-1), fork = branches[0][0];
+  // Walk upstream to the smoothed segment containing the fork. This preserves
+  // upstream widths even where an older meander comes close to the mouth.
+  let fromFork = 0;
+  for (let i = path.points.length - 1; i > 0; i--) {
+    const a = path.points[i - 1], b = path.points[i];
+    const segment = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const toB = Math.hypot(b[0] - fork[0], b[1] - fork[1]);
+    if (Math.hypot(a[0] - fork[0], a[1] - fork[1]) + toB > segment + build.spacing * 1e-6) continue;
+    fromFork = toB;
+    for (let j = i; j < path.widths.length; j++) {
+      path.widths[j] *= 1 - 0.17 * branches.length * Math.min(1, fromFork / build.spacing);
+      const next = path.points[j + 1];
+      if (next) fromFork += Math.hypot(next[0] - path.points[j][0], next[1] - path.points[j][1]);
+    }
+    break;
+  }
+  for (const points of branches) {
+    const widths = points.map((_, i) => mouthWidth * (0.48 - 0.1 * i / (points.length - 1)));
+    const channel = {river: path.river, points, widths, scales: new Float64Array(points.length).fill(1), distributary: true};
+    build.bankBudget?.include(channel);
+    build.paths.push(channel);
+  }
+}
+
+function drawRiverPath(build, {river, points, widths, scales, distributary}) {
   const colors = [], color = riverRenderColor(river);
   for (let i = 0; i < widths.length; i++) {
     const projected = projectWorldLineWidth(widths[i] * scales[i], build.projection);
@@ -8098,7 +8130,8 @@ function drawRiverPath(build, {river, points, widths, scales}) {
   const before = build.vertices.length;
   pushVariableScreenPolyline(build.vertices, build.context, points, widths, color, colors);
   if (build.vertices.length === before) return;
-  build.stats.rivers++;
+  if (distributary) build.stats.distributaries++;
+  else build.stats.rivers++;
   build.stats.segments += points.length - 1;
 }
 
@@ -8112,6 +8145,7 @@ function finalizeRiverMeshBuild(build) {
 function emptyRiverBuildStats(projection = null) {
   return {
     rivers: 0,
+    distributaries: 0,
     hiddenFragments: 0,
     culledRivers: 0,
     segments: 0,
@@ -8198,6 +8232,7 @@ function riverPointFlux(point, cells, cell, river) {
 function normalizeRiverWidthStats(stats) {
   return {
     rivers: stats.rivers,
+    distributaries: stats.distributaries,
     hiddenFragments: stats.hiddenFragments || 0,
     culledRivers: stats.culledRivers || 0,
     segments: stats.segments,

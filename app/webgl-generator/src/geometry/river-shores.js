@@ -1,4 +1,4 @@
-function sharedShore(grid, land, water, target) {
+export function sharedShore(grid, land, water, target) {
   const ring = grid?.cells?.v?.[land], adjacent = grid?.cells?.v?.[water];
   const site = grid?.points?.[water];
   if (!site || !ring || !adjacent || !(grid.cells.h?.[land] >= 20 && grid.cells.h[water] < 20)) return null;
@@ -13,7 +13,7 @@ function sharedShore(grid, land, water, target) {
     if (best && distance >= best.distance) continue;
     // End just inside the receiving water polygon. The land mask cuts the
     // channel precisely at the displayed shoreline.
-    best = {distance, point: [x + (site[0] - x) * 0.12, y + (site[1] - y) * 0.12, ...target.slice(2)]};
+    best = {distance, edge: [a, b], point: [x + (site[0] - x) * 0.12, y + (site[1] - y) * 0.12, ...target.slice(2)]};
   }
   return best;
 }

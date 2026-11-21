@@ -20,6 +20,7 @@ import {normalizeRiverNetwork} from "../generator/river-network.js";
 import {normalizeRiverControlPoints} from "./river-control-points.js";
 import {isSharedCubicCurve, normalizeRiverVisualCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {riverShorePoints} from "../geometry/river-shores.js";
+import {riverDeltaBranches} from "../geometry/river-deltas.js";
 import {normalizeLakeOverflowDiagnostics} from "../generator/lake-overflow.js";
 import {REGENERATION_LOCK_VERSION, normalizeRegenerationLockStore, validateRegenerationLockStore} from "./regeneration-locks.js";
 import {normalizeZoneMap, resolveZoneContext} from "./zone-context.js";
@@ -2177,10 +2178,11 @@ function riverFeatures(map) {
     const visualPoints = isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : riverShorePoints(map, river);
     const coordinates = lineCoordinates(visualPoints, map);
     if (coordinates.length < 2) return null;
+    const branches = riverDeltaBranches(map, river, visualPoints).map(points => lineCoordinates(points, map));
     const note = readObjectNote(map, {kind: "river", id: river.id});
     const stable = {
       ...serializeRiverGeoJsonProperties(map, river),
-      ...(isSharedCubicCurve(river.visualCurve) ? {segmentCount: Math.max(0, visualPoints.length - 1)} : {})
+      segmentCount: coordinates.length - 1 + branches.reduce((sum, line) => sum + line.length - 1, 0)
     };
     return {
       type: "Feature",
@@ -2206,10 +2208,9 @@ function riverFeatures(map) {
         note: note?.body || "",
         ...stable
       },
-      geometry: {
-        type: "LineString",
-        coordinates
-      }
+      geometry: branches.length
+        ? {type: "MultiLineString", coordinates: [coordinates, ...branches]}
+        : {type: "LineString", coordinates}
     };
   }).filter(Boolean);
 }

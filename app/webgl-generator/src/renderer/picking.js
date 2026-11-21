@@ -1,5 +1,6 @@
 import {locateGridPoint} from "../geometry/grid-point.js";
 import {riverShorePoints} from "../geometry/river-shores.js";
+import {riverDeltaBranches} from "../geometry/river-deltas.js";
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {markerPresentationRecords} from "../domains/markers/presentation.js";
@@ -67,6 +68,7 @@ export function buildObjectPickingIndex(map, options = {}) {
     for (let index = 0; index < points.length - 1; index++) {
       const a = points[index];
       const b = points[index + 1];
+      if (!a || !b) continue;
       const segment = {kind: "river", river, index, a, b};
       addSegmentToBuckets(buckets, columns, rows, bucketSize, segment, "riverSegments");
       riverSegmentCount++;
@@ -159,6 +161,7 @@ export function refreshRiversInPickingIndex(index, rivers, map = null) {
   for (const river of rivers || []) {
     const points = riverPickingPoints(river, map);
     for (let segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex++) {
+      if (!points[segmentIndex] || !points[segmentIndex + 1]) continue;
       addSegmentToBuckets(index.buckets, index.columns, index.rows, index.bucketSize, {
         kind: "river",
         river,
@@ -545,13 +548,22 @@ function allRouteSegments(map) {
 function allRiverSegments(map) {
   return (map?.rivers?.rivers || []).flatMap(river => {
     const points = riverPickingPoints(river, map);
-    return points.slice(0, -1).map((point, index) => ({river, index, a: point, b: points[index + 1]}));
+    const segments = [];
+    for (let i = 1; i < points.length; i++) {
+      if (points[i - 1] && points[i]) segments.push({river, index: i - 1, a: points[i - 1], b: points[i]});
+    }
+    return segments;
   });
 }
 
 export function riverPickingPoints(river, map = null) {
   const points = Array.isArray(river?.points) ? river.points : [];
-  return isSharedCubicCurve(river?.visualCurve) ? sampleCentripetalCatmullRom(points).points : riverShorePoints(map, river, points);
+  if (isSharedCubicCurve(river?.visualCurve)) return sampleCentripetalCatmullRom(points).points;
+  const main = riverShorePoints(map, river, points);
+  const branches = riverDeltaBranches(map, river, main);
+  // Keep the existing segment indexes on the main channel. Gaps between paths
+  // have no pickable segment; worker references use these same point indexes.
+  return branches.length ? main.concat(...branches.map(path => [null, ...path])) : main;
 }
 
 function militaryRegiments(map) {
