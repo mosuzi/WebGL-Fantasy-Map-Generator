@@ -320,7 +320,7 @@ function buildTableInstances(file) {
       browserEvidence: "pending-Q107",
       sourceRefs: [
         {file, token: normalized.slice(0, 360)},
-        {file: FILES.objectTable, tokens: ["handleRowClick", "handleRowDoubleClick", "handleSelectAllChange", "VIRTUAL_ROW_HEIGHT = 32"]},
+        {file: FILES.objectTable, tokens: ["handleRowClick", "handleRowDoubleClick", "emitSelectionChange", "viewportHeight.value / rowHeight.value"]},
         ...(doubleClickEdit ? [{file, pattern: "function openRenameEditor\\(row\\)[\\s\\S]*?if \\([^\\n]+\\) props\\.callbacks\\.onSelect\\?\\.\\(row\\)"}] : []),
         ...(batchSelection ? batchSelectionSourceRefs(file) : []),
         ...(hoverHighlight ? [{file, tokens: [":hover-row", "callbacks.onHover"]}, {file: FILES.objectTable, tokens: ["setHover", "hoverOutline"]}] : []),
@@ -526,20 +526,21 @@ function buildVisualEvidence() {
   const tableSource = readText(FILES.objectTable);
   const geometrySource = readText(FILES.objectTableGeometry);
   const styles = readText(FILES.styles);
-  requireTokens(FILES.objectTableGeometry, geometrySource, ["export const OBJECT_TABLE_ROW_HEIGHT = 42"]);
+  requireTokens(FILES.objectTableGeometry, geometrySource, ["export const OBJECT_TABLE_ROW_HEIGHT = 28", "export const TOUCH_OBJECT_TABLE_ROW_HEIGHT = 34"]);
   requireTokens(FILES.objectTable, tableSource, ["OBJECT_TABLE_ROW_HEIGHT", "--object-table-row-height", "const VIRTUAL_THRESHOLD = 120", "const VIRTUAL_OVERSCAN_ROWS = 8"]);
   requireTokens(FILES.styles, styles, [".object-table-native tbody .object-table-row", "height: var(--object-table-row-height);", "padding-top: 0;", "padding-bottom: 0;", "--el-font-size-small: 12px;", ".table-icon-action", "height: var(--editor-icon-hit);"]);
   return {
     tokenBasis: ["--el-font-size-small: 12px", "--ui-segmented-height: 28px", "--ui-segmented-font-size: 12px"],
     sharedComponentBasis: [FILES.objectTable, FILES.actionDock],
     geometryBasis: {
-      virtualRowHeight: 42,
+      virtualRowHeight: 28,
+      touchRowHeight: 34,
       virtualThreshold: 120,
       virtualOverscanRows: 8,
       tableCellPadding: "0 8px",
       tableLineHeight: 1.35,
-      locateButtonHeight: 28,
-      locateRowMinimumHeight: 42,
+      locateButtonHeight: 24,
+      locateRowMinimumHeight: 28,
       fixedCssRowHeight: true
     },
     evidenceStatus: "E-C",

@@ -58,11 +58,14 @@ try {
         const actions = el.querySelectorAll(".ui-action-icon-row button, .ui-panel-io-actions .ui-icon-action, .regeneration-lock-action, .table-icon-action, .list-toolbar-actions .ui-icon-action");
         return Array.from(actions).filter(button => button.offsetWidth > 0).map(button => {
           const hit = button.getBoundingClientRect(), svg = button.querySelector("svg")?.getBoundingClientRect();
-          return {label: button.getAttribute("aria-label"), hit: [hit.width, hit.height], glyph: svg && [svg.width, svg.height],
+          return {label: button.getAttribute("aria-label"), inRow: button.matches(".table-icon-action"), hit: [hit.width, hit.height], glyph: svg && [svg.width, svg.height],
             centered: svg && Math.abs(hit.x + hit.width / 2 - svg.x - svg.width / 2) <= 1 && Math.abs(hit.y + hit.height / 2 - svg.y - svg.height / 2) <= 1};
         });
       });
-      for (const icon of icons) assert.ok(icon.label && icon.hit.every(v => v === 24) && icon.glyph?.every(v => v === 15) && icon.centered, JSON.stringify({name, width, icon}));
+      for (const icon of icons) assert.ok(icon.label && icon.hit.every(v => v === 24) && icon.glyph?.every(v => v === (icon.inRow ? 13 : 15)) && icon.centered, JSON.stringify({name, width, icon}));
+      const heights = await panel.locator(".object-table-row:visible").evaluateAll(nodes => [...new Set(nodes.map(row => row.getBoundingClientRect().height))]);
+      assert.ok(heights.every(height => height === 28), JSON.stringify({name, width, heights}));
+      if (name === "city" && width === 760) await verifyVirtualCityList(page, panel);
       if (width === 560 && ["city", "state", "province", "culture", "religion", "lake", "river"].includes(name)) {
         const snapshot = () => page.evaluate(kind => {
           const {map, editHistory} = window.__webglGeneratorApp;
@@ -112,4 +115,53 @@ try {
 } finally {
   await browser.close();
   await server.close();
+}
+
+async function verifyVirtualCityList(page, panel) {
+  const wrap = panel.locator(".object-table-wrap");
+  const countText = await panel.locator(".city-panel-summary .ui-key-value-item").filter({has: page.getByText("筛选", {exact: true})}).locator("strong").innerText();
+  const total = Number(countText.replaceAll(",", ""));
+  assert.ok(total > 120, "须覆盖虚拟城市列表");
+  const touch = await page.context().newCDPSession(page);
+  const samples = [];
+  for (const mode of ["mouse", "touch", "mouse"]) {
+    const coarse = mode === "touch", height = coarse ? 34 : 28;
+    await touch.send("Emulation.setTouchEmulationEnabled", {enabled: coarse, maxTouchPoints: 1});
+    await page.waitForFunction(expected => {
+      const table = document.querySelector('[data-panel-id="city-panel"] .object-table');
+      return getComputedStyle(table).getPropertyValue("--object-table-row-height").trim() === expected + "px";
+    }, height);
+    for (const position of [0, 0.5, 1]) {
+      const sample = await wrap.evaluate(async (el, fraction) => {
+        el.scrollTop = fraction * (el.scrollHeight - el.clientHeight);
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const body = el.querySelector("tbody"), rows = [...body.querySelectorAll(".object-table-row")];
+        const button = rows.at(-1).querySelector(".table-icon-action");
+        const bounds = el.getBoundingClientRect(), header = el.querySelector("thead th").getBoundingClientRect();
+        const fullyVisible = rows.filter(row => {
+          const rect = row.getBoundingClientRect();
+          return rect.top >= header.bottom - 0.5 && rect.bottom <= bounds.top + el.clientTop + el.clientHeight + 0.5;
+        });
+        return {bodyHeight: body.getBoundingClientRect().height, heights: [...new Set(rows.map(row => row.getBoundingClientRect().height))],
+          viewport: el.clientHeight, headerHeight: header.height, rendered: rows.length, visible: fullyVisible.length,
+          first: rows[0].dataset.rowKey, last: rows.at(-1).dataset.rowKey,
+          hit: button.offsetHeight, glyph: button.querySelector("svg").getBoundingClientRect().width};
+      }, position);
+      assert.equal(sample.bodyHeight, total * height, "虚拟占位与真实行总高度须一致");
+      assert.deepEqual(sample.heights, [height]);
+      const capacity = Math.floor((sample.viewport - sample.headerHeight) / height);
+      assert.ok(sample.visible >= capacity - 1 && sample.visible <= capacity && sample.rendered < total);
+      assert.deepEqual([sample.hit, sample.glyph], [coarse ? 32 : 24, 13]);
+      samples.push({mode, position, ...sample});
+      if (samples.length === 1) await wrap.screenshot({path: join(out, "城市列表.png")});
+    }
+  }
+  await touch.detach();
+  assert.equal(samples[2].last, samples[5].last);
+  assert.equal(samples[2].last, samples[8].last);
+  const lastRow = wrap.locator(".object-table-row").last();
+  const cityName = await lastRow.locator('td[data-column-key="name"]').innerText();
+  await lastRow.locator('td[data-column-key="name"]').click();
+  assert.equal(await panel.locator(".city-attribute-name").innerText(), cityName, "末行点击须选中对应城市");
+  await writeFile(join(out, "行高.json"), JSON.stringify({total, samples}, null, 2));
 }

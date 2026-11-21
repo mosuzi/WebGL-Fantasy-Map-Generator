@@ -117,6 +117,7 @@
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
+import {useMediaQuery} from "@vueuse/core";
 import {useDebugMode} from "../../composables/use-debug-mode.js";
 import {visibleListFields} from "../../composables/list-visibility.js";
 import {Location, Lock, Unlock} from "@element-plus/icons-vue";
@@ -129,7 +130,7 @@ import {
   stickyTableViewportInsets
 } from "../../../components/selection-scroll.js";
 import {objectTableSelectionRange} from "./object-table-selection.js";
-import {OBJECT_TABLE_ROW_HEIGHT} from "./object-table-geometry.js";
+import {OBJECT_TABLE_ROW_HEIGHT, TOUCH_OBJECT_TABLE_ROW_HEIGHT} from "./object-table-geometry.js";
 import {beginDirectManipulationSession} from "../../../../runtime/direct-manipulation-session.js";
 
 defineOptions({
@@ -266,7 +267,9 @@ function refreshHover() {
   const hit = wrap?.ownerDocument.elementFromPoint(pointer.x, pointer.y);
   setHover(wrap?.contains(hit) ? hit.closest("tr[data-row-key]") : null);
 }
-const objectTableGeometryStyle = Object.freeze({"--object-table-row-height": `${OBJECT_TABLE_ROW_HEIGHT}px`});
+const coarsePointer = useMediaQuery("(pointer: coarse)");
+const rowHeight = computed(() => coarsePointer.value ? TOUCH_OBJECT_TABLE_ROW_HEIGHT : OBJECT_TABLE_ROW_HEIGHT);
+const objectTableGeometryStyle = computed(() => ({"--object-table-row-height": `${rowHeight.value}px`}));
 const scrollTop = ref(0);
 const viewportHeight = ref(300);
 let scrollMetricsFrame = 0;
@@ -281,8 +284,10 @@ const columnSpan = computed(() => visibleColumns.value.length + (props.showLocat
 const virtualEnabled = computed(() => props.rows.length > VIRTUAL_THRESHOLD);
 const virtualWindow = computed(() => {
   if (!virtualEnabled.value) return {start: 0, end: props.rows.length};
-  const visibleCount = Math.max(1, Math.ceil(viewportHeight.value / OBJECT_TABLE_ROW_HEIGHT));
-  const start = Math.max(0, Math.floor(scrollTop.value / OBJECT_TABLE_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS);
+  const visibleCount = Math.max(1, Math.ceil(viewportHeight.value / rowHeight.value));
+  // 缩短行高或筛选结果时，浏览器可能仍报告原来的滚动位置。
+  const lastStart = Math.max(0, props.rows.length - visibleCount - VIRTUAL_OVERSCAN_ROWS);
+  const start = Math.min(lastStart, Math.max(0, Math.floor(scrollTop.value / rowHeight.value) - VIRTUAL_OVERSCAN_ROWS));
   const end = Math.min(props.rows.length, start + visibleCount + VIRTUAL_OVERSCAN_ROWS * 2);
   return {start, end};
 });
@@ -293,8 +298,8 @@ watch(visibleRows, () => {
   if (hoverOutline && !hoverOutline.isCurrent()) setHover(null);
   refreshHover();
 }, {flush: "post"});
-const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.value.start * OBJECT_TABLE_ROW_HEIGHT : 0);
-const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * OBJECT_TABLE_ROW_HEIGHT : 0);
+const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.value.start * rowHeight.value : 0);
+const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * rowHeight.value : 0);
 const sortableKeys = computed(() => new Set((props.sortOptions || []).map(option => option?.key).filter(Boolean)));
 const sortIndicator = computed(() => props.sortDirection === "asc" ? "↑" : "↓");
 const effectiveSelectionIds = computed(() => props.showRegenerationLock ? props.lockSelectionIds : props.selectedRowIds);
@@ -322,14 +327,14 @@ const selectedCenterController = createSelectionCenterController({
   getViewportInsets: scroller => tableViewportInsets(scroller),
   prepareTarget: scroller => {
     if (!virtualEnabled.value || selectedRowPosition.value < 0) return;
-    centerVirtualRowVertically(scroller, selectedRowPosition.value, OBJECT_TABLE_ROW_HEIGHT, tableViewportInsets(scroller));
+    centerVirtualRowVertically(scroller, selectedRowPosition.value, rowHeight.value, tableViewportInsets(scroller));
     refreshScrollMetrics();
   },
   onSettled: refreshScrollMetrics
 });
 
 watch(
-  selectedScrollAnchor,
+  [selectedScrollAnchor, rowHeight],
   () => scrollSelectedRowIntoView(),
   {flush: "post", immediate: true}
 );

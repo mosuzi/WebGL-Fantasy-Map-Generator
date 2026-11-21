@@ -3067,6 +3067,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .ui-icon-action.el-button .el-icon,
+.object-table-native th .el-icon,
 .table-icon-action .el-icon {
   flex: none;
   width: var(--editor-icon-size);
@@ -3349,6 +3350,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .object-table-native {
+  --editor-icon-size: 13px;
   --object-table-action-width: var(--editor-icon-hit);
   width: 100%;
   min-width: max-content;
@@ -3379,6 +3381,8 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .object-table-native th {
+  height: var(--object-table-row-height);
+  padding-block: 0;
   position: sticky;
   top: 0;
   z-index: 2;
@@ -3399,7 +3403,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   border: 0;
   background: transparent;
   color: inherit;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: inherit;
   gap: 5px;
@@ -3663,7 +3667,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .table-icon-action {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
@@ -3677,6 +3681,7 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   font-size: 16px;
   line-height: 1;
   padding: 0;
+  margin-inline: auto;
 }
 
 .table-icon-action:hover,

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {createRequire} from "node:module";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {OBJECT_TABLE_ROW_HEIGHT} from "../app/webgl-generator/src/ui/vue/components/base/object-table-geometry.js";
 const {chromium}=createRequire(path.resolve("source/Fantasy-Map-Generator/package.json"))("playwright");
 const out=process.env.TEMP,mode=process.argv[2]||"large";
 const browser=await chromium.launch({channel:"chrome",headless:true});
@@ -46,7 +47,7 @@ try {
     await page.evaluate(name=>{document.querySelectorAll('.floating-panel:not(.hidden) .floating-panel-close').forEach(b=>b.click());const a=window.__webglGeneratorApp,h=a.editHistory.getStats();if(name==='height')a.panels[name].open(h);else if(name==='state')a.panels[name].open(a.map,h);else a.panels[name].open(a.map,a.selection,h);},name);
     await page.waitForTimeout(160);
     const data=await page.evaluate(()=>{const p=document.querySelector('.floating-panel:not(.hidden)'),b=p.querySelector('.floating-panel-body'),table=p.querySelector('table');return {client:b.clientWidth,scroll:b.scrollWidth,headers:table?[...table.querySelectorAll('th')].map(t=>t.textContent.trim()):[],rows:[...p.querySelectorAll('.object-table-row')].slice(0,3).map(r=>r.getBoundingClientRect().height)};});
-    report.layouts.push({width,name,...data});assert.ok(data.scroll<=data.client+2,`${name} 溢出`);assert.ok(data.rows.every(h=>Math.abs(h-42)<1),`${name} 表格行高失配`);
+    report.layouts.push({width,name,...data});assert.ok(data.scroll<=data.client+2,`${name} 溢出`);assert.ok(data.rows.every(h=>Math.abs(h-OBJECT_TABLE_ROW_HEIGHT)<1),`${name} 表格行高失配`);
     await page.screenshot({path:path.join(out,`panel-final-${width}-${name}.png`)});
    }
   }

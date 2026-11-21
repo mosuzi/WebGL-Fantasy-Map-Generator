@@ -1,1 +1,2 @@
-export const OBJECT_TABLE_ROW_HEIGHT = 42;
+export const OBJECT_TABLE_ROW_HEIGHT = 28;
+export const TOUCH_OBJECT_TABLE_ROW_HEIGHT = 34;

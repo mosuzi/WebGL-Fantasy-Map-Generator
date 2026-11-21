@@ -4,7 +4,7 @@ import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {panelAvailableHeight} from "../app/webgl-generator/src/ui/panel-manager.js";
 import {beginDirectManipulationSession} from "../app/webgl-generator/src/runtime/direct-manipulation-session.js";
-import {OBJECT_TABLE_ROW_HEIGHT} from "../app/webgl-generator/src/ui/vue/components/base/object-table-geometry.js";
+import {OBJECT_TABLE_ROW_HEIGHT, TOUCH_OBJECT_TABLE_ROW_HEIGHT} from "../app/webgl-generator/src/ui/vue/components/base/object-table-geometry.js";
 import {
   captureObjectTableSelectionEvent,
   captureObjectTableSelectionHitClick,
@@ -36,15 +36,16 @@ assert.equal(tableInstances.filter(item => /(?:selectable-rows|show-regeneration
 assert.equal(tableInstances.filter(item => !item.source.includes(':show-locate-action="false"')).length, 20, "定位实例必须保持 20 个");
 assert.equal(tableInstances.filter(item => item.source.includes(`:doubleClickAction="'edit'"`)).length, 11, "双击编辑实例必须保持 11 个");
 
-assert.equal(OBJECT_TABLE_ROW_HEIGHT, 42, "共享对象表格行高必须为 42px");
+assert.equal(OBJECT_TABLE_ROW_HEIGHT, 28, "鼠标行高为 28px");
+assert.equal(TOUCH_OBJECT_TABLE_ROW_HEIGHT, 34, "触屏保留 32px 按钮和分隔线");
 assert.doesNotMatch(tableSource, /\bVIRTUAL_ROW_HEIGHT\b|(?:scrollTop|viewportHeight)[^\n]*\/\s*32|virtualWindow[^\n]*\*\s*32/, "共享表格不得保留裸 32px 虚拟行高");
-assert.match(tableSource, /"--object-table-row-height": `\$\{OBJECT_TABLE_ROW_HEIGHT\}px`/, "CSS 行高变量必须由 JS 单一 token 写入");
+assert.match(tableSource, /"--object-table-row-height": `\$\{rowHeight\.value\}px`/, "DOM 和虚拟窗口使用同一行高");
 for (const token of [
-  "viewportHeight.value / OBJECT_TABLE_ROW_HEIGHT",
-  "scrollTop.value / OBJECT_TABLE_ROW_HEIGHT",
-  "virtualWindow.value.start * OBJECT_TABLE_ROW_HEIGHT",
-  "virtualWindow.value.end) * OBJECT_TABLE_ROW_HEIGHT",
-  "selectedRowPosition.value, OBJECT_TABLE_ROW_HEIGHT"
+  "viewportHeight.value / rowHeight.value",
+  "scrollTop.value / rowHeight.value",
+  "virtualWindow.value.start * rowHeight.value",
+  "virtualWindow.value.end) * rowHeight.value",
+  "selectedRowPosition.value, rowHeight.value"
 ]) assert.ok(tableSource.includes(token), `虚拟窗口、spacer 与居中必须共同读取行高 token：${token}`);
 const rowRule = cssRule(".object-table-native tbody .object-table-row");
 const cellRule = cssRule(".object-table-native tbody .object-table-row > td");

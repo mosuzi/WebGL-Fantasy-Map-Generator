@@ -6,6 +6,7 @@ import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createServer as createViteServer} from "vite";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {OBJECT_TABLE_ROW_HEIGHT} from "../app/webgl-generator/src/ui/vue/components/base/object-table-geometry.js";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -855,7 +856,7 @@ async function verifyTableGeometry(page) {
   await wrap.waitFor({state: "visible"});
   const positions = [];
   for (const position of ["start", "middle", "end"]) {
-    positions.push(await wrap.evaluate(async (element, position) => {
+    positions.push(await wrap.evaluate(async (element, {position, rowHeight}) => {
       element.scrollTop = position === "start" ? 0 : position === "middle" ? element.scrollHeight / 2 : element.scrollHeight;
       element.dispatchEvent(new Event("scroll", {bubbles: true}));
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -870,8 +871,9 @@ async function verifyTableGeometry(page) {
       const topSpacer = Number.parseFloat(topSpacerCell?.style.height || "0") || 0;
       const bottomSpacer = Number.parseFloat(bottomSpacerCell?.style.height || "0") || 0;
       const rowHeights = rows.map(row => row.getBoundingClientRect().height);
-      const totalRows = Math.round((topSpacer + bottomSpacer + rowHeights.reduce((sum, value) => sum + value, 0)) / 42);
-      const reconstructionError = Math.abs(topSpacer + bottomSpacer + rowHeights.reduce((sum, value) => sum + value, 0) - totalRows * 42);
+      const bodyHeight = topSpacer + bottomSpacer + rowHeights.reduce((sum, value) => sum + value, 0);
+      const totalRows = Math.round(bodyHeight / rowHeight);
+      const reconstructionError = Math.abs(bodyHeight - totalRows * rowHeight);
       return {
         position,
         scrollTop: element.scrollTop,
@@ -884,11 +886,11 @@ async function verifyTableGeometry(page) {
         rowHeightMax: Math.max(...rowHeights),
         reconstructionError
       };
-    }, position));
+    }, {position, rowHeight: OBJECT_TABLE_ROW_HEIGHT}));
   }
   for (const position of positions) {
     assert.ok(position.renderedRows > 0, `${position.position} 未渲染虚拟行`);
-    assert.ok(Math.abs(position.rowHeightMin - 42) <= 1 && Math.abs(position.rowHeightMax - 42) <= 1, `${position.position} 行高偏差超过 1px`);
+    assert.ok(Math.abs(position.rowHeightMin - OBJECT_TABLE_ROW_HEIGHT) <= 1 && Math.abs(position.rowHeightMax - OBJECT_TABLE_ROW_HEIGHT) <= 1, `${position.position} 行高偏差超过 1px`);
     assert.ok(position.reconstructionError <= 1, `${position.position} 虚拟定位误差超过 1px`);
   }
   assert.equal(positions[0].topSpacer, 0, "首段不得保留顶部虚拟 spacer");
