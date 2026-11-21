@@ -37,30 +37,30 @@ try {
   await markPhase("state-opening");
   await page.evaluate(() => {
     const app = window.__webglGeneratorApp;
-    const stateId = app.map.politics.states.find(item => item?.id > 0 && !item.removed)?.id;
+    const stateId = app.map.politics.states.find(item => item?.id > 0 && !item.removed && app.map.politics.provinces.filter(p => p?.i > 0 && !p.removed && p.state === item.id).length >= 2)?.id;
     if (!stateId) throw new Error("夹具缺少国家");
     app.panels.state.setTargetStateId(stateId);
     app.panels.state.open(app.map, app.editHistory.getStats());
   });
 
   const main = page.locator('.floating-panel[data-panel-id="state-panel"]:not(.hidden)');
-  const color = main.getByRole("button", {name: "调整颜色", exact: true});
-  const government = main.getByRole("button", {name: "调整政体", exact: true});
-  await color.waitFor({state: "visible"});
+  const split = main.getByRole("button", {name: "按完整省份拆分国家", exact: true});
+  const government = main.getByRole("button", {name: "调整辖下省份后缀", exact: true});
+  await split.waitFor({state: "visible"});
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await markPhase("state-ready");
   await markPhase("color-opening");
-  await color.click();
-  await page.getByRole("dialog", {name: "调整颜色"}).waitFor({state: "visible"});
+  await split.click();
+  await page.getByRole("dialog", {name: "按完整省份拆分国家"}).waitFor({state: "visible"});
   await markPhase("government-switch");
   await government.click();
-  const dialog = page.getByRole("dialog", {name: "调整政体"});
+  const dialog = page.getByRole("dialog", {name: "调整辖下省份后缀"});
   await dialog.waitFor({state: "visible"});
   await page.waitForTimeout(80);
   const switched = await inspectLayers(page);
-  console.log(JSON.stringify({phase: "color-to-government", ...switched}));
-  assert.equal(switched.dialogAboveMain, true, "连续切换二级弹框后，政体弹框被国家面板盖住");
-  assert.equal(switched.hitDialog, true, "重叠位置无法点击政体弹框");
+  console.log(JSON.stringify({phase: "split-to-province-suffix", ...switched}));
+  assert.equal(switched.dialogAboveMain, true, "连续切换二级弹框后，省份后缀弹框被国家面板盖住");
+  assert.equal(switched.hitDialog, true, "重叠位置无法点击省份后缀弹框");
 
   await markPhase("outside-close");
   await main.locator(".floating-panel-header").click({position: {x: 20, y: 20}});
@@ -79,11 +79,11 @@ try {
   await markPhase("dropdown-opening");
   await government.click();
   await dialog.waitFor({state: "visible"});
-  await dialog.locator(".state-government-select .el-select__wrapper").click();
+  await dialog.locator(".state-province-suffix-select .el-select__wrapper").click();
   const options = page.locator(".ui-select-popper.el-popper:visible");
   await options.waitFor({state: "visible"});
   const dropdown = await inspectDropdown(page);
-  assert.ok(dropdown.popperZ > dropdown.dialogZ && dropdown.popperZ > dropdown.mainZ, `政体选项被编辑面板盖住：${JSON.stringify(dropdown)}`);
+  assert.ok(dropdown.popperZ > dropdown.dialogZ && dropdown.popperZ > dropdown.mainZ, `省份后缀选项被编辑面板盖住：${JSON.stringify(dropdown)}`);
   if (process.env.FMG_TASK_ARTIFACT_DIR && target === 3000) {
     await page.screenshot({path: join(process.env.FMG_TASK_ARTIFACT_DIR, "task-425-government-popup.png")});
   }
@@ -102,16 +102,16 @@ try {
   await dialog.waitFor({state: "visible"});
   const longSession = await inspectLayers(page);
   assert.ok(longSession.dialogAboveMain && longSession.dialogZ < 1500, `长会话二级弹框层级失效：${JSON.stringify(longSession)}`);
-  await dialog.locator(".state-government-select .el-select__wrapper").click();
+  await dialog.locator(".state-province-suffix-select .el-select__wrapper").click();
   await options.waitFor({state: "visible"});
   const longSessionDropdown = await inspectDropdown(page);
-  assert.ok(longSessionDropdown.popperZ > longSessionDropdown.dialogZ, `长会话政体选项被弹框遮挡：${JSON.stringify(longSessionDropdown)}`);
+  assert.ok(longSessionDropdown.popperZ > longSessionDropdown.dialogZ, `长会话省份后缀选项被弹框遮挡：${JSON.stringify(longSessionDropdown)}`);
   await page.keyboard.press("Escape");
   await options.waitFor({state: "hidden"});
-  assert.equal(await dialog.isVisible(), true, "第一次 Esc 应只收起政体候选");
+  assert.equal(await dialog.isVisible(), true, "第一次 Esc 应只收起省份后缀候选");
   await page.keyboard.press("Escape");
   await dialog.waitFor({state: "hidden"});
-  assert.equal(await government.evaluate(button => document.activeElement === button), true, "Esc 关闭政体弹框后没有返回触发按钮");
+  assert.equal(await government.evaluate(button => document.activeElement === button), true, "Esc 关闭省份后缀弹框后没有返回触发按钮");
   const longTasks = await page.evaluate(() => window.__overlayLayerLongTasks.map(task => ({
     ...task,
     phase: window.__overlayLayerPhases.filter(phase => phase.time <= task.startTime).at(-1)?.label || "unknown"
@@ -128,7 +128,7 @@ try {
 async function inspectDropdown(page) {
   return page.evaluate(() => {
     const main = document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden)');
-    const dialog = document.querySelector('.ui-secondary-action-panel[aria-label="调整政体"]');
+    const dialog = document.querySelector('.ui-secondary-action-panel[aria-label="调整辖下省份后缀"]');
     const popper = document.querySelector('.ui-select-popper.el-popper:not([aria-hidden="true"])');
     return {mainZ: Number(getComputedStyle(main).zIndex), dialogZ: Number(getComputedStyle(dialog).zIndex), popperZ: Number(getComputedStyle(popper).zIndex)};
   });
@@ -137,7 +137,7 @@ async function inspectDropdown(page) {
 async function inspectLayers(page) {
   return page.evaluate(() => {
     const main = document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden)');
-    const dialog = document.querySelector('.ui-secondary-action-panel[aria-label="调整政体"]');
+    const dialog = document.querySelector('.ui-secondary-action-panel[aria-label="调整辖下省份后缀"]');
     const mainRect = main.getBoundingClientRect();
     const dialogRect = dialog.getBoundingClientRect();
     const overlap = {

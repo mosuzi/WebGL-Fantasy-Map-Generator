@@ -80,15 +80,15 @@ try {
   assert.ok(labelBefore.targetText, "夹具须找到当前国家标签，才能验证改名与撤销");
   assert.equal(labelBefore.otherVisible, true, "夹具须找到另一个原本可见的国家标签，才能验证局部刷新可见性");
   await markPhase("state-panel-opened");
-  const stateRenameButton = page.locator('.floating-panel[data-panel-id="state-panel"]:not(.hidden)').getByRole("button", {name: "重命名", exact: true});
+  const stateRenameButton = page.locator('.floating-panel[data-panel-id="state-panel"]:not(.hidden)').getByRole("button", {name: "编辑全称", exact: true});
   await markPhase("rename-opening");
   await stateRenameButton.click();
   await markPhase("rename-opened");
-  const stateDialog = page.getByRole("dialog", {name: "重命名"});
-  const stateInput = stateDialog.locator(".state-name-editor input");
+  const stateDialog = page.locator('.state-panel-details [data-inline-label="全称"]');
+  const stateInput = stateDialog.locator("input");
   await stateInput.waitFor();
   assert.equal(await stateDialog.locator(".ui-secondary-action-title").count(), 0, "单输入弹框不得重复显示标题");
-  await page.waitForFunction(() => document.activeElement?.matches?.(".state-name-editor input"));
+  await page.waitForFunction(() => document.activeElement?.closest?.('[data-inline-label="全称"]') && document.activeElement.tagName === "INPUT");
   assert.equal(await stateInput.evaluate(input => document.activeElement === input), true, "打开重命名应聚焦输入框");
   if (process.argv.includes("--state-only")) await stateDialog.evaluate(dialog => {
     window.__quickInputEnterEvents = [];
@@ -98,7 +98,7 @@ try {
     });
   });
   const compact = await stateDialog.evaluate(dialog => {
-    const input = dialog.querySelector(".state-name-editor input");
+    const input = dialog.querySelector("input");
     const rect = dialog.getBoundingClientRect();
     const inputRect = input.getBoundingClientRect();
     return {width: rect.width, height: rect.height,
@@ -113,14 +113,14 @@ try {
   await stateInput.press("Enter");
   assert.equal(await stateName(), originalStateName, "输入法选字时不得提交");
   assert.equal(await history(), stateHistory);
-  assert.equal(await stateDialog.isVisible(), true, "输入法选字不得关闭弹框");
+  assert.equal(await stateInput.isVisible(), true, "输入法选字不得关闭弹框");
   await stateInput.dispatchEvent("compositionend");
   await markPhase("rename-commit");
   await stateInput.press("Enter");
   await markPhase("rename-committed");
   if (process.argv.includes("--state-only")) {
-    const diagnosis = {stateAfterEnter: await stateName(), history: await history(), dialogVisible: await stateDialog.isVisible(),
-      input: await stateDialog.isVisible() ? await stateInput.inputValue() : null,
+    const diagnosis = {stateAfterEnter: await stateName(), history: await history(), dialogVisible: await stateInput.isVisible(),
+      input: await stateInput.isVisible() ? await stateInput.inputValue() : null,
       events: await page.evaluate(() => window.__quickInputEnterEvents), errors};
     console.log(JSON.stringify(diagnosis));
     assert.equal(diagnosis.stateAfterEnter, "回车测试国", "有效回车没有写入国家名称");
@@ -139,12 +139,12 @@ try {
   assert.ok(labelAfter.targetText?.includes("回车测试国"), "地图国家标签应跟随改名");
   assert.equal(labelAfter.otherPreserved, true, "无关国家标签不应重建");
   assert.equal(labelAfter.otherVisible, true, "远处原本可见的国家标签不应因局部刷新消失");
-  await stateDialog.waitFor({state: "hidden"});
-  await page.waitForFunction(() => document.activeElement?.dataset?.actionId === "StatePanel:rename");
+  await stateInput.waitFor({state: "hidden"});
+  await page.waitForFunction(() => document.activeElement?.matches('.state-panel-details [data-inline-label="全称"] button'));
   assert.equal(await history(), stateHistory + 1, "国家回车只提交一次");
   await stateRenameButton.click();
   await stateInput.press("Enter");
-  await stateDialog.waitFor({state: "hidden"});
+  await stateInput.waitFor({state: "hidden"});
   assert.equal(await history(), stateHistory + 1, "同值回车不写历史");
   await page.evaluate(() => window.webglGeneratorApi.history.undo());
   assert.equal(await stateName(), originalStateName, "国家重命名可撤销");
@@ -153,16 +153,16 @@ try {
   await stateRenameButton.click();
   await stateInput.fill("按 Esc 放弃");
   await page.keyboard.press("Escape");
-  await stateDialog.waitFor({state: "hidden"});
+  await stateInput.waitFor({state: "hidden"});
   assert.equal(await stateName(), originalStateName, "Esc 应丢弃草稿");
   await stateRenameButton.click();
   await stateInput.fill("");
   await stateInput.press("Enter");
   assert.equal(await stateName(), originalStateName, "空名称不得覆盖原名");
   assert.equal(await history(), historyAfterUndo, "空名称不写历史");
-  assert.equal(await stateDialog.isVisible(), true, "空名称应留在弹框中修正");
+  assert.equal(await stateInput.isVisible(), true, "空名称应留在弹框中修正");
   await stateInput.fill("未提交的名称");
-  await stateDialog.getByRole("button", {name: "关闭二级编辑面板"}).click();
+  await stateInput.press("Escape");
   assert.equal(await stateName(), originalStateName, "关闭编辑面板丢弃草稿");
   await stateRenameButton.click();
   await stateInput.fill("失效  目标国");
@@ -173,7 +173,7 @@ try {
   }, stateId);
   try {
     await stateInput.press("Enter");
-    assert.equal(await stateDialog.isVisible(), true, "目标已失效时不得关闭并丢失草稿");
+    assert.equal(await stateInput.isVisible(), true, "目标已失效时不得关闭并丢失草稿");
     assert.equal(await stateInput.inputValue(), "失效  目标国");
     assert.equal(await history(), historyAfterUndo, "失效目标不得写历史");
   } finally {
@@ -184,19 +184,19 @@ try {
     }, stateId);
   }
   await stateInput.press("Enter");
-  await stateDialog.waitFor({state: "hidden"});
+  await stateInput.waitFor({state: "hidden"});
   assert.equal(await stateName(), "失效 目标国", "恢复目标后应提交规范化名称");
   await page.evaluate(() => window.webglGeneratorApi.history.undo());
   assert.equal(await stateName(), originalStateName);
   await stateRenameButton.click();
   await stateInput.fill(`  ${originalStateName}  `);
   await stateInput.press("Enter");
-  await stateDialog.waitFor({state: "hidden"});
+  await stateInput.waitFor({state: "hidden"});
   assert.equal(await history(), historyAfterUndo, "等价空白名称不写历史");
   await stateRenameButton.click();
   await stateInput.fill("失焦测试国");
   await stateInput.evaluate(input => input.blur());
-  await stateDialog.waitFor({state: "hidden"});
+  await stateInput.waitFor({state: "hidden"});
   assert.equal(await stateName(), "失焦测试国", "有效失焦应提交国家名称");
   assert.equal(await history(), historyAfterUndo + 1, "失焦只提交一次历史");
   await page.evaluate(() => window.webglGeneratorApi.history.undo());
@@ -204,20 +204,20 @@ try {
   await stateRenameButton.click();
   await stateInput.fill("外点测试国");
   await page.mouse.click(5, 5);
-  await stateDialog.waitFor({state: "hidden"});
+  await stateInput.waitFor({state: "hidden"});
   assert.equal(await stateName(), "外点测试国", "点击弹框外应先失焦提交");
   await page.evaluate(() => window.webglGeneratorApi.history.undo());
   assert.equal(await stateName(), originalStateName);
   await stateRenameButton.click();
   await stateInput.evaluate(input => input.blur());
-  await stateDialog.waitFor({state: "hidden"});
+  await stateInput.waitFor({state: "hidden"});
   assert.equal(await history(), historyAfterUndo, "同值失焦不写历史");
   await stateRenameButton.click();
   await stateInput.fill("");
   await stateInput.evaluate(input => input.blur());
-  assert.equal(await stateDialog.isVisible(), true, "空名称失焦仍应保留编辑状态");
+  await stateInput.waitFor({state: "hidden"});
+  assert.ok(await stateDialog.getByRole("alert").isVisible(), "空名称失焦保留错误说明");
   assert.equal(await stateName(), originalStateName);
-  await stateDialog.getByRole("button", {name: "关闭二级编辑面板"}).click();
   report.state = {composition: true, singleHistory: true, noOp: true, empty: true, undo: true, escape: true, close: true, blur: true, outsideClick: true, rejectedKeepsDraft: true, normalizedName: true, focusReturn: true, compact, labels: labelAfter};
   await markPhase("state-complete");
 
@@ -232,11 +232,10 @@ try {
       await stateRenameButton.click();
       const zoomLayout = await stateDialog.evaluate(dialog => {
         const rect = dialog.getBoundingClientRect();
-        const input = dialog.querySelector(".state-name-editor input");
-        const close = dialog.querySelector(".ui-secondary-action-close");
+        const input = dialog.querySelector("input");
         return {width: rect.width, height: rect.height, viewport: innerWidth,
           textInset: input.getBoundingClientRect().left - rect.left + Number.parseFloat(getComputedStyle(input).paddingLeft),
-          inputValue: input.value, inputVisibility: getComputedStyle(input).visibility, closeVisibility: getComputedStyle(close).visibility,
+          inputValue: input.value, inputVisibility: getComputedStyle(input).visibility,
           overflow: dialog.scrollWidth > dialog.clientWidth, clipped: rect.left < 0 || rect.right > innerWidth};
       });
       assert.ok(!zoomLayout.overflow && !zoomLayout.clipped && zoomLayout.textInset <= 24, JSON.stringify(zoomLayout));
@@ -245,7 +244,7 @@ try {
         await page.screenshot({path: join(process.env.FMG_TASK_ARTIFACT_DIR, `task-424-page-zoom200-${target}.png`)});
       }
       await page.keyboard.press("Escape");
-      await stateDialog.waitFor({state: "hidden"});
+      await stateInput.waitFor({state: "hidden"});
       report.zoom200 = zoomLayout;
     } catch (error) {
       zoomFailure = error;
@@ -269,19 +268,20 @@ try {
   }, cityId);
   const cityBefore = await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities[id].name, cityId);
   const cityHistory = await history();
-  await page.locator('.floating-panel[data-panel-id="city-panel"]:not(.hidden)').getByRole("button", {name: "重命名", exact: true}).click();
-  const cityDialog = page.getByRole("dialog", {name: "重命名"});
-  const cityInput = cityDialog.locator(".city-name-editor input");
+  await page.locator('.floating-panel[data-panel-id="city-panel"]:not(.hidden)').getByRole("button", {name: "编辑名称", exact: true}).click();
+  const cityDialog = page.locator('.floating-panel[data-panel-id="city-panel"] [data-inline-label="名称"]');
+  const cityInput = cityDialog.locator("input");
   await cityInput.fill("回车测试城");
   await cityInput.press("Enter");
   await page.waitForFunction(id => window.__webglGeneratorApp.map.settlements.cities[id].name === "回车测试城", cityId);
-  await cityDialog.waitFor({state: "hidden"});
+  await cityInput.waitFor({state: "hidden"});
   assert.equal(await history(), cityHistory + 1);
   await page.evaluate(() => window.webglGeneratorApi.history.undo());
   assert.equal(await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities[id].name, cityId), cityBefore);
   const populationInput = page.locator('.floating-panel[data-panel-id="city-panel"]:not(.hidden) input[aria-label="城市人口（人）"]');
   const populationBefore = await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities[id].population, cityId);
   const populationHistory = await history();
+  await page.locator('.floating-panel[data-panel-id="city-panel"]').getByRole("button", {name: "城市人口（人）", exact: true}).click();
   await populationInput.fill(String(Number(await populationInput.inputValue()) + 111));
   await populationInput.evaluate(input => input.blur());
   await page.waitForFunction(({id, before}) => window.__webglGeneratorApp.map.settlements.cities[id].population !== before, {id: cityId, before: populationBefore});
@@ -302,13 +302,13 @@ try {
   }, cultureId);
   const cultureBefore = await page.evaluate(id => window.__webglGeneratorApp.map.society.cultures[id].name, cultureId);
   const cultureHistory = await history();
-  await page.locator('.floating-panel[data-panel-id="culture-panel"]:not(.hidden)').getByRole("button", {name: "重命名", exact: true}).click();
-  const cultureDialog = page.getByRole("dialog", {name: "重命名"});
-  const cultureInput = cultureDialog.locator(".culture-name-editor input");
+  await page.locator('.floating-panel[data-panel-id="culture-panel"]:not(.hidden)').getByRole("button", {name: "编辑名称", exact: true}).click();
+  const cultureDialog = page.locator('.floating-panel[data-panel-id="culture-panel"] [data-inline-label="名称"]');
+  const cultureInput = cultureDialog.locator("input");
   await cultureInput.fill("回车测试文化");
   await cultureInput.press("Enter");
   await page.waitForFunction(id => window.__webglGeneratorApp.map.society.cultures[id].name === "回车测试文化", cultureId);
-  await cultureDialog.waitFor({state: "hidden"});
+  await cultureInput.waitFor({state: "hidden"});
   assert.equal(await history(), cultureHistory + 1);
   await page.evaluate(() => window.webglGeneratorApi.history.undo());
   assert.equal(await page.evaluate(id => window.__webglGeneratorApp.map.society.cultures[id].name, cultureId), cultureBefore);
@@ -329,13 +329,13 @@ try {
       app.panels.military.setSelectedRegimentId(id);
     }, regimentTarget.rowId);
     const militaryPanel = page.locator('.floating-panel[data-panel-id="military-panel"]:not(.hidden)');
-    await militaryPanel.getByRole("button", {name: "重命名", exact: true}).click();
-    const militaryDialog = page.getByRole("dialog", {name: "重命名"});
-    const militaryInput = militaryDialog.locator(".military-name-editor input");
+    await militaryPanel.getByRole("button", {name: "编辑军团", exact: true}).click();
+    const militaryDialog = page.locator('.floating-panel[data-panel-id="military-panel"] [data-inline-label="军团"]');
+    const militaryInput = militaryDialog.locator("input");
     await militaryInput.fill("回车  测试军团");
     await markPhase("military-commit");
     await militaryInput.press("Enter");
-    await militaryDialog.waitFor({state: "hidden"});
+    await militaryInput.waitFor({state: "hidden"});
     assert.equal(await page.evaluate(({stateId, regimentId}) => window.__webglGeneratorApp.map.politics.states[stateId].military.find(item => item.i === regimentId)?.name, regimentTarget), "回车  测试军团", "军团名称应保留内部空格并关闭");
     await page.evaluate(() => window.webglGeneratorApi.history.undo());
     assert.equal(await page.evaluate(({stateId, regimentId}) => window.__webglGeneratorApp.map.politics.states[stateId].military.find(item => item.i === regimentId)?.name, regimentTarget), regimentTarget.name);
@@ -354,15 +354,15 @@ try {
     app.panels.notes.setSelectedNoteId(`state:${id}`);
   }, stateId);
   const notesPanel = page.locator('.floating-panel[data-panel-id="notes-panel"]:not(.hidden)');
-  await notesPanel.getByRole("button", {name: "重命名", exact: true}).click();
-  const notesDialog = page.getByRole("dialog", {name: "重命名"});
-  const notesInput = notesDialog.locator("[data-ui-text-edit-field] input");
+  await notesPanel.getByRole("button", {name: "编辑名称", exact: true}).click();
+  const notesDialog = page.locator('.floating-panel[data-panel-id="notes-panel"] [data-inline-label="名称"]');
+  const notesInput = notesDialog.locator("input");
   assert.equal(await notesInput.inputValue(), originalStateName, "关联备注应显示对象当前名称");
   const notesHistory = await history();
   await notesInput.fill("从备注改名国");
   await markPhase("notes-commit");
   await notesInput.press("Enter");
-  await notesDialog.waitFor({state: "hidden"});
+  await notesInput.waitFor({state: "hidden"});
   assert.equal(await stateName(), "从备注改名国", "从备注重命名应更新关联对象");
   assert.equal(await history(), notesHistory + 1, "从备注重命名只写一次历史");
   assert.equal(await page.evaluate(id => window.__webglGeneratorApp.map.notes.notes.find(note => note.id === `state:${id}`)?.name, stateId), originalStateName, "备注快照保持原始名称以覆盖旧数据反例");
@@ -375,11 +375,11 @@ try {
   }, {mode: "append"}), {stateId, name: originalStateName});
   assert.equal(labelNoteImported.ok, true, JSON.stringify(labelNoteImported.error));
   await page.evaluate(id => window.__webglGeneratorApp.panels.notes.setSelectedNoteId(`label:state:${id}`), stateId);
-  await notesPanel.getByRole("button", {name: "重命名", exact: true}).click();
+  await notesPanel.getByRole("button", {name: "编辑名称", exact: true}).click();
   assert.equal(await notesInput.inputValue(), originalStateName, "关联标签备注应读取当前目标名称");
   await notesInput.fill("从标签备注改名国");
   await notesInput.press("Enter");
-  await notesDialog.waitFor({state: "hidden"});
+  await notesInput.waitFor({state: "hidden"});
   assert.equal(await stateName(), "从标签备注改名国", "标签备注应能重命名关联国家");
   await page.evaluate(() => window.webglGeneratorApi.history.undo());
   assert.equal(await stateName(), originalStateName);
@@ -394,11 +394,11 @@ try {
   }, {mode: "append"}), customLabelId);
   assert.equal(customNoteImported.ok, true, JSON.stringify(customNoteImported.error));
   await page.evaluate(id => window.__webglGeneratorApp.panels.notes.setSelectedNoteId(`label:custom:${id}`), customLabelId);
-  await notesPanel.getByRole("button", {name: "重命名", exact: true}).click();
+  await notesPanel.getByRole("button", {name: "编辑名称", exact: true}).click();
   assert.equal(await notesInput.inputValue(), "旧手工标签");
   await notesInput.fill("手工标签新名");
   await notesInput.press("Enter");
-  await notesDialog.waitFor({state: "hidden"});
+  await notesInput.waitFor({state: "hidden"});
   assert.equal(await page.evaluate(id => window.__webglGeneratorApp.map.labels.custom.find(item => item.id === id)?.text, customLabelId), "手工标签新名");
   await page.evaluate(() => window.webglGeneratorApi.history.undo());
   assert.equal(await page.evaluate(id => window.__webglGeneratorApp.map.labels.custom.find(item => item.id === id)?.text, customLabelId), "旧手工标签");
@@ -410,11 +410,11 @@ try {
     }, {mode: "append"}), regimentTarget);
     assert.equal(regimentNoteImported.ok, true, JSON.stringify(regimentNoteImported.error));
     await page.evaluate(id => window.__webglGeneratorApp.panels.notes.setSelectedNoteId(`military:${id}`), regimentTarget.rowId);
-    await notesPanel.getByRole("button", {name: "重命名", exact: true}).click();
+    await notesPanel.getByRole("button", {name: "编辑名称", exact: true}).click();
     assert.equal(await notesInput.inputValue(), regimentTarget.name);
     await notesInput.fill("备注  军团更名");
     await notesInput.press("Enter");
-    await notesDialog.waitFor({state: "hidden"});
+    await notesInput.waitFor({state: "hidden"});
     assert.equal(await page.evaluate(({stateId, regimentId}) => window.__webglGeneratorApp.map.politics.states[stateId].military.find(item => item.i === regimentId)?.name, regimentTarget), "备注  军团更名");
     await page.evaluate(() => window.webglGeneratorApi.history.undo());
     assert.equal(await page.evaluate(({stateId, regimentId}) => window.__webglGeneratorApp.map.politics.states[stateId].military.find(item => item.i === regimentId)?.name, regimentTarget), regimentTarget.name);
@@ -442,7 +442,7 @@ try {
   report.seed = {enter: true, blur: true};
 
   await page.setViewportSize({width: 690, height: 900});
-  const layouts = await page.locator(".state-name-editor, .city-name-editor, .climate-downstream-seed").evaluateAll(elements => elements.map(element => ({className: element.className, width: element.clientWidth, scroll: element.scrollWidth})));
+  const layouts = await page.locator('.state-panel-details [data-inline-label="全称"], .city-attribute-name, .climate-downstream-seed').evaluateAll(elements => elements.map(element => ({className: element.className, width: element.clientWidth, scroll: element.scrollWidth})));
   assert.ok(layouts.every(layout => layout.width >= layout.scroll), JSON.stringify(layouts));
   report.layout = layouts;
   }

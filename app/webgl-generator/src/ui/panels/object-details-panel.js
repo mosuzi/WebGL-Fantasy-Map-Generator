@@ -35,6 +35,7 @@ export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
       onCancelEdit: () => callbacks.onCancelEdit?.(),
       onLocate: () => callbacks.onLocate?.(panelState.object),
       onOpenCityPanel: () => callbacks.onOpenCityPanel?.(panelState.object),
+      onPopulationChange: callbacks.onPopulationChange,
       onRename: name => callbacks.onRename?.(panelState.object, name),
       onRenameFromNamebase: () => callbacks.onRenameFromNamebase?.(panelState.object)
     }

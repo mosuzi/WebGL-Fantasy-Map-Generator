@@ -39,35 +39,32 @@
 
 
   <section v-if="selected" class="city-attribute-shortcuts">
-    <strong class="city-attribute-name">{{ selected.rawName }}</strong>
-    <div class="ui-action-icon-row" role="group" aria-label="城市属性">
-      <UiButton
-        v-for="action in attributeActions"
-        :key="action.key"
-        class="ui-icon-action city-attribute-button"
-        :active="action.active"
-        :disabled="action.disabled || modalActionActive || attributeBusy"
-        :title="action.title"
-        :aria-label="action.label"
-        :aria-pressed="action.active ? 'true' : 'false'"
-        @click="handleAttributeChange(action)"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path :d="action.path" /></svg>
-      </UiButton>
-    </div>
-    <span v-if="attributeFeedback" class="city-attribute-feedback" role="status">{{ attributeFeedback }}</span>
+    <strong class="city-attribute-name"><UiInlineValue :key="selected.id" ref="cityName" label="名称" :display="selected.rawName" :editor="{value: selected.rawName, maxLength: 48, disabled: modalActionActive, apply: value => callbacks.onRename(selected.id, value)}" /></strong>
   </section>
 
-  <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
+  <UiDetailGrid :key="selected?.id" class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows">
+    <template #标记>
+      <span v-if="selected.provincial">省会</span>
+      <div class="ui-action-icon-row" role="group" aria-label="城市属性">
+        <UiButton
+          v-for="action in attributeActions"
+          :key="action.key"
+          class="ui-icon-action city-attribute-button"
+          :active="action.active"
+          :disabled="action.disabled || modalActionActive || attributeBusy"
+          :title="action.title"
+          :aria-label="action.label"
+          :aria-pressed="action.active ? 'true' : 'false'"
+          @click="handleAttributeChange(action)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path :d="action.path" /></svg>
+        </UiButton>
+      </div>
+      <span v-if="attributeFeedback" class="city-attribute-feedback" role="status">{{ attributeFeedback }}</span>
+    </template>
+  </UiDetailGrid>
 
-  <section v-if="selected" class="city-population-controls" aria-label="城市人口编辑">
-    <form @submit.prevent="applyPopulation(false)">
-      <label>人口（人）<input ref="populationInput" v-model="populationDraft" aria-label="城市人口（人）" aria-keyshortcuts="Enter" title="按回车或离开输入框保存人口" type="number" min="0" max="1000000000" step="1" :disabled="populationDisabled" @input="populationEnterValue = null" @blur="applyPopulationOnBlur" @keydown.enter="applyPopulationOnEnter" @compositionstart="populationComposing = true" @compositionend="populationComposing = false" /></label>
-      <UiButton v-if="selected.population !== populationPotential" variant="secondary" :disabled="populationDisabled" @pointerdown.prevent @click="applyPopulation(true)">采用潜在人口</UiButton>
-    </form>
-    <span>潜在人口 {{ formatPopulationValue(populationPotential) }}</span>
-    <span v-if="populationFeedback" role="status">{{ populationFeedback }}</span>
-  </section>
+  <span v-if="populationFeedback" class="city-population-feedback" role="status">{{ populationFeedback }}</span>
 
   <section v-if="state.moveMode || state.movePreview" class="city-move-preview" :data-valid="state.movePreview?.valid === true">
     <strong>{{ state.moveMode ? "连续拖动城市到目标位置" : "最近一次移动影响" }}</strong>
@@ -79,14 +76,6 @@
   </section>
 
   <UiActionDock host-id="CityPanel" v-model:active="activeAction" :actions="cityActions" @select="handleActionSelect">
-    <template #rename>
-      <UiTextEditField
-        class-name="city-name-editor"
-        :model-value="selected.rawName"
-        :max-length="48"
-        @apply="name => callbacks.onRename(selected.id, name)"
-      />
-    </template>
 
     <template #owner>
       <div class="city-owner-sync">
@@ -95,26 +84,12 @@
       </div>
     </template>
 
-    <template #visual>
-      <div class="city-visual-editor">
-        <UiSelectField class-name="city-visual-select" label="剪影" :model-value="visualDraft.silhouette" :options="silhouetteOptions" @update:model-value="applyVisual" />
-        <UiButton variant="secondary" :disabled="!selected.manualVisual" @click="callbacks.onVisualReset(selected.id)">恢复自动</UiButton>
-      </div>
-    </template>
 
-    <template #note>
-      <UiNoteField
-        class-name="city-note-editor"
-        :model-value="selected.noteBody"
-        @apply="body => callbacks.onNoteChange(selected.id, body)"
-        @clear="callbacks.onNoteChange(selected.id, '')"
-      />
-    </template>
   </UiActionDock>
 </template>
 
 <script setup>
-import {Delete, Document, EditPen, MagicStick, Picture, Plus, Rank, RefreshLeft, Switch, User} from "@element-plus/icons-vue";
+import {Delete, MagicStick, Plus, Rank, RefreshLeft, Switch} from "@element-plus/icons-vue";
 import {computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch} from "vue";
 import {readCityAttributeActions} from "../../../runtime/city-attribute-commands.js";
 import {estimateCityPopulationPotential} from "../../../generator/city-development.js";
@@ -124,11 +99,9 @@ import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
-import UiSelectField from "./base/UiSelectField.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
+import UiInlineValue from "./base/UiInlineValue.vue";
 import {
   CITY_SILHOUETTE_OPTIONS,
   cityCultureStyleLabel,
@@ -187,6 +160,7 @@ const populationPotential = computed(() => {
   const map = props.state.map;
   return estimateCityPopulationPotential(map?.pack, map?.settlements?.cities?.[props.state.selectedCityId], map?.options?.seed);
 });
+const cityName = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);
 const lastCitySelect = {
@@ -216,17 +190,11 @@ const selected = computed(() => {
 const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode || props.state.moveMode));
 const attributeBusy = ref(false);
 const attributeFeedback = ref("");
-const populationInput = ref(null);
-const populationComposing = ref(false);
-const populationDraft = ref("");
-const populationEnterValue = ref(null);
 const populationFeedback = ref("");
 const populationPending = ref(false);
 const runtimeOperationBusy = ref(false);
 const populationDisabled = computed(() => modalActionActive.value || populationPending.value || runtimeOperationBusy.value);
 watch(() => [selected.value?.id, selected.value?.population, unitPreferences.value.populationScale], () => {
-  populationDraft.value = selected.value ? String(Math.round(populationUnitsToPeople(selected.value.population, unitPreferences.value))) : "";
-  populationEnterValue.value = populationDraft.value;
   populationFeedback.value = "";
 }, {immediate: true});
 onMounted(() => {
@@ -235,20 +203,10 @@ onMounted(() => {
 });
 onBeforeUnmount(() => globalThis.document?.removeEventListener("webgl-generator-runtime-operation", handlePopulationBusy));
 function handlePopulationBusy(event) {runtimeOperationBusy.value = Boolean(event.detail?.busy);}
-function applyPopulationOnEnter(event) {
-  event.preventDefault();
-  if (populationComposing.value || event.isComposing || event.keyCode === 229) return;
-  populationEnterValue.value = event.target.value;
-  applyPopulation(false);
-}
-function applyPopulationOnBlur(event) {
-  if (populationComposing.value || event.target.value === populationEnterValue.value) return;
-  applyPopulation(false);
-}
-async function applyPopulation(recalculate) {
+async function applyPopulation(recalculate, people) {
   if (!selected.value || populationDisabled.value) return;
   const id = selected.value.id;
-  const value = peopleToPopulationUnits(populationDraft.value, unitPreferences.value);
+  const value = peopleToPopulationUnits(people, unitPreferences.value);
   if (!recalculate && !Number.isFinite(value)) {populationFeedback.value = "请输入 0～1,000,000,000 的整数人数。"; return;}
   populationPending.value = true;
   try {
@@ -278,11 +236,7 @@ const cityActions = computed(() => [
   {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图位置", icon: Plus, panel: false, active: props.state.addMode, disabled: props.state.deleteMode || props.state.moveMode},
   {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: Delete, panel: false, active: props.state.deleteMode, disabled: props.state.addMode || props.state.moveMode},
   {key: "move", resultClass: "toggle-canvas-mode", label: props.state.moveMode ? "退出移动城市" : "移动城市：在地图上拖动所选城市", icon: Rank, panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen, disabled: modalActionActive.value || !selected.value},
-  {key: "population", resultClass: "direct", label: "调整人口", icon: User, panel: false, disabled: populationDisabled.value || !selected.value},
   {key: "owner", resultClass: "open-secondary", label: "同步归属", icon: Switch, disabled: modalActionActive.value || !selected.value?.canSyncOwner},
-  {key: "visual", resultClass: "open-secondary", label: "调整剪影", icon: Picture, disabled: modalActionActive.value || !selected.value},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document, disabled: modalActionActive.value || !selected.value}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -299,9 +253,13 @@ const summaryMetrics = computed(() => [
 
 const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.type},
-  {label: "人口", value: formatPopulationValue(selected.value.population)},
+  {label: "人口", value: formatPopulationValue(selected.value.population),
+    editor: {type: "number", label: "城市人口（人）", value: Math.round(populationUnitsToPeople(selected.value.population, unitPreferences.value)), min: 0, max: 1000000000, step: 1,
+      disabled: populationDisabled.value, invalid: "请输入 0～1,000,000,000 的整数人数。", apply: people => applyPopulation(false, people)}},
+  {label: "潜在人口", value: formatPopulationValue(populationPotential.value),
+    editor: selected.value.population !== populationPotential.value ? {type: "action", label: "采用潜在人口", disabled: populationDisabled.value, apply: () => applyPopulation(true)} : null},
   {label: "征募潜力", value: formatNumberValue(cityRecruitmentPotential(props.state.map.pack, props.state.map.pack.burgs[selected.value.burgId])) + " 人"},
-  {label: "标记", value: selected.value.flags},
+  {label: "标记", wide: true, value: selected.value.flags},
   {label: "资源区域", value: formatNumberValue(selected.value.resourceCells)},
   {label: "资源种类", value: selected.value.resourceGoodNames || "无"},
   {label: "所属国家", value: selected.value.stateName},
@@ -315,9 +273,12 @@ const detailRows = computed(() => selected.value ? [
   {label: "burg id", value: selected.value.burgId, debug: true},
   {label: "文化", value: selected.value.culture},
   {label: "宗教", value: selected.value.religion},
-  {label: "剪影", value: selected.value.visualLabel},
+  {label: "剪影", value: selected.value.visualLabel,
+    editor: {type: "select", value: visualDraft.silhouette, options: silhouetteOptions.value, disabled: modalActionActive.value, apply: applyVisual,
+      reset: selected.value.manualVisual ? () => props.callbacks.onVisualReset(selected.value.id) : null, resetLabel: "恢复自动剪影"}},
   {label: "文化样式", value: selected.value.cultureStyleLabel},
-  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumberValue(selected.value.noteBody.length)}字）` : "无"},
+  {label: "备注", value: selected.value.noteBody || "无",
+    editor: {type: "note", value: selected.value.noteBody, disabled: modalActionActive.value, maxLength: 1000, apply: body => props.callbacks.onNoteChange(selected.value.id, body)}},
   {label: "手动剪影", value: selected.value.manualVisual ? "是" : "否"}
 ] : []);
 
@@ -328,7 +289,7 @@ watch(() => selected.value?.id, id => {
   if (!sameObjectId(renameRequestId.value, id)) return;
   renameRequestId.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    cityName.value?.start();
   });
 });
 watch(() => selected.value?.silhouette, syncVisualDraft);
@@ -493,7 +454,6 @@ function sortRows(rows, key, direction) {
 }
 
 function handleActionSelect(key) {
-  if (key === "population") {populationInput.value?.focus(); return;}
   if (key === "add") {
     props.callbacks.onAddMode?.(!props.state.addMode);
     return;
@@ -536,7 +496,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;
-    activeAction.value = "rename";
+    cityName.value?.start();
   });
 }
 

@@ -37,7 +37,10 @@ try {
       try {
         const value = structuredClone({
           routes: app.map.settlements.routes,
-          packRoutes: app.map.pack.routes,
+          // 载入与重新投影会改变属性插入顺序，保留所有值并按相同顺序比较。
+          packRoutes: app.map.pack.routes.map(route => route && Object.fromEntries(
+            Object.keys(route).sort().map(key => [key, route[key]])
+          )),
           links: app.map.pack.cells.routes,
           cities: app.map.settlements.cities,
           burgs: app.map.pack.burgs,

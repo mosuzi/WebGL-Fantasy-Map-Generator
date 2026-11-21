@@ -46,84 +46,40 @@
     :message="regenerationMessage"
   />
 
-  <UiDetailGrid class-name="route-panel-details" empty-text="未选中路线" :rows="detailRows" />
+  <UiDetailGrid :key="selected?.id" class-name="route-panel-details" empty-text="未选中路线" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" host-id="RoutePanel" v-model:active="activeAction" :actions="routeActions">
-    <template #edit>
-      <div v-if="state.editDraft" class="route-edit-form">
-        <UiSelectField
-          input-id="route-edit-type"
-          label="路线类型"
-          :model-value="state.editDraft.type"
-          :options="routeTypeOptions"
-          @update:model-value="value => callbacks.onEditDraft({type: value})"
-        />
-        <UiSelectField
-          input-id="route-edit-level"
-          label="路线等级"
-          :model-value="state.editDraft.level"
-          :options="routeLevelOptions"
-          @update:model-value="value => callbacks.onEditDraft({level: value})"
-        />
-        <UiSelectField
-          input-id="route-edit-from"
-          label="起点城市"
-          :model-value="state.editDraft.fromId"
-          :options="cityEndpointOptions"
-          :disabled="state.editDraft.type === 'searoute'"
-          @update:model-value="value => callbacks.onEditDraft({fromId: value})"
-        />
-        <UiSelectField
-          input-id="route-edit-to"
-          label="终点城市"
-          :model-value="state.editDraft.toId"
-          :options="cityEndpointOptions"
-          :disabled="state.editDraft.type === 'searoute'"
-          @update:model-value="value => callbacks.onEditDraft({toId: value})"
-        />
-        <div class="route-edit-waypoint-actions">
-          <UiButton variant="secondary" :active="state.waypointMode" @click="callbacks.onWaypointMode(!state.waypointMode)">
-            {{ state.waypointMode ? "取消选择改线点" : "在地图选择改线点" }}
-          </UiButton>
-          <UiButton v-if="state.editDraft.viaPackCells?.length" variant="secondary" @click="callbacks.onEditDraft({viaPackCells: []})">清除改线点</UiButton>
-        </div>
-        <UiStateBanner
-          :kind="state.editPreview?.valid ? 'preview' : 'error'"
-          title="路线修改影响"
-          :message="routeEditPreviewMessage"
-          :action-label="state.editPreview?.valid && state.editPreview?.changed ? '应用路线修改' : ''"
-          secondary-action-label="取消"
-          @action="handleRouteEditApply"
-          @secondary-action="handleRouteEditCancel"
-        />
-      </div>
-    </template>
-    <template #note>
-      <UiNoteField
-        class-name="route-note-editor"
-        :model-value="selected.noteBody"
-        @apply="body => callbacks.onNoteChange(selected.id, body)"
-        @clear="callbacks.onNoteChange(selected.id, '')"
-      />
-    </template>
-  </UiActionDock>
+  <div v-if="selected" class="route-edit-form">
+    <div class="route-edit-waypoint-actions">
+      <UiButton variant="secondary" :active="state.waypointMode" @click="toggleWaypoint">
+        {{ state.waypointMode ? "取消选择改线点" : "在地图选择改线点" }}
+      </UiButton>
+      <UiButton v-if="state.editDraft?.viaPackCells?.length" variant="secondary" @click="callbacks.onEditDraft({viaPackCells: []})">清除改线点</UiButton>
+    </div>
+    <UiStateBanner v-if="state.editDraft"
+      :kind="state.editPreview?.pending || state.editPreview?.valid ? 'preview' : 'error'"
+      title="路线修改影响"
+      :message="routeEditPreviewMessage"
+      :action-label="state.editPreview?.valid && state.editPreview?.changed ? '应用路线修改' : ''"
+      secondary-action-label="取消"
+      @action="handleRouteEditApply"
+      @secondary-action="handleRouteEditCancel"
+    />
+  </div>
+
 </template>
 
 <script setup>
-import {Delete, Document, EditPen, Plus, Refresh, RefreshLeft} from "@element-plus/icons-vue";
+import {Delete, Plus, Refresh, RefreshLeft} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, onBeforeUnmount, onMounted, ref, watch} from "vue";
-import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
-import UiSelectField from "./base/UiSelectField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatDistance, formatNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
@@ -168,11 +124,6 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
-const activeAction = ref(null);
-const routeActions = Object.freeze([
-  {key: "edit", resultClass: "open-secondary", label: "编辑路线", icon: EditPen},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document}
-]);
 const rows = computed(() => {
   props.state.version;
   return routeRows(props.state.map);
@@ -210,7 +161,8 @@ const cityEndpointOptions = computed(() => [
 const routeEditPreviewMessage = computed(() => {
   const preview = props.state.editPreview;
   if (!preview) return "调整字段或在地图选择一个改线点。";
-  if (!preview.valid) return `${preview.code || "invalid"}：${preview.reason || "路线修改无效"}`;
+  if (preview.pending) return "正在查看路线走向…";
+  if (!preview.valid) return preview.reason || (preview.code === "operation_busy" ? "请在当前操作完成后再调整路线。" : "无法预览这次修改，请调整路线设置。");
   const waypoint = props.state.editDraft?.viaPackCells?.[0];
   return `${preview.changed ? "可以应用" : "没有变化"}；经过 ${formatNumberValue(preview.cells)} 个区域；${formatRouteLength(preview.distance)}${Number.isInteger(waypoint) ? `；途经位置 #${waypoint}` : ""}`;
 });
@@ -234,10 +186,10 @@ const summaryMetrics = computed(() => [
 ]);
 
 const detailRows = computed(() => selected.value ? [
-  {label: "类型", value: selected.value.typeLabel},
-  {label: "等级", value: selected.value.level},
-  {label: "起点", value: selected.value.fromName},
-  {label: "终点", value: selected.value.toName},
+  {label: "类型", ...routeField("type", routeTypeOptions, selected.value.typeLabel)},
+  {label: "等级", ...routeField("level", routeLevelOptions, selected.value.level)},
+  {label: "起点", ...routeField("fromId", cityEndpointOptions.value, selected.value.fromName, true)},
+  {label: "终点", ...routeField("toId", cityEndpointOptions.value, selected.value.toName, true)},
   {label: "长度", value: formatRouteLength(selected.value.length)},
   {label: "段数", value: formatNumberValue(selected.value.segments)},
   {label: "资源区域", value: formatNumberValue(selected.value.resourceCells)},
@@ -245,21 +197,30 @@ const detailRows = computed(() => selected.value ? [
   {label: "grid cells", value: formatNumberValue(selected.value.cellCount), debug: true},
   {label: "pack cells", value: formatNumberValue(selected.value.packCellCount), debug: true},
   {label: "feature", value: selected.value.feature, debug: true},
-  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumberValue(selected.value.noteBody.length)}字）` : "无"}
+  {label: "备注", value: selected.value.noteBody || "无",
+    editor: {type: "note", value: selected.value.noteBody, maxLength: 1000, apply: body => props.callbacks.onNoteChange(selected.value.id, body)}}
 ] : []);
 
-watch(() => selected.value?.id, () => {
-  activeAction.value = null;
+watch(() => selected.value?.id, id => {
+  if (props.state.editDraft && props.state.editDraft.routeId !== id) props.callbacks.onEditCancel?.();
 });
-
-watch(activeAction, (next, previous) => {
-  if (next === "edit" && selected.value) props.callbacks.onEditStart?.(selected.value.id);
-  else if (previous === "edit") props.callbacks.onEditCancel?.();
+watch(() => props.state.editRequestId, () => {
+  if (selected.value && !props.state.editMode) props.callbacks.onEditStart?.(selected.value.id);
 });
-
-watch(() => props.state.editRequestId, requestId => {
-  if (requestId > 0 && selected.value) activeAction.value = "edit";
-}, {immediate: true});
+function routeField(key, options, fallback, endpoint = false) {
+  const value = props.state.editDraft?.[key] ?? selected.value[key] ?? (endpoint ? -1 : "");
+  const label = options.find(option => String(option.value) === String(value))?.label || fallback;
+  return {value: label, editor: {type: "select", value, options,
+    disabled: endpoint && (props.state.editDraft?.type ?? selected.value.type) === "searoute",
+    apply: next => {
+      if (!props.state.editDraft) props.callbacks.onEditStart?.(selected.value.id, {[key]: next});
+      else props.callbacks.onEditDraft?.({[key]: next});
+    }}};
+}
+function toggleWaypoint() {
+  if (!props.state.editDraft) props.callbacks.onEditStart?.(selected.value.id);
+  props.callbacks.onWaypointMode?.(!props.state.waypointMode);
+}
 
 onMounted(() => {
   const snapshot = globalThis.window?.__webglGeneratorApp?.runtimeOperationSnapshot;
@@ -275,11 +236,11 @@ onBeforeUnmount(() => {
 function handleRouteEditApply() {
   if (!props.state.editPreview?.valid || !props.state.editPreview?.changed) return;
   const result = props.callbacks.onEditApply?.();
-  if (result?.executed) activeAction.value = null;
+  if (result?.executed) props.callbacks.onEditCancel?.();
 }
 
 function handleRouteEditCancel() {
-  activeAction.value = null;
+  props.callbacks.onEditCancel?.();
 }
 
 function handleEmptyAction(key) {

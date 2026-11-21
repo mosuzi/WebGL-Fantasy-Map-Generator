@@ -77,7 +77,7 @@
   />
   <p class="visual-theme-editor-note diplomacy-export-note">此处 CSV / JSON 是外交摘要；要完整保存并恢复双方关系、战争和历史，请使用控制面板“导出 → 完整地图数据”。</p>
 
-  <UiDetailGrid class-name="diplomacy-panel-details" empty-text="未选中外交对象" :rows="detailRows" />
+  <UiDetailGrid :key="selected && [selected.subjectId, selected.id].join('-')" class-name="diplomacy-panel-details" empty-text="未选中外交对象" :rows="detailRows" />
 
   <section v-if="diplomacyChronicleRows.length" class="diplomacy-history-preview" aria-label="外交历史">
     <div class="diplomacy-history-heading">
@@ -102,49 +102,11 @@
   </section>
 
   <UiActionDock v-if="selected" host-id="DiplomacyPanel" v-model:active="activeAction" :actions="diplomacyActions" @select="selectDiplomacyAction">
-    <template #relation>
-      <div class="diplomacy-relation-panel">
-        <div class="diplomacy-relation-heading">
-          <strong>{{ selected.subjectName }}</strong>
-          <span>调整对 {{ selected.name }} 的外交关系</span>
-        </div>
-        <div class="diplomacy-relation-context">
-          <span v-for="item in relationContextMetrics" :key="item.label">
-            <small>{{ item.label }}</small>
-            <b>{{ item.value }}</b>
-          </span>
-        </div>
-        <UiSelectField
-          input-id="diplomacy-relation-select"
-          class-name="diplomacy-relation-select"
-          label="关系"
-          :model-value="selected.relation"
-          :options="relationOptions"
-          @update:model-value="relation => applyRelationChange(relation)"
-        />
-        <label class="diplomacy-relation-reason">
-          <span>说明</span>
-          <textarea
-            v-model="relationReasonDraft"
-            maxlength="80"
-            rows="2"
-            placeholder="可选，例如边境谈判、贸易让步、宗教摩擦"
-          />
-        </label>
-        <div class="diplomacy-relation-safety" aria-label="关系变更影响">
-          <span v-for="item in relationSafetyRows" :key="item.label">
-            <small>{{ item.label }}</small>
-            <b>{{ item.value }}</b>
-          </span>
-        </div>
-        <p class="diplomacy-relation-note">选择后会立即写入当前关系并进入撤销记录；说明会进入外交历史，不会触发军事行动。</p>
-      </div>
-    </template>
   </UiActionDock>
 </template>
 
 <script setup>
-import {Connection, Flag, RefreshLeft} from "@element-plus/icons-vue";
+import {Flag, RefreshLeft} from "@element-plus/icons-vue";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 const debugEnabled = useDebugMode();
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
@@ -265,7 +227,6 @@ function selectDiplomacyAction(key) {
 
 const diplomacyActions = Object.freeze([
   {key: "openState", resultClass: "open-other-panel", label: "国家管理", icon: Flag},
-  {key: "relation", resultClass: "open-secondary", label: "调整关系", icon: Connection}
 ]);
 
 watch(matrixSelectionAnchor, () => {
@@ -293,7 +254,8 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "主体国家", value: selected.value.subjectName},
   {label: "对象国家", value: selected.value.name},
-  {label: "关系", value: selected.value.relationLabel},
+  {label: "关系", value: selected.value.relationLabel, editor: {type: "select", value: selected.value.relation, options: relationOptions, apply: applyRelationChange}},
+  {label: "变更说明", value: relationReasonDraft.value || "无", editor: {type: "note", value: relationReasonDraft.value, maxLength: 80, apply: value => {relationReasonDraft.value = value;}}},
   {label: "文化", value: selected.value.cultureName},
   {label: "宗教", value: selected.value.religionName},
   {label: "邻接", value: selected.value.neighborLabel},
@@ -307,20 +269,6 @@ const detailRows = computed(() => selected.value ? [
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "城镇", value: formatNumber(selected.value.burgs)}
-] : []);
-const relationContextMetrics = computed(() => selected.value ? [
-  {label: "当前关系", value: selected.value.relationLabel},
-  {label: "关系倾向", value: relationPolarityLabel(selected.value.relationPolarity)},
-  {label: "邻接", value: selected.value.neighborLabel},
-  {label: "直接贸易", value: selected.value.tradeLabel},
-  {label: "国力", value: formatNumber(selected.value.powerScore)},
-  {label: "文化/宗教", value: `${selected.value.cultureName} / ${selected.value.religionName}`}
-] : []);
-const relationSafetyRows = computed(() => selected.value ? [
-  {label: "提交方式", value: "选择即提交，可撤销"},
-  {label: "写入范围", value: "外交矩阵 / 历史"},
-  {label: "战争选项", value: "只记录外交状态"},
-  {label: "说明写入", value: relationReasonDraft.value.trim() || "手动关系编辑"}
 ] : []);
 const diplomacyChronicleRows = computed(() => {
   props.state.version;

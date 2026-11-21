@@ -18,12 +18,12 @@ const FILES = Object.freeze({
 });
 
 const SHARED_FIELD_FILES = Object.freeze([
-  "UiTextEditField.vue", "UiNoteField.vue", "UiNumberField.vue", "UiSliderField.vue",
+  "UiInlineValue.vue", "UiNoteField.vue", "UiNumberField.vue", "UiSliderField.vue",
   "UiSelectField.vue", "UiSwitchField.vue", "UiColorField.vue", "UiSegmented.vue"
 ].map(name => `${COMPONENT_ROOT}/base/${name}`));
 
 const SHARED_FIELDS = Object.freeze([
-  "UiTextEditField", "UiNoteField", "UiNumberField", "UiSliderField",
+  "UiInlineValue", "UiNoteField", "UiNumberField", "UiSliderField",
   "UiSelectField", "UiSwitchField", "UiColorField", "UiSegmented"
 ]);
 
@@ -251,7 +251,7 @@ function fieldRecord(file, workspaceId, tag, ordinal, fieldFamily, forcedType = 
 function classifyFieldCommit(component, tag, fieldFamily) {
   if (fieldFamily === "export-parameter") return "draft-confirm";
   if (component === "export-select" || component === "export-number") return "draft-confirm";
-  if (["UiTextEditField", "UiNoteField", "UiNumberField", "UiColorField"].includes(component)) return "explicit-apply";
+  if (["UiInlineValue", "UiNoteField", "UiNumberField", "UiColorField"].includes(component)) return "explicit-apply";
   if (component === "UiSliderField") {
     if (/Draft|draft/.test(tag)) return "draft-confirm";
     return /@change=/.test(tag) ? "input-preview-change-commit" : "live-local-parameter";

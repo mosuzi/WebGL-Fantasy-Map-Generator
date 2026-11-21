@@ -79,6 +79,8 @@ const REGENERATION_RENDER_LAYERS = Object.freeze({
 const REGENERATION_PICKING_COMPONENTS = Object.freeze({
   features: Object.freeze([...OBJECT_PICKING_COMPONENTS]),
   routes: Object.freeze(["cities", "routeSegments"]),
+  "route-path": Object.freeze(["routeSegments"]),
+  "city-relocation": Object.freeze(["cities", "routeSegments"]),
   rivers: Object.freeze(["riverSegments"]),
   cities: Object.freeze(["cities", "routeSegments"]),
   states: Object.freeze(["cities", "routeSegments"]),

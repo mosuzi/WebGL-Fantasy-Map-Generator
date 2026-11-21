@@ -22,20 +22,15 @@ const renameHosts = hosts.filter(host => host.actions.some(action => action.key 
 assert.equal(new Set(hosts.map(host => host.hostId)).size, hosts.length, "UiActionDock hostId 必须唯一");
 assert.equal(new Set(identities).size, identities.length, "动作身份必须按 host + key 唯一");
 assert.ok(actions.every(action => action.resultClass), "每个动作必须显式声明 resultClass");
-assert.deepEqual(resultCounts, {"toggle-canvas-mode": 12, "open-secondary": 57, direct: 1, "open-other-panel": 1});
-assert.deepEqual(actions.filter(action => action.resultClass === "open-other-panel").map(action => action.identity), ["CulturePanel:namebase"]);
+assert.deepEqual(resultCounts, {"toggle-canvas-mode": 11, "open-secondary": 18, direct: 0, "open-other-panel": 2});
+assert.ok(actions.some(action => action.identity === "CulturePanel:namebase"));
 assert.ok(actions.filter(action => action.resultClass === "open-secondary").every(action => action.hasSlot), "二级面板动作必须有同名 slot");
 assert.ok(actions.filter(action => action.resultClass !== "open-secondary").every(action => !action.hasSlot), "非二级动作不得有同名 slot");
-assert.equal(renameHosts.length, 12, "单行重命名浮层清单有变化，须复核紧凑输入规则");
+assert.equal(renameHosts.length, 0, "名称应直接在详情编辑");
 assert.equal(noteRenameTargetKind({kind: "label", targetKind: "state", targetId: 1}), "object");
 assert.equal(noteRenameTargetKind({kind: "label", targetKind: "custom", targetId: 1}), "custom-label");
 assert.equal(noteRenameTargetKind({kind: "label", targetKind: "zone", targetId: 1}), "zone");
 assert.equal(noteRenameTargetKind({kind: "route", id: 1}), null, "无名称命令的备注关联对象不应提供失效的重命名弹框");
-for (const host of renameHosts) {
-  const slot = sources.get(host.file).match(/<template #rename>([\s\S]*?)<\/template>/)?.[1] || "";
-  assert.match(slot, /<UiTextEditField\b/, `${host.file} 重命名不再是单行输入`);
-}
-assert.match(dockSource, /props\.active === "rename" && Boolean\(activeAction\.value\)/, "紧凑输入仅应用于已清点的重命名浮层");
 assert.match(dockSource, /:class="\{active: isActionActive\(action\), 'is-editing': isActionActive\(action\)\}"/);
 assert.match(dockSource, /:aria-pressed="isActionActive\(action\) \? 'true' : 'false'"/);
 assert.match(dockSource, /function actionIdentity\(action\)[\s\S]*?props\.hostId.*action\.key/);

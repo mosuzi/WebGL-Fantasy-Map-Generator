@@ -40,34 +40,11 @@
     @action="handleListAction"
   />
 
-  <UiDetailGrid class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
+  <UiDetailGrid ref="detailGrid" :key="selected?.id" class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
 
   <UiActionDock host-id="ProvincePanel" v-model:active="activeAction" :actions="provinceActions" @select="handleActionSelect">
-    <template #rename>
-      <UiTextEditField
-        class-name="province-name-editor"
-        :model-value="selected.rawName"
-        :max-length="48"
-        @apply="name => callbacks.onRename(selected.id, name)"
-      />
-    </template>
 
-    <template #color>
-      <UiColorActionPanel
-        class-name="province-color-field"
-        :model-value="selected.color"
-        @apply="color => callbacks.onColorChange(selected.id, color)"
-      />
-    </template>
 
-    <template #note>
-      <UiNoteField
-        class-name="province-note-editor"
-        :model-value="selected.noteBody"
-        @apply="body => callbacks.onNoteChange(selected.id, body)"
-        @clear="callbacks.onNoteChange(selected.id, '')"
-      />
-    </template>
 
     <template #capital>
       <div class="province-capital-reassessment">
@@ -126,21 +103,18 @@
 </template>
 
 <script setup>
-import {BrushFilled, Delete, Document, EditPen, Flag, MagicStick, Plus, RefreshLeft} from "@element-plus/icons-vue";
+import {Delete, EditPen, Flag, MagicStick, Plus, RefreshLeft} from "@element-plus/icons-vue";
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
-import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
@@ -196,6 +170,7 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);
 const metrics = computed(() => {
@@ -217,9 +192,6 @@ const provinceActions = computed(() => [
   {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图位置作为中心", icon: Plus, panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
   {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除省份" : "删除省份：下一次点击地图省份", icon: Delete, panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
   {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: EditPen, panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen, disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: BrushFilled, disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document, disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "capital", resultClass: "open-secondary", label: "重评省会", icon: Flag, disabled: modalActionActive.value || !canDeleteSelected.value}
 ]);
 const provinceListActions = computed(() => [
@@ -239,7 +211,10 @@ const summaryMetrics = computed(() => [
 ]);
 
 const detailRows = computed(() => selected.value ? [
-  {label: "全称", value: selected.value.fullName},
+  {label: "颜色", value: selected.value.color,
+    editor: {type: "color", value: selected.value.color, disabled: modalActionActive.value || !canDeleteSelected.value, apply: color => props.callbacks.onColorChange(selected.value.id, color)}},
+  {label: "全称", value: selected.value.fullName,
+    editor: {value: selected.value.rawName, disabled: modalActionActive.value || !canDeleteSelected.value, maxLength: 48, apply: value => props.callbacks.onRename?.(selected.value.id, value)}},
   {label: "所属国家", value: selected.value.stateName},
   {label: "中心 pack cell", value: selected.value.centerCell, debug: true},
   {label: "中心 grid cell", value: selected.value.gridCenterCell, debug: true},
@@ -256,7 +231,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "城市", value: formatNumber(selected.value.cityCount)},
   {label: "文化", value: selected.value.culture},
   {label: "宗教", value: selected.value.religion},
-  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
+  {label: "备注", value: selected.value.noteBody || "无",
+    editor: {type: "note", value: selected.value.noteBody, disabled: modalActionActive.value || !canDeleteSelected.value, maxLength: 1000, apply: body => props.callbacks.onNoteChange(selected.value.id, body)}}
 ] : []);
 
 watch(() => selected.value?.id, id => {
@@ -264,7 +240,7 @@ watch(() => selected.value?.id, id => {
   if (!sameObjectId(renameRequestId.value, id) || selected.value?.neutral) return;
   renameRequestId.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    detailGrid.value?.edit("全称");
   });
 });
 
@@ -360,7 +336,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row.id) || selected.value?.neutral) return;
     renameRequestId.value = null;
-    activeAction.value = "rename";
+    detailGrid.value?.edit("全称");
   });
 }
 

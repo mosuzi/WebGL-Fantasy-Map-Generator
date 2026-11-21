@@ -37,46 +37,11 @@
   />
 
 
-  <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
+  <UiDetailGrid ref="detailGrid" :key="selected?.id" class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
 
   <UiActionDock host-id="StatePanel" v-model:active="activeAction" :actions="stateActions" @select="handleActionSelect">
-    <template #rename>
-      <UiTextEditField
-        class-name="state-name-editor"
-        :model-value="selected.rawName"
-        :max-length="48"
-        @apply="name => callbacks.onRename(selected.id, name)"
-      />
-    </template>
 
-    <template #color>
-      <UiColorActionPanel
-        class-name="state-color-field"
-        :model-value="selected.color"
-        @apply="color => callbacks.onColorChange(selected.id, color)"
-      />
-    </template>
 
-    <template #government>
-      <div class="state-government-field">
-        <UiSelectField
-          label="政体"
-          class-name="state-government-select"
-          :model-value="governmentDraft"
-          :options="governmentOptions"
-          @update:model-value="governmentDraft = $event"
-        />
-        <UiSelectField
-          label="国号后缀"
-          class-name="state-government-suffix-select"
-          :model-value="governmentSuffixDraft"
-          :options="governmentSuffixOptions"
-          @update:model-value="governmentSuffixDraft = $event"
-        />
-        <UiButton variant="secondary" @click="callbacks.onGovernmentChange(selected.id, governmentDraft, governmentSuffixDraft)">套用政体与国号</UiButton>
-        <p class="state-government-note">{{ governmentNote }}</p>
-      </div>
-    </template>
 
     <template #province-suffix>
       <div class="state-province-suffix-field">
@@ -101,28 +66,7 @@
       </div>
     </template>
 
-    <template #capital>
-      <div class="state-capital-field">
-        <UiSelectField
-          label="首都"
-          class-name="state-capital-select"
-          :model-value="capitalDraft"
-          :options="capitalOptions"
-          :disabled="!capitalOptions.length"
-          @update:model-value="capitalDraft = Number($event)"
-        />
-        <UiButton variant="secondary" :disabled="!capitalOptions.length" @click="callbacks.onCapitalChange(selected.id, capitalDraft)">设为首都</UiButton>
-      </div>
-    </template>
 
-    <template #note>
-      <UiNoteField
-        class-name="state-note-editor"
-        :model-value="selected.noteBody"
-        @apply="body => callbacks.onNoteChange(selected.id, body)"
-        @clear="callbacks.onNoteChange(selected.id, '')"
-      />
-    </template>
 
     <template #merge>
       <div class="state-topology-editor">
@@ -210,23 +154,20 @@
 </template>
 
 <script setup>
-import {BrushFilled, Connection, Delete, Document, EditPen, Flag, MagicStick, Notebook, OfficeBuilding, Plus, RefreshLeft, Scissor} from "@element-plus/icons-vue";
+import {Connection, Delete, EditPen, MagicStick, Notebook, Plus, RefreshLeft, Scissor} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
-import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
@@ -286,11 +227,9 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);
-const capitalDraft = ref(0);
-const governmentDraft = ref("monarchy");
-const governmentSuffixDraft = ref("王国");
 const provinceSuffixDraft = ref("");
 const overwriteCustomProvinceNames = ref(false);
 const provinceSuffixResult = ref(null);
@@ -327,8 +266,7 @@ const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
   value: option.value,
   label: `${option.label} / ${option.category}`
 })));
-const governmentSuffixOptions = computed(() => readGovernmentSuffixOptions(governmentDraft.value).map(value => ({value, label: value})));
-const governmentNote = computed(() => selected.value?.governmentEffectSummary || "政体影响税收、外交倾向和军事动员；国号后缀可在当前政体允许范围内独立选择。");
+const governmentSuffixOptions = computed(() => readGovernmentSuffixOptions(selected.value?.governmentKey).map(value => ({value, label: value})));
 const selectedStateItem = computed(() => props.state.map?.politics?.states?.[selected.value?.id] || null);
 const provinceSuffixValues = computed(() => provinceFormsForState(
   selectedStateItem.value,
@@ -356,12 +294,7 @@ const stateActions = computed(() => [
   {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图位置作为首都", icon: Plus, panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
   {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: Delete, panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
   {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: EditPen, panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen, disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: BrushFilled, disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "government", resultClass: "open-secondary", label: "调整政体", icon: OfficeBuilding, panelWidth: 620, disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "province-suffix", resultClass: "open-secondary", label: "调整辖下省份后缀", icon: Notebook, panelWidth: 520, disabled: modalActionActive.value || !canDeleteSelected.value || !provinceSuffixOptions.value.length},
-  {key: "capital", resultClass: "open-secondary", label: "设置首都", icon: Flag, disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document, disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "merge", resultClass: "open-secondary", label: "合并相邻国家", icon: Connection, panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
   {key: "split", resultClass: "open-secondary", label: "按完整省份拆分国家", icon: Scissor, panelWidth: 420, panelHeight: 560, disabled: modalActionActive.value || !canDeleteSelected.value || stateProvinces(props.state.map, selected.value?.id).length < 2}
 ]);
@@ -379,11 +312,17 @@ const summaryMetrics = computed(() => [
 ]);
 
 const detailRows = computed(() => selected.value ? [
-  {label: "全称", value: selected.value.fullName},
-  {label: "政体", value: selected.value.governmentLabel},
-  {label: "国号后缀", value: selected.value.formName},
+  {label: "颜色", value: selected.value.color,
+    editor: {type: "color", value: selected.value.color, disabled: modalActionActive.value || !canDeleteSelected.value, apply: color => props.callbacks.onColorChange(selected.value.id, color)}},
+  {label: "全称", value: selected.value.fullName,
+    editor: {value: selected.value.rawName, disabled: modalActionActive.value || !canDeleteSelected.value, maxLength: 48, apply: value => props.callbacks.onRename?.(selected.value.id, value)}},
+  {label: "政体", value: selected.value.governmentLabel,
+    editor: {type: "select", value: selected.value.governmentKey, options: governmentOptions.value, disabled: modalActionActive.value || !canDeleteSelected.value, apply: applyGovernment}},
+  {label: "国号后缀", value: selected.value.formName,
+    editor: {type: "select", value: selected.value.formName, options: governmentSuffixOptions.value, disabled: modalActionActive.value || !canDeleteSelected.value, apply: suffix => props.callbacks.onGovernmentChange(selected.value.id, selected.value.governmentKey, suffix)}},
   {label: "政体影响", value: selected.value.governmentEffectSummary},
-  {label: "首都", value: selected.value.capitalName},
+  {label: "首都", value: selected.value.capitalName,
+    editor: {type: "select", value: selected.value.capitalBurgId, options: capitalOptions.value, disabled: modalActionActive.value || !canDeleteSelected.value, apply: id => props.callbacks.onCapitalChange(selected.value.id, Number(id))}},
   {label: "文化", value: selected.value.culture},
   {label: "宗教", value: selected.value.religion},
   {label: "中心 cell", value: selected.value.centerCell, debug: true},
@@ -397,25 +336,16 @@ const detailRows = computed(() => selected.value ? [
   {label: "资源类型", value: selected.value.resourceSummary},
   {label: "军力", value: formatMilitaryValue(selected.value.militaryPower)},
   {label: "外交", value: selected.value.diplomacySummary},
-  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"},
+  {label: "备注", value: selected.value.noteBody || "无",
+    editor: {type: "note", value: selected.value.noteBody, disabled: modalActionActive.value || !canDeleteSelected.value, maxLength: 1000, apply: body => props.callbacks.onNoteChange(selected.value.id, body)}},
   {label: "邻国", value: formatNumber(selected.value.neighborCount)}
 ] : []);
 
-watch(() => selected.value?.capitalBurgId, next => {
-  capitalDraft.value = Number(next) || capitalOptions.value[0]?.value || 0;
-}, {immediate: true});
-
-watch(() => [selected.value?.id, selected.value?.governmentKey, selected.value?.formName], ([, nextGovernmentKey, nextFormName]) => {
-  governmentDraft.value = nextGovernmentKey || "monarchy";
-  const suffixes = readGovernmentSuffixOptions(governmentDraft.value);
-  governmentSuffixDraft.value = suffixes.includes(nextFormName) ? nextFormName : suffixes[0];
-}, {immediate: true});
-
-watch(governmentDraft, governmentKey => {
-  const suffixes = readGovernmentSuffixOptions(governmentKey);
-  if (suffixes.includes(governmentSuffixDraft.value)) return;
-  governmentSuffixDraft.value = suffixes[0];
-});
+function applyGovernment(key) {
+  const suffixes = readGovernmentSuffixOptions(key);
+  const current = selected.value.formName;
+  props.callbacks.onGovernmentChange(selected.value.id, key, suffixes.includes(current) ? current : suffixes[0]);
+}
 
 watch(() => [selected.value?.id, props.state.version], ([stateId]) => {
   if (!sameObjectId(provinceSuffixStateId.value, stateId)) {
@@ -438,7 +368,7 @@ watch(() => selected.value?.id, id => {
   if (!sameObjectId(renameRequestId.value, id) || selected.value?.neutral) return;
   renameRequestId.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    detailGrid.value?.edit("全称");
   });
 });
 
@@ -664,7 +594,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row.id) || selected.value?.neutral) return;
     renameRequestId.value = null;
-    activeAction.value = "rename";
+    detailGrid.value?.edit("全称");
   });
 }
 

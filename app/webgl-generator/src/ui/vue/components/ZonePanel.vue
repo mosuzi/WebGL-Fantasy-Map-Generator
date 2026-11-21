@@ -56,56 +56,20 @@
     @action="handleListAction"
   />
 
-  <UiDetailGrid class-name="zone-panel-details" empty-text="未选中地区" :rows="detailRows" />
+  <UiDetailGrid :key="selected?.id" class-name="zone-panel-details" empty-text="未选中地区" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" host-id="ZonePanel" v-model:active="activeAction" :actions="zoneActions">
-    <template #style>
-      <div class="zone-style-editor">
-        <UiColorActionPanel
-          class-name="zone-color-field"
-          :model-value="selected.color"
-          @apply="color => callbacks.onStyleChange?.(selected.id, {hexColor: color})"
-        />
-        <div class="zone-pattern-editor">
-          <UiSelectField
-            class-name="zone-pattern-select"
-            label="纹理"
-            :model-value="styleDraft.pattern"
-            :options="patternOptions"
-            @update:model-value="applyPattern"
-          />
-        </div>
-      </div>
-    </template>
-    <template #properties>
-      <div class="zone-style-editor">
-        <label>名称<input v-model="propertyDraft.name" maxlength="64" @input="propertyDraftDirty = true" /></label>
-        <label v-if="selected.category === 'custom'">自定义类型<input v-model="propertyDraft.customTypeName" maxlength="48" @input="propertyDraftDirty = true" /></label>
-        <label>说明<input v-model="propertyDraft.description" maxlength="240" @input="propertyDraftDirty = true" /></label>
-        <UiSelectField label="覆盖方式" :model-value="propertyDraft.coverage" :options="coverageOptions" :disabled="selected.category !== 'custom'" @update:model-value="value => updatePropertyDraft('coverage', value)" />
-        <UiNumberField label="宜居度修正" :model-value="propertyDraft.habitability" :min="-100" :max="100" @update:model-value="value => updatePropertyDraft('habitability', value)" @apply="value => updatePropertyDraft('habitability', value)" />
-        <UiNumberField label="通行成本倍率" :model-value="propertyDraft.movementCost" :min="0" :max="10" :step="0.1" @update:model-value="value => updatePropertyDraft('movementCost', value)" @apply="value => updatePropertyDraft('movementCost', value)" />
-        <UiNumberField label="经济产出倍率" :model-value="propertyDraft.economy" :min="0" :max="10" :step="0.1" @update:model-value="value => updatePropertyDraft('economy', value)" @apply="value => updatePropertyDraft('economy', value)" />
-        <UiNumberField label="防守修正" :model-value="propertyDraft.defense" :min="-100" :max="100" @update:model-value="value => updatePropertyDraft('defense', value)" @apply="value => updatePropertyDraft('defense', value)" />
-        <UiButton variant="primary" @click="applyProperties">应用地区属性</UiButton>
-      </div>
-    </template>
-  </UiActionDock>
 </template>
 
 <script setup>
-import {Brush, Delete, Plus, RefreshLeft, Setting} from "@element-plus/icons-vue";
-import {computed, reactive, ref, watch} from "vue";
+import {Delete, Plus, RefreshLeft} from "@element-plus/icons-vue";
+import {computed, reactive} from "vue";
 import {ZONE_CREATION_TYPE_OPTIONS} from "../../../runtime/zone-edit-commands.js";
 import {resolveZoneContext, zoneRoleLabel} from "../../../runtime/zone-context.js";
 import {normalizeZoneTypeRecord, zoneCategoryLabel} from "../../../runtime/zone-types.js";
-import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
-import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
@@ -169,10 +133,6 @@ const patternOptions = Object.freeze([
   {value: "dots", label: "圆点阵列"}
 ]);
 
-const zoneActions = Object.freeze([
-  {key: "style", resultClass: "open-secondary", label: "调整样式", icon: Brush, panelWidth: 360, panelHeight: 420},
-  {key: "properties", resultClass: "open-secondary", label: "地区属性", icon: Setting, panelWidth: 380, panelHeight: 620}
-]);
 
 const sortOptions = Object.freeze([
   {key: "id", label: "ID"},
@@ -192,12 +152,6 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
-const activeAction = ref(null);
-const styleDraft = reactive({
-  pattern: "diagonal"
-});
-const propertyDraft = reactive({name: "", customTypeName: "", description: "", coverage: "base", habitability: 0, movementCost: 1, economy: 1, defense: 0});
-const propertyDraftDirty = ref(false);
 const coverageOptions = Object.freeze([{value: "base", label: "底区"}, {value: "overlay", label: "覆盖区"}]);
 const zoneDraft = reactive({type: props.state.createType || "Disaster"});
 const rows = computed(() => {
@@ -239,75 +193,30 @@ const summaryMetrics = computed(() => [
 ]);
 
 const detailRows = computed(() => selected.value ? [
-  {label: "选中", value: `#${selected.value.id} / ${selected.value.type}`},
+  {label: "名称", value: selected.value.name, editor: {value: selected.value.name, maxLength: 64, apply: name => setProperty("name", name)}},
+  {label: "类型", value: selected.value.customTypeName || selected.value.type, editor: selected.value.category === "custom" ? {value: selected.value.customTypeName, maxLength: 48, apply: type => setProperty("customTypeName", type)} : null},
+  {label: "说明", value: selected.value.description || "无", editor: {type: "note", value: selected.value.description, maxLength: 240, apply: value => setProperty("description", value)}},
   {label: "含义", value: selected.value.note},
   {label: "类别", value: zoneCategoryLabel(selected.value.category)},
-  {label: "覆盖方式", value: selected.value.coverage === "base" ? "底区" : "覆盖区"},
-  {label: "基础影响", value: formatEffects(selected.value.effects)},
+  {label: "覆盖方式", value: selected.value.coverage === "base" ? "底区" : "覆盖区", editor: {type: "select", value: selected.value.coverage, options: coverageOptions, disabled: selected.value.category !== "custom", apply: value => setProperty("coverage", value)}},
+  ...[["宜居度修正", "habitability", -100, 100, 1], ["通行成本倍率", "movementCost", 0, 10, 0.1],
+    ["经济产出倍率", "economy", 0, 10, 0.1], ["防守修正", "defense", -100, 100, 1]].map(([label, key, min, max, step]) => ({
+    label, value: selected.value.effects[key], editor: {type: "number", value: selected.value.effects[key], min, max, step,
+      apply: value => setProperty("effects", {...selected.value.effects, [key]: value})}
+  })),
   {label: "事件摘要", value: selected.value.summary},
   {label: "事件状态", value: selected.value.statusLabel},
   ...selected.value.participants.map(participant => ({label: zoneRoleLabel(participant.role), value: participant.name})),
-  {label: "纹理", value: `${selected.value.patternLabel} / ${selected.value.color}`},
+  {label: "纹理", value: selected.value.patternLabel, editor: {type: "select", value: selected.value.pattern, options: patternOptions, apply: pattern => props.callbacks.onStyleChange?.(selected.value.id, {pattern})}},
+  {label: "颜色", value: selected.value.color, editor: {type: "color", value: selected.value.color, apply: hexColor => props.callbacks.onStyleChange?.(selected.value.id, {hexColor})}},
   {label: "涉及国家", value: selected.value.statesLabel},
   {label: "规模", value: `${formatNumber(selected.value.cells)} 个区域`},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "状态", value: selected.value.hidden ? "隐藏" : "显示"}
 ] : []);
 
-watch(() => selected.value?.id, () => {
-  activeAction.value = null;
-  syncStyleDraft();
-  syncPropertyDraft();
-}, {immediate: true});
-
-watch(() => selected.value?.pattern, syncStyleDraft);
-watch(() => JSON.stringify({
-  version: props.state.version,
-  id: selected.value?.id,
-  name: selected.value?.name,
-  customTypeName: selected.value?.customTypeName,
-  description: selected.value?.description,
-  coverage: selected.value?.coverage,
-  effects: selected.value?.effects,
-  status: selected.value?.status,
-  summary: selected.value?.summary
-}), () => {
-  if (!propertyDraftDirty.value) syncPropertyDraft();
-});
-
-function syncStyleDraft() {
-  styleDraft.pattern = selected.value?.pattern || "diagonal";
-}
-
-function syncPropertyDraft() {
-  const zone = selected.value;
-  if (!zone) return;
-  Object.assign(propertyDraft, {name: zone.name, customTypeName: zone.customTypeName, description: zone.description, coverage: zone.coverage, ...zone.effects});
-  propertyDraftDirty.value = false;
-}
-
-function updatePropertyDraft(key, value) {
-  propertyDraft[key] = value;
-  propertyDraftDirty.value = true;
-}
-
-function applyProperties() {
-  if (!selected.value) return;
-  props.callbacks.onPropertiesChange?.(selected.value.id, {
-    name: propertyDraft.name,
-    customTypeName: propertyDraft.customTypeName,
-    description: propertyDraft.description,
-    coverage: propertyDraft.coverage,
-    effects: {habitability: propertyDraft.habitability, movementCost: propertyDraft.movementCost, economy: propertyDraft.economy, defense: propertyDraft.defense}
-  });
-  propertyDraftDirty.value = false;
-}
-
-function applyPattern(pattern) {
-  if (!selected.value) return;
-  styleDraft.pattern = pattern;
-  if (pattern === selected.value.pattern) return;
-  props.callbacks.onStyleChange?.(selected.value.id, {pattern});
+function setProperty(key, value) {
+  return props.callbacks.onPropertiesChange?.(selected.value.id, {[key]: value});
 }
 
 function handleEmptyAction(key) {
@@ -409,9 +318,6 @@ function formatAreaValue(value) {
   return formatArea(value, unitPreferences.value);
 }
 
-function formatEffects(effects = {}) {
-  return `宜居 ${effects.habitability ?? 0} / 通行 ×${effects.movementCost ?? 1} / 经济 ×${effects.economy ?? 1} / 防守 ${effects.defense ?? 0}`;
-}
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);

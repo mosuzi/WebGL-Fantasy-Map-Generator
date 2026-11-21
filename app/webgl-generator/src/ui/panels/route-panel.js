@@ -39,6 +39,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     selectedRouteId: null,
     version: 0
   });
+  let previewInFlight = false;
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
@@ -76,11 +77,11 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     onDelete: row => callbacks.onDelete?.(routeObject(row)),
     onDeleteMany: routeIds => callbacks.onDeleteMany?.(routeIds),
     onCreateMode: active => callbacks.onCreateMode?.(active),
-    onEditStart: routeId => {
+    onEditStart: (routeId, patch) => {
       const route = findRoute(panelState.map, routeId);
       if (!route) return;
       panelState.editMode = true;
-      panelState.editDraft = routeEditDraft(route);
+      panelState.editDraft = {...routeEditDraft(route), ...patch};
       refreshEditPreview(route.id, panelState.editDraft);
     },
     onEditDraft: patch => {
@@ -191,6 +192,11 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
 
   function refreshEditPreview(routeId, draft) {
     const requestId = ++panelState.editRequestId;
+    panelState.editPreview = {pending: true};
+    if (!previewInFlight) inspectDraft(requestId, routeId, draft);
+  }
+
+  function inspectDraft(requestId, routeId, draft) {
     let pending;
     try {
       pending = callbacks.onInspectEdit?.(routeId, draft);
@@ -202,12 +208,17 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
       settleEditPreview(requestId, pending || null);
       return;
     }
-    panelState.editPreview = {valid: false, changed: false, pending: true, code: "pending", summary: "正在规划路线预览……"};
-    panelState.version++;
+    previewInFlight = true;
     void Promise.resolve(pending).then(
       preview => settleEditPreview(requestId, preview || null),
       error => settleEditPreview(requestId, {valid: false, changed: false, code: error?.code || "inspect-failed", summary: error?.message || "路线预检失败"})
-    );
+    ).finally(() => {
+      previewInFlight = false;
+      const latest = panelState.editDraft;
+      if (panelState.editMode && latest && requestId !== panelState.editRequestId) {
+        inspectDraft(panelState.editRequestId, latest.routeId, latest);
+      }
+    });
   }
 
   function settleEditPreview(requestId, preview) {

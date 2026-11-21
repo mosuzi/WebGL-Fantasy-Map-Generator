@@ -170,6 +170,7 @@ export class OverlayRegistry {
       || event.repeat
       || event.isComposing
       || event.keyCode === 229
+      || event.target?.closest?.(".ui-inline-input, .ui-inline-choice select, .ui-inline-color")
       || hasOpenFrameworkPopup(this.documentRef)
       // 原生模态对话框位于所有登记面板之上，由浏览器处理其 Esc。
       || event.target?.closest?.("dialog[open]")

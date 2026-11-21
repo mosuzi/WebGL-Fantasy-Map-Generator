@@ -39,19 +39,9 @@
     @action="handleMeasurementAction"
   />
 
-  <UiDetailGrid class-name="measurement-panel-details" empty-text="未选中测量对象" :rows="detailRows" />
+  <UiDetailGrid ref="detailGrid" :key="selected?.id" class-name="measurement-panel-details" empty-text="未选中测量对象" :rows="detailRows" />
 
   <template v-if="selected">
-    <UiActionDock host-id="MeasurementPanel" v-model:active="activeAction" :actions="measurementActions">
-      <template #rename>
-        <UiTextEditField
-          class-name="measurement-name-editor"
-          :model-value="selected.name"
-          :max-length="48"
-          @apply="name => callbacks.onRename(selected.id, name)"
-        />
-      </template>
-    </UiActionDock>
   </template>
 </template>
 
@@ -70,13 +60,11 @@ import {
 } from "../../../runtime/measurement-objects.js";
 import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "../../../runtime/measurement-route-fit.js";
 import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
-import UiActionDock from "./base/UiActionDock.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 import {compareListValues} from "../../sort-utils.js";
@@ -97,7 +85,7 @@ const props = defineProps({
 });
 
 const unitPreferences = useUnitPreferences();
-const activeAction = ref(null);
+const detailGrid = ref(null);
 const renameRequestId = ref(null);
 
 const sortOptions = Object.freeze([
@@ -117,9 +105,6 @@ const columns = Object.freeze([
   {key: "area", label: "面积", width: 102, align: "right", format: value => value ? formatAreaValue(value) : "-"}
 ]);
 
-const measurementActions = Object.freeze([
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen}
-]);
 const startMeasurementAction = Object.freeze({key: "start", label: "开始测量", icon: Compass});
 
 const rows = computed(() => {
@@ -153,7 +138,8 @@ const summaryMetrics = computed(() => [
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 const detailRows = computed(() => selected.value ? [
-  {label: "名称", value: selected.value.name},
+  {label: "名称", value: selected.value.name,
+    editor: {value: selected.value.name, maxLength: 48, apply: value => props.callbacks.onRename?.(selected.value.id, value)}},
   {label: "类型", value: selected.value.typeLabel},
   {label: "模式", value: selected.value.routeFitLabel},
   {label: "闭合", value: selected.value.closureLabel},
@@ -170,11 +156,10 @@ const detailRows = computed(() => selected.value ? [
 ] : []);
 
 watch(() => selected.value?.id, id => {
-  activeAction.value = null;
   if (renameRequestId.value !== id) return;
   renameRequestId.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 });
 
@@ -280,7 +265,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (selected.value?.id !== row?.id) return;
     renameRequestId.value = null;
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 }
 

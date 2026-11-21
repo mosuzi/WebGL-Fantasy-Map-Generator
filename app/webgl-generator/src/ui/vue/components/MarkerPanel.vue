@@ -51,53 +51,24 @@
     @action="handleMarkerListAction"
   />
 
-  <UiDetailGrid class-name="marker-panel-details" empty-text="未选中资源点或通用标记" :rows="detailRows" />
+  <UiDetailGrid ref="detailGrid" :key="selected?.id" class-name="marker-panel-details" empty-text="未选中资源点或通用标记" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" host-id="MarkerPanel" v-model:active="activeAction" :actions="markerActions">
-    <template #rename>
-      <UiTextEditField
-        class-name="marker-name-editor"
-        :model-value="selected.rawName"
-        :max-length="48"
-        @apply="name => callbacks.onRename(selected.id, name)"
-      />
-    </template>
-
-    <template #visual>
-      <div class="marker-visual-editor">
-        <UiSelectField class-name="marker-visual-select" label="图形" :model-value="visualDraft.symbol" :options="visualSymbolOptions" @update:model-value="symbol => applyVisual({symbol})" />
-        <UiSelectField class-name="marker-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" :disabled="isAutomaticVisualDraft" @update:model-value="palette => applyVisual({palette})" />
-      </div>
-    </template>
-
-    <template #note>
-      <UiNoteField
-        class-name="marker-note-editor"
-        :model-value="selected.noteBody"
-        @apply="body => callbacks.onNoteChange(selected.id, body)"
-        @clear="callbacks.onNoteChange(selected.id, '')"
-      />
-    </template>
-  </UiActionDock>
 </template>
 
 <script setup>
-import {Delete, Document, EditPen, Picture, Plus, Rank, RefreshLeft} from "@element-plus/icons-vue";
+import {Delete, Plus, Rank, RefreshLeft} from "@element-plus/icons-vue";
 import {computed, nextTick, reactive, ref, watch} from "vue";
 import {MARKER_TYPE_OPTIONS} from "../../../generator/markers.js";
 import {MARKER_SYMBOL_OPTIONS, resolveMarkerIconVisual} from "../../../renderer/canvas-icon-registry.js";
-import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSegmented from "./base/UiSegmented.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
@@ -169,7 +140,7 @@ const markerDraft = reactive({
   type: markerTypeOptions.find(option => option.value === "encounters")?.value || markerTypeOptions[0]?.value || "encounters"
 });
 
-const activeAction = ref(null);
+const detailGrid = ref(null);
 const renameRequestId = ref(null);
 const metrics = computed(() => {
   props.state.version;
@@ -194,11 +165,6 @@ const visualSymbolOptions = computed(() => {
   if (!isAutomaticVisualDraft.value) return symbolOptions;
   return [{value: visualDraft.symbol, label: symbolLabel(visualDraft.symbol)}, ...symbolOptions];
 });
-const markerActions = Object.freeze([
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen},
-  {key: "visual", resultClass: "open-secondary", label: "调整图标", icon: Picture},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document}
-]);
 const markerListActions = computed(() => [
   {...defaultMarkerEmptyAction, active: props.state.editMode === "add", disabled: props.state.editMode === "move"},
   {key: "move", label: "移动选中对象", icon: Rank, active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
@@ -213,6 +179,10 @@ const summaryMetrics = computed(() => [
 ]);
 
 const detailRows = computed(() => selected.value ? [
+  {label: "配色", value: paletteLabel(visualDraft.palette),
+    editor: {type: "select", value: visualDraft.palette, options: paletteOptions, disabled: isAutomaticVisualDraft.value, apply: palette => applyVisual({palette})}},
+  {label: "名称", value: selected.value.rawName,
+    editor: {value: selected.value.rawName, maxLength: 48, apply: value => props.callbacks.onRename?.(selected.value.id, value)}},
   {label: "类型", value: selected.value.typeLabel},
   {label: "类别", value: selected.value.categoryLabel},
   {label: "资源", value: selected.value.resourceLabel},
@@ -221,8 +191,10 @@ const detailRows = computed(() => selected.value ? [
   {label: "所属省份", value: selected.value.provinceName},
   {label: "grid cell", value: selected.value.cell, debug: true},
   {label: "pack cell", value: selected.value.packCell, debug: true},
-  {label: "图形", value: selected.value.visualLabel},
-  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"},
+  {label: "图形", value: symbolLabel(visualDraft.symbol),
+    editor: {type: "select", value: visualDraft.symbol, options: visualSymbolOptions.value, apply: symbol => applyVisual({symbol})}},
+  {label: "备注", value: selected.value.noteBody || "无",
+    editor: {type: "note", value: selected.value.noteBody, maxLength: 1000, apply: body => props.callbacks.onNoteChange(selected.value.id, body)}},
   {label: "手动图标", value: selected.value.manual ? "是" : "否"}
 ] : []);
 
@@ -234,11 +206,10 @@ const editStatus = computed(() => {
 
 watch(() => selected.value?.id, syncVisualDraft, {immediate: true});
 watch(() => selected.value?.id, id => {
-  activeAction.value = null;
   if (!sameObjectId(renameRequestId.value, id)) return;
   renameRequestId.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 });
 watch(() => selected.value?.symbol, syncVisualDraft);
@@ -330,7 +301,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 }
 

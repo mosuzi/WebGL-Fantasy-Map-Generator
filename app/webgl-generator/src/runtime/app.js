@@ -866,7 +866,15 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   state.toggleObjectEditing = toggleObjectEditing;
   const openSelectionAwarePanel = options => openSelectionAwarePanelForState(state, options);
   state.openSelectionAwarePanel = openSelectionAwarePanel;
+  function changeCityPopulation(cityId, population) {
+    if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return {executed: false, message: "当前还有操作正在进行，请稍后再试。"};
+    const command = createSetCityPopulationCommand(cityId, population);
+    const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}, throwOnError: false});
+    updateEditingInteractionLock(state, documentRef);
+    return {...execution, message: execution.error ? "人口更新失败，请重新选择城市后重试。" : execution.executed ? "人口已更新，所属地区统计已同步，可撤销。" : "人口未改变。"};
+  }
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
+    onPopulationChange: changeCityPopulation,
     onEdit: object => {
       const action = describeObjectDetailsActions(object).edit;
       if (action?.mode === OBJECT_DETAILS_EDIT_MODE.INLINE_NAME) startObjectEditing(object, {select: false});
@@ -1687,14 +1695,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       });
       updateEditingInteractionLock(state, documentRef);
     },
-    onPopulationChange: (cityId, population) => {
-      if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return {executed: false, message: "当前还有操作正在进行，请稍后再试。"};
-      const context = {map: state.map};
-      const command = createSetCityPopulationCommand(cityId, population);
-      const execution = executeEditCommand(state, documentRef, command, {context, throwOnError: false});
-      updateEditingInteractionLock(state, documentRef);
-      return {...execution, message: execution.error ? "人口更新失败，请重新选择城市后重试。" : execution.executed ? "人口已更新，所属地区统计已同步，可撤销。" : "人口未改变。"};
-    },
+    onPopulationChange: changeCityPopulation,
     onPopulationRecalculate: cityId => {
       if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return {executed: false, message: "当前还有操作正在进行，请稍后再试。"};
       const city = state.map?.settlements?.cities?.[cityId];
@@ -9793,7 +9794,7 @@ async function executeRoutePathWorkerHistory(state, documentRef, action, command
   const patch = action === "undo" ? metadata.beforePatch : metadata.afterPatch;
   return executeWorkerMapMutation(state, documentRef, {
     task: metadata.task,
-    targetKind: "route-path",
+    targetKind: metadata.request.kind === "city-relocation" ? "city-relocation" : "route-path",
     userLabel: `${verb}${metadata.label}结果`,
     payload: {historyTransition: {action, label: command.label, request: metadata.request, patch}},
     includeBindingInPayload: true,
@@ -10544,8 +10545,9 @@ function attachRoutePathWorkerHistory(command, metadata) {
       label: metadata.userLabel,
       request: structuredClone(metadata.request),
       renderLayers: Object.freeze([...metadata.renderLayers]),
-      beforePatch: structuredClone(metadata.history.beforePatch),
-      afterPatch: structuredClone(metadata.history.afterPatch)
+      // 返回的前后快照已与地图隔离，由这条历史命令持有。
+      beforePatch: metadata.history.beforePatch,
+      afterPatch: metadata.history.afterPatch
     })
   });
   return command;

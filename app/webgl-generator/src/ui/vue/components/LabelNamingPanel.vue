@@ -30,7 +30,7 @@
     @selection-change="selectedLabelKeys = $event"
   />
 
-  <UiDetailGrid class-name="route-panel-details" empty-text="未选中标签" :rows="detailRows" />
+  <UiDetailGrid ref="detailGrid" :key="selected?.key" class-name="route-panel-details" empty-text="未选中标签" :rows="detailRows" />
 
   <UiPanelIoActions
     class-name="label-management-actions"
@@ -40,24 +40,7 @@
   />
 
   <UiActionDock v-if="selected" host-id="LabelNamingPanel" v-model:active="activeAction" :actions="labelActions">
-    <template #rename>
-      <UiTextEditField
-        class-name="label-name-editor"
-        :label="selected.targetKind === LABEL_TARGET_KIND.STATE ? '国家名称' : selected.targetKind === LABEL_TARGET_KIND.PROVINCE ? '省份名称' : selected.targetKind === LABEL_TARGET_KIND.CUSTOM ? '标签文字' : '城市名称'"
-        :model-value="selected.name"
-        :max-length="48"
-        @apply="name => callbacks.onRename(selected, name)"
-      />
-    </template>
 
-    <template #note>
-      <UiNoteField
-        class-name="label-note-editor"
-        :model-value="selected.noteBody"
-        @apply="body => callbacks.onNoteChange(selected, body)"
-        @clear="callbacks.onNoteChange(selected, '')"
-      />
-    </template>
 
     <template #display>
       <UiNumberField
@@ -79,18 +62,16 @@
 </template>
 
 <script setup>
-import {Document, EditPen, Plus, RefreshLeft, SetUp} from "@element-plus/icons-vue";
+import {Plus, RefreshLeft, SetUp} from "@element-plus/icons-vue";
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNoteField from "./base/UiNoteField.vue";
 import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {LABEL_TARGET_KIND} from "../../../runtime/object-kinds.js";
 import {resolveLabelLayout} from "../../../runtime/label-layout-registry.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -135,11 +116,10 @@ const rows = computed(() => {
   return labelRows(props.state.map);
 });
 const unitPreferences = useUnitPreferences();
+const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestKey = ref(null);
 const labelActions = Object.freeze([
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document},
   {key: "display", resultClass: "open-secondary", label: "显示布局", icon: SetUp}
 ]);
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
@@ -166,15 +146,18 @@ const summaryMetrics = computed(() => [
 
 const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.type},
-  {label: "名称", value: selected.value.name},
+  {label: "名称", value: selected.value.name,
+    editor: {value: selected.value.name, maxLength: 48, apply: value => props.callbacks.onRename?.(selected.value, value)}},
   {label: "归属", value: selected.value.owner},
   {label: "显示策略", value: selected.value.visibility},
   {label: "状态", value: selected.value.status},
-  {label: "优先级", value: `${selected.value.priority}（${selected.value.manualPriority ? "手工" : "自动"}）`},
+  {label: "优先级", value: `${selected.value.priority}（${selected.value.manualPriority ? "手工" : "自动"}）`,
+    editor: {type: "number", min: 0, max: 100, step: 1, value: selected.value.priority, apply: value => props.callbacks.onPriorityChange(selected.value, value)}},
   {label: "位置", value: selected.value.positionLocked ? `已锁定 ${formatPoint(selected.value.x, selected.value.y)}` : "自动世界锚点"},
   {label: "中心", value: selected.value.center},
   {label: "目标 id", value: selected.value.targetId},
-  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
+  {label: "备注", value: selected.value.noteBody || "无",
+    editor: {type: "note", value: selected.value.noteBody, maxLength: 1000, apply: body => props.callbacks.onNoteChange(selected.value, body)}}
 ] : []);
 
 watch(() => selected.value?.key, key => {
@@ -182,7 +165,7 @@ watch(() => selected.value?.key, key => {
   if (renameRequestKey.value !== key) return;
   renameRequestKey.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 });
 
@@ -206,7 +189,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (selected.value?.key !== row?.key) return;
     renameRequestKey.value = null;
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 }
 

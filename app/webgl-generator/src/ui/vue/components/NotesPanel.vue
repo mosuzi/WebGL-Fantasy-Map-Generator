@@ -65,7 +65,7 @@
     @action="handleNotesAction"
   />
 
-  <UiDetailGrid class-name="notes-panel-details" empty-text="未选中备注" :rows="detailRows" />
+  <UiDetailGrid :key="selected?.id" class-name="notes-panel-details" empty-text="未选中备注" :rows="detailRows" />
 
   <UiStateBanner
     v-if="selected?.orphan"
@@ -76,39 +76,25 @@
     @action="callbacks.onDelete?.(selected)"
   />
 
-  <div v-if="selected" class="notes-panel-preview">
-    {{ selected.body || "空备注" }}
-  </div>
   <OrphanNoteRescue v-if="selected?.orphan" :map="state.map" :note="selected" :version="state.version" :on-rescue="callbacks.onRescue" />
 
-  <UiActionDock v-if="selected && !selected.orphan" host-id="NotesPanel" v-model:active="activeAction" :actions="noteActions">
-    <template #rename>
-      <UiTextEditField :model-value="selected.name" :max-length="64" :data-ui-name-spacing="selected.object.kind === 'military' ? 'preserve' : null" @apply="name => callbacks.onRename?.(selected, name)" />
-    </template>
-    <template #edit>
-      <UiNoteField :model-value="selected.body" @apply="body => callbacks.onNoteChange?.(selected, body)" @clear="callbacks.onNoteChange?.(selected, '')" />
-    </template>
-  </UiActionDock>
 </template>
 
 <script setup>
-import {Delete, Document, EditPen, Filter, Plus, RefreshLeft} from "@element-plus/icons-vue";
-import {computed, ref, watch} from "vue";
+import {Delete, Filter, Plus, RefreshLeft} from "@element-plus/icons-vue";
+import {computed} from "vue";
 import OrphanNoteRescue from "./OrphanNoteRescue.vue";
 import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 import {noteRenameTargetKind} from "../../../runtime/notes-rename-target.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
-import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
@@ -130,7 +116,6 @@ const props = defineProps({
 });
 
 const unitPreferences = useUnitPreferences();
-const activeAction = ref(null);
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},
   {key: "kindLabel", label: "类型"},
@@ -167,10 +152,6 @@ const notesExportActions = computed(() => [
   {key: "selected-notes", label: `导出选中 ${formatNumber(selectedNoteRows.value.length)}`, disabled: !selectedNoteRows.value.length}
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedNoteId) || null);
-const noteActions = computed(() => [
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen, disabled: !noteRenameTargetKind(selected.value?.object)},
-  {key: "edit", resultClass: "open-secondary", label: "编辑正文", icon: Document}
-]);
 const visibleOrphanRows = computed(() => visibleRows.value.filter(row => row.orphan));
 const deleteTargetRows = computed(() => selectedNoteRows.value.length ? selectedNoteRows.value : selected.value ? [selected.value] : []);
 const notesListActions = computed(() => [
@@ -178,7 +159,6 @@ const notesListActions = computed(() => [
   {key: "select-orphans", label: `只选孤儿备注 ${formatNumber(visibleOrphanRows.value.length)}`, icon: Filter, disabled: !visibleOrphanRows.value.length},
   {key: "delete-batch", label: deleteTargetRows.value.length > 1 ? `批量删除已选 ${formatNumber(deleteTargetRows.value.length)}` : "删除选中备注", icon: Delete, disabled: !deleteTargetRows.value.length}
 ]);
-watch(() => selected.value?.id, () => { activeAction.value = null; });
 const summaryMetrics = computed(() => [
   {label: "备注", value: formatNumber(rows.value.length)},
   {label: "可定位", value: formatNumber(rows.value.filter(row => !row.orphan).length)},
@@ -187,8 +167,11 @@ const summaryMetrics = computed(() => [
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 const detailRows = computed(() => selected.value ? [
+  {label: "正文", value: selected.value.body || "空备注",
+    editor: {type: "note", value: selected.value.body, maxLength: 1000, disabled: selected.value.orphan, apply: body => props.callbacks.onNoteChange?.(selected.value, body)}},
   {label: "类型", value: selected.value.kindLabel},
-  {label: "名称", value: selected.value.name},
+  {label: "名称", value: selected.value.name,
+    editor: {value: selected.value.name, disabled: selected.value.orphan || !noteRenameTargetKind(selected.value.object), maxLength: 64, apply: value => props.callbacks.onRename?.(selected.value, value)}},
   {label: "备注 id", value: selected.value.id, debug: true},
   {label: "对象 id", value: selected.value.objectId, debug: true},
   {label: "状态", value: selected.value.orphan ? "对象缺失" : "可定位"},

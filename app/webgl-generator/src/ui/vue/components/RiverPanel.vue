@@ -67,65 +67,24 @@
     @action="handleRiverListAction"
   />
 
-  <UiDetailGrid class-name="river-panel-details" empty-text="未选中河流" :rows="detailRows" />
+  <UiDetailGrid ref="detailGrid" :key="selected?.id" class-name="river-panel-details" empty-text="未选中河流" :rows="detailRows" />
 
   <template v-if="selected">
-    <UiActionDock host-id="RiverPanel" v-model:active="activeAction" :actions="riverActions" @select="handleRiverActionSelect">
-      <template #rename>
-        <UiTextEditField
-          class-name="river-name-editor"
-          :model-value="selected.name"
-          :max-length="48"
-          @apply="name => callbacks.onRename(selected.id, name)"
-        />
-      </template>
-
-      <template #width>
-        <div class="river-width-editor">
-          <UiSliderField
-            label="宽度因子"
-            field-class="river-width-field"
-            :model-value="widthDraft"
-            unit-label="x"
-            :min="0.2"
-            :max="3"
-            :step="0.05"
-            @input="value => widthDraft = normalizeWidth(value)"
-          />
-          <div class="river-width-actions">
-            <UiButton variant="secondary" @click="callbacks.onSetWidthFactor(selected.id, widthDraft)">应用宽度</UiButton>
-          </div>
-        </div>
-      </template>
-
-      <template #note>
-        <UiNoteField
-          class-name="river-note-editor"
-          :model-value="selected.noteBody"
-          @apply="body => callbacks.onNoteChange(selected.id, body)"
-          @clear="callbacks.onNoteChange(selected.id, '')"
-        />
-      </template>
-    </UiActionDock>
   </template>
 </template>
 
 <script setup>
-import {Delete, Document, EditPen, MagicStick, Plus, RefreshLeft, Share, FullScreen} from "@element-plus/icons-vue";
+import {Delete, MagicStick, Plus, RefreshLeft, Share} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, nextTick, ref, watch} from "vue";
-import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
-import UiSliderField from "./base/UiSliderField.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {estimateRiverRunoffFlowRange, formatArea, formatDistance, formatNumber as formatDisplayNumber, formatPrecipitation, formatRiverFlow as formatDisplayRiverFlow, formatRiverRunoffFlowRange, riverFluxToCubicMetersPerSecond} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
@@ -165,9 +124,8 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
-const activeAction = ref(null);
+const detailGrid = ref(null);
 const renameRequestId = ref(null);
-const widthDraft = ref(1);
 const rows = computed(() => {
   props.state.version;
   return riverRows(props.state.map);
@@ -202,9 +160,6 @@ const draftSummary = computed(() => {
 });
 const riverActions = computed(() => [
   {key: "path", resultClass: "toggle-canvas-mode", label: props.state.waypointMode ? "退出河道折线调整" : "调整河道折线", icon: Share, panel: false, active: props.state.waypointMode},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen},
-  {key: "width", resultClass: "open-secondary", label: "调整宽度", icon: FullScreen},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document}
 ]);
 const riverListActions = computed(() => [
   {key: "create", label: props.state.createMode ? "取消新增河流" : "新增河流", icon: Plus, active: props.state.createMode},
@@ -221,6 +176,8 @@ const summaryMetrics = computed(() => [
 ]);
 
 const detailRows = computed(() => selected.value ? [
+  {label: "名称", value: selected.value.name,
+    editor: {value: selected.value.name, maxLength: 48, apply: value => props.callbacks.onRename?.(selected.value.id, value)}},
   {label: "选中", value: `#${selected.value.id} / ${selected.value.type}`},
   {label: "汇入干流", value: selected.value.parentLabel},
   {label: "流域主河", value: selected.value.basinLabel},
@@ -235,23 +192,20 @@ const detailRows = computed(() => selected.value ? [
   {label: "模型 / 估算", value: formatHydrologyFlowRatio(selected.value)},
   {label: "诊断方式", value: formatHydrologyMethod(selected.value.hydrology)},
   {label: "河段", value: formatNumber(selected.value.segments)},
-  {label: "宽度因子", value: selected.value.widthFactor.toFixed(2)},
-  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
+  {label: "宽度因子", value: selected.value.widthFactor.toFixed(2),
+    editor: {type: "number", value: selected.value.widthFactor, min: 0.2, max: 3, step: 0.05, apply: value => props.callbacks.onSetWidthFactor(selected.value.id, value)}},
+  {label: "备注", value: selected.value.noteBody || "无",
+    editor: {type: "note", value: selected.value.noteBody, maxLength: 1000, apply: body => props.callbacks.onNoteChange(selected.value.id, body)}}
 ] : []);
 
 watch(() => selected.value?.id, id => {
-  widthDraft.value = normalizeWidth(selected.value?.widthFactor ?? 1);
-  activeAction.value = null;
   if (!sameObjectId(renameRequestId.value, id)) return;
   renameRequestId.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 }, {immediate: true});
 
-watch(() => selected.value?.widthFactor, next => {
-  widthDraft.value = normalizeWidth(next ?? 1);
-});
 
 function riverRows(map) {
   const rivers = map?.rivers?.rivers || [];
@@ -329,7 +283,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 }
 
@@ -418,9 +372,6 @@ function hasHydrology(hydrology) {
   return Number.isFinite(hydrology?.catchmentArea) && hydrology.catchmentArea > 0 && Number.isFinite(hydrology.averagePrecipitation);
 }
 
-function normalizeWidth(value) {
-  return Math.round((Number(value) || 1) * 100) / 100;
-}
 
 function isPoint(point) {
   return Number.isFinite(point?.[0]) && Number.isFinite(point?.[1]);

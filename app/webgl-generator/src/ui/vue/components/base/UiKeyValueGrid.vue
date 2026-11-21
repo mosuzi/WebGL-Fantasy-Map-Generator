@@ -10,7 +10,10 @@
         :class="['ui-key-value-item', {'is-wide': item.wide}]"
       >
         <span class="ui-key-value-label">{{ item.label }}</span>
-        <strong class="ui-key-value-value">{{ item.value }}</strong>
+        <strong class="ui-key-value-value">
+          <UiInlineValue v-if="item.editor" :ref="el => rememberEditor(item.label, el)" :label="item.label" :display="item.value" :editor="item.editor" />
+          <slot v-else :name="item.label" :item="item">{{ item.value }}</slot>
+        </strong>
       </div>
     </template>
     <p v-else class="ui-key-value-empty">{{ emptyText }}</p>
@@ -19,6 +22,7 @@
 
 <script setup>
 import {computed} from "vue";
+import UiInlineValue from "./UiInlineValue.vue";
 import {useDebugMode} from "../../composables/use-debug-mode.js";
 
 defineOptions({
@@ -58,6 +62,12 @@ const props = defineProps({
 });
 
 const debugEnabled = useDebugMode();
+const editors = new Map();
+function rememberEditor(label, editor) {
+  if (editor) editors.set(label, editor);
+  else editors.delete(label);
+}
+defineExpose({edit: label => editors.get(label)?.start()});
 const gridStyle = computed(() => props.minWidth > 0 ? {"--ui-key-value-min": `${props.minWidth}px`} : {});
 const visibleItems = computed(() => props.items
   .filter(item => !item?.debug || debugEnabled.value)
@@ -69,6 +79,7 @@ function normalizeItem(item, index) {
   return {
     key: item?.key ?? `${label}-${index}`,
     label,
+    editor: item?.editor,
     value,
     wide: shouldUseWideCell(item, value)
   };

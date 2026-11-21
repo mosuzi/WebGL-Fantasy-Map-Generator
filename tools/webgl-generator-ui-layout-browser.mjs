@@ -149,7 +149,8 @@ async function inspectObjects() {
     await capture(`object-${kind}`);
     if (kind === "city" || kind === "lake") {
       await page.getByRole("button", {name: "编辑名称", exact: true}).click();
-      await page.getByRole("button", {name: "退出名称编辑", exact: true}).waitFor();await capture(`object-${kind}-编辑`);
+      const input = page.getByRole("textbox", {name: "编辑名称", exact: true});
+      await input.waitFor();await capture(`object-${kind}-编辑`);await input.press("Escape");
     }
   }
 }

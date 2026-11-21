@@ -53,7 +53,7 @@ try {
   await page.locator("#open-state-panel").click();
   const statePanel = page.locator('[data-panel-id="state-panel"]');
   await statePanel.locator('[data-row-key="n:' + setup.stateId + '"]').dblclick();
-  const input = page.getByRole("dialog", {name:"重命名"}).locator(".state-name-editor input");
+  const input = statePanel.locator('[data-inline-label="全称"] input');
   const edited = "东岚";
   assert.notEqual(setup.original, edited);
   await input.fill(edited);

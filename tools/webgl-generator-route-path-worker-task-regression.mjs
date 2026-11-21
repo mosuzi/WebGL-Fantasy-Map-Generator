@@ -342,7 +342,8 @@ function taskContext(binding, source) {
 
 function createRenderRequest(binding, layers = ["route", "picking"]) {
   return {
-    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: 0,
+      renderPreparationId: `${binding.mapIdentity}-${binding.operationId}`, renderGeneration: binding.generationToken},
     layers,
     camera: {scale: 1, offsetX: 0, offsetY: 0},
     canvas: {width: 1200, height: 720, clientWidth: 1200, clientHeight: 720},

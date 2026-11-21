@@ -5,6 +5,7 @@ export async function verifyCityPopulation(page, panel, select) {
   const id = await page.evaluate(() => window.__webglGeneratorApp.map.settlements.cities.find(city => city?.state > 0 && city?.province > 0).id);
   await select(id);
   const input = panel.getByRole("spinbutton", {name: "城市人口（人）"});
+  const trigger = panel.getByRole("button", {name: "城市人口（人）", exact: true});
   const read = () => page.evaluate(id => {
     const app = window.__webglGeneratorApp, map = app.map, city = map.settlements.cities[id];
     const fields = records => records.map(item => item && {urban: item.urban, rural: item.rural});
@@ -19,7 +20,7 @@ export async function verifyCityPopulation(page, panel, select) {
     await page.evaluate(async scale => {const r = await window.webglGeneratorApi.units.apply({populationScale: scale, numberAbbreviation: "none"}); if (!r.ok) throw Error(JSON.stringify(r.error));}, scale);
     const before = await read(), count = await history();
     const people = scale === .1 ? 0 : 123457;
-    await input.fill(String(people));
+    await trigger.click(); await input.fill(String(people));
     await input.press("Enter");
     await page.waitForFunction(({id, people, scale}) => Math.round(window.__webglGeneratorApp.map.settlements.cities[id].population * 1000 * scale) === people, {id, people, scale});
     const after = await read();
@@ -36,23 +37,24 @@ export async function verifyCityPopulation(page, panel, select) {
     }
     await undo(); assert.deepEqual(await read(), before);
     await redo(); assert.deepEqual(await read(), after);
-    assert.equal(await input.inputValue(), String(people));
+    await trigger.click(); assert.equal(await input.inputValue(), String(people));
     await input.press("Enter"); assert.equal(await history(), count + 1, "同值不写历史");
     matrices.push({scale, people, undoRedo: true});
   }
   const count = await history();
+  await trigger.click();
   for (const invalid of ["", "-1", "1.5", "1000000001"]) {
     await input.fill(invalid); await input.press("Enter");
-    assert.match(await panel.locator(".city-population-controls [role=status]").innerText(), /整数人数/);
+    assert.match(await panel.locator('[data-inline-label="人口"] [role=alert]').innerText(), /整数人数/);
     assert.equal(await history(), count);
   }
   await page.evaluate(() => document.dispatchEvent(new CustomEvent("webgl-generator-runtime-operation", {detail: {busy: true}})));
-  assert.equal(await input.isDisabled(), true);
+  assert.equal(await trigger.isDisabled(), true);
   await page.evaluate(() => document.dispatchEvent(new CustomEvent("webgl-generator-runtime-operation", {detail: {busy: false}})));
   const otherId = await page.evaluate(id => window.__webglGeneratorApp.map.settlements.cities.find(c => c && !c.removed && c.id !== id).id, id);
-  await select(otherId); assert.equal(await panel.locator(".city-population-controls [role=status]").count(), 0);
+  await select(otherId); assert.equal(await panel.locator('[data-inline-label="人口"] [role=alert]').count(), 0);
   await select(id);
-  await panel.getByRole("button", {name: "调整人口", exact: true}).click();
+  await trigger.click();
   assert.equal(await input.evaluate(element => element === document.activeElement), true);
   await input.fill("543219"); await input.press("Enter");
   await page.waitForFunction(id => Math.round(window.__webglGeneratorApp.map.settlements.cities[id].population * 10000) === 543219, id);
@@ -88,7 +90,7 @@ export async function verifyCityPopulation(page, panel, select) {
   assert.notEqual(recalculated.states[recalculated.state].urban, current.states[current.state].urban);
   await undo(); assert.deepEqual(await read(), current);
   await page.setViewportSize({width: 690, height: 960});
-  const layout = await panel.locator(".city-population-controls").evaluate(e => ({width: e.clientWidth, scroll: e.scrollWidth}));
+  const layout = await panel.locator(".city-panel-details").evaluate(e => ({width: e.clientWidth, scroll: e.scrollWidth}));
   assert.equal(layout.width, layout.scroll);
   await page.setViewportSize({width: 1440, height: 1000});
   return {matrices, invalid: 4, busy: true, selection: true, panels: ["city", "state", "province", "population"], recalculate: true, layout};

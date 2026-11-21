@@ -121,7 +121,7 @@
     @action="handleNamebaseAction"
   />
 
-  <UiDetailGrid class-name="namebase-panel-details" empty-text="未选中名称库" :rows="detailRows" />
+  <UiDetailGrid :key="selected?.id" class-name="namebase-panel-details" empty-text="未选中名称库" :rows="detailRows" />
 
   <div v-if="selected" class="namebase-panel-preview">
     <div class="namebase-panel-preview-header">
@@ -136,13 +136,6 @@
     <span>{{ selected.duplicateLabel }}</span>
   </div>
 
-  <UiTextEditField
-    v-if="selectedUserRow"
-    :model-value="selectedUserRow.name"
-    label="名称"
-    :max-length="48"
-    @apply="value => callbacks.onRenameUser(selectedUserRow, value)"
-  />
 
   <div v-if="selectedUserRow" class="namebase-source-editor">
     <label>
@@ -197,7 +190,6 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {compareListValues} from "../../sort-utils.js";
 
@@ -338,7 +330,8 @@ const importPreviewNote = computed(() => {
 const detailRows = computed(() => selected.value ? [
   {label: "分类", value: selected.value.category},
   {label: "来源", value: selected.value.origin},
-  {label: "名称", value: selected.value.name},
+  {label: "名称", value: selected.value.name,
+    editor: {value: selected.value.name, disabled: !selectedUserRow.value, maxLength: 48, apply: value => props.callbacks.onRenameUser(selectedUserRow.value, value)}},
   {label: "类型", value: selected.value.kind},
   {label: "样本数", value: formatNumber(selected.value.samples)},
   {label: "样本权重", value: formatWeight(selected.value.weightedSamples)},

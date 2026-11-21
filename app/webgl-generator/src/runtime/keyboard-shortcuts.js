@@ -242,6 +242,7 @@ export function installKeyboardShortcuts(documentRef, options = {}) {
       return;
     }
     if (hasExclusiveKeyboardModal(documentRef)) return;
+    if (event.key === "Escape" && event.target?.closest?.(".ui-inline-input, .ui-inline-choice select, .ui-inline-color")) return;
     const item = resolveShortcut(event, registry, {platform, scopes: options.getActiveScopes?.(event) || ["global"]});
     if (!item) return;
     if (item.id !== "selection.cancel" && isEditableShortcutTarget(event.target)) {

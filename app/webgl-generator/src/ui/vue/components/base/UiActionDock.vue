@@ -23,19 +23,17 @@
         v-if="active"
         ref="panel"
         class="ui-secondary-action-panel is-editing"
-        :class="{'is-quick-input': isQuickInput}"
         data-ui-state="editing"
         :data-placement-side="panelPlacement.side"
         :data-available-height="panelPlacement.available"
         :style="panelStyle"
         role="dialog"
         :aria-label="activeActionLabel"
-        @keydown.enter="closeQuickInputOnEnter"
-        @focusout="closeQuickInputOnBlur"
+
       >
         <header ref="panelHeader" class="ui-secondary-action-header" :class="{dragging: dragState}" @pointerdown="startPanelDrag">
-          <div v-if="!isQuickInput" class="ui-secondary-action-title"><span class="ui-state-token">编辑中</span><strong>{{ activeActionLabel }}</strong></div>
-          <button type="button" class="ui-close-button ui-secondary-action-close" aria-label="关闭二级编辑面板" @pointerdown.stop="onClosePointerDown" @click="closePanel">×</button>
+          <div class="ui-secondary-action-title"><span class="ui-state-token">编辑中</span><strong>{{ activeActionLabel }}</strong></div>
+          <button type="button" class="ui-close-button ui-secondary-action-close" aria-label="关闭二级编辑面板" @pointerdown.stop @click="closePanel">×</button>
         </header>
         <div ref="panelBody" class="ui-secondary-action-body">
           <slot :name="active" />
@@ -81,7 +79,6 @@ const dragState = ref(null);
 const userPositioned = ref(false);
 const activeAction = computed(() => props.actions.find(action => action.resultClass === "open-secondary" && action.key === props.active));
 const activeActionLabel = computed(() => activeAction.value?.label || "对象操作");
-const isQuickInput = computed(() => props.active === "rename" && Boolean(activeAction.value));
 const overlayId = computed(() => `ui-action-dock:${props.hostId}`);
 let panelDragSession = null;
 let positionObserver = null;
@@ -101,7 +98,6 @@ watch(() => props.active, active => {
       bindPositionObserver();
       schedulePanelPositionUpdate();
       addPositionListeners();
-      focusQuickInput();
     });
     return;
   }
@@ -143,68 +139,15 @@ function isActionActive(action) {
 }
 
 function closePanel() {
-  if (isQuickInput.value) panelBody.value?.querySelector("[data-ui-text-edit-field]")?.setAttribute("data-ui-skip-blur-commit", "");
   panelDragSession?.cancel("panel-close");
   userPositioned.value = false;
   emit("update:active", null);
   emit("select", null);
 }
 
-function closeQuickInputOnEnter(event) {
-  if (!event.defaultPrevented) return;
-  finishQuickInput(event);
-}
-
-function closeQuickInputOnBlur(event) {
-  finishQuickInput(event);
-}
-
-function finishQuickInput(event) {
-  const input = event.target;
-  const field = input instanceof HTMLInputElement ? input.closest("[data-ui-text-edit-field]") : null;
-  if (!isQuickInput.value || event.isComposing || event.keyCode === 229
-    || !field || field.hasAttribute("data-ui-skip-blur-commit")
-    || !panelBody.value?.contains(input) || !input.value.trim()) return;
-  // 军团名称只裁去两侧空白，其余名称命令还会合并中间空白。
-  const normalize = value => field.getAttribute("data-ui-name-spacing") === "preserve"
-    ? String(value || "").trim()
-    : String(value || "").trim().replace(/\s+/g, " ");
-  const submitted = normalize(input.value);
-  const before = field.getAttribute("data-ui-committed-value") || "";
-  if (normalize(before) === submitted) {
-    closePanel();
-    return;
-  }
-  nextTick(() => {
-    if (!isQuickInput.value || !field.isConnected) return;
-    const after = field.getAttribute("data-ui-committed-value") || "";
-    if (after !== before && normalize(after) === submitted) closePanel();
-  });
-}
-
-function onClosePointerDown(event) {
-  if (isQuickInput.value) event.preventDefault();
-}
-
-function focusQuickInput() {
-  if (!isQuickInput.value) return;
-  const view = panel.value?.ownerDocument?.defaultView;
-  view?.requestAnimationFrame(() => view.requestAnimationFrame(() => view.setTimeout(() => {
-    if (!isQuickInput.value) return;
-    const input = panelBody.value?.querySelector("[data-ui-text-edit-field] input");
-    input?.focus({preventScroll: true});
-    input?.select();
-  }, 0)));
-}
-
 function onDocumentPointerDown(event) {
   if (!props.active) return;
   if (panel.value?.contains(event.target)) return;
-  if (isQuickInput.value) {
-    const input = panelBody.value?.querySelector("[data-ui-text-edit-field] input");
-    if (input === document.activeElement) input.blur();
-    return;
-  }
   if (root.value?.contains(event.target)) {
     const action = event.target?.closest?.("button[data-action-id]");
     if (action && !action.disabled) return;
@@ -352,7 +295,7 @@ function updatePanelPosition() {
   const viewportWidth = view.innerWidth || 1024;
   const viewportHeight = view.innerHeight || 768;
   const safeTop = effectiveSafeTop();
-  const width = Math.min(Number(activeAction.value?.panelWidth) || (isQuickInput.value ? 288 : 340), viewportWidth - margin * 2);
+  const width = Math.min(Number(activeAction.value?.panelWidth) || 340, viewportWidth - margin * 2);
   const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewportWidth - width - margin));
   const panelHeight = naturalPanelHeight();
   const placement = chooseSecondaryPanelPlacement({anchorRect: rect, panelHeight, viewportHeight, safeTop, bottomMargin: 8, gap: 8});

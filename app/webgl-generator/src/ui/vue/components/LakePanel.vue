@@ -36,7 +36,7 @@
     @action="handleLakeListAction"
   />
 
-  <UiDetailGrid class-name="lake-panel-details" empty-text="未选中湖泊" :rows="detailRows" />
+  <UiDetailGrid ref="detailGrid" :key="selected?.id" class-name="lake-panel-details" empty-text="未选中湖泊" :rows="detailRows" />
 
   <template v-if="selected">
     <UiActionDock host-id="LakePanel" v-model:active="activeAction" :actions="lakeActions">
@@ -90,20 +90,12 @@
           />
         </div>
       </template>
-      <template #rename>
-        <UiTextEditField
-          class-name="lake-name-editor"
-          :model-value="selected.name"
-          :max-length="48"
-          @apply="name => callbacks.onRename(selected.id, name)"
-        />
-      </template>
     </UiActionDock>
   </template>
 </template>
 
 <script setup>
-import {Brush, Delete, EditPen, MagicStick, Plus, RefreshLeft, Right} from "@element-plus/icons-vue";
+import {Brush, Delete, MagicStick, Plus, RefreshLeft, Right} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, nextTick, ref, watch} from "vue";
@@ -116,7 +108,6 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
@@ -156,6 +147,7 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);
 const rows = computed(() => {
@@ -175,7 +167,6 @@ const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row
 const lakeActions = Object.freeze([
   {key: "outlet", resultClass: "open-secondary", label: "编辑湖泊出口", icon: Right},
   {key: "shore", resultClass: "open-secondary", label: "局部水陆修正", icon: Brush},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen}
 ]);
 const patchTargetOptions = Object.freeze([
   {value: "water", label: "扩展为湖泊水域"},
@@ -220,6 +211,8 @@ const summaryMetrics = computed(() => [
 ]);
 
 const detailRows = computed(() => selected.value ? [
+  {label: "名称", value: selected.value.name,
+    editor: {value: selected.value.name, maxLength: 48, apply: value => props.callbacks.onRename?.(selected.value.id, value)}},
   {label: "选中", value: `#${selected.value.id} / ${selected.value.type}`},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "水域区域", value: formatNumber(selected.value.cells)},
@@ -240,7 +233,7 @@ watch(() => selected.value?.id, id => {
   if (!sameObjectId(renameRequestId.value, id)) return;
   renameRequestId.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 });
 
@@ -312,7 +305,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 }
 

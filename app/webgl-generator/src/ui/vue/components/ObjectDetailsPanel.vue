@@ -1,20 +1,14 @@
 <template>
   <template v-if="state.object">
-    <div class="object-details-title" aria-live="polite">{{ title }}</div>
-    <UiDetailGrid class-name="object-details-list" :rows="detailRowsWithState" />
-    <UiTextEditField
-      v-if="editing && canRename"
-      ref="nameEditor"
-      :model-value="editableName"
-      class-name="object-name-editor"
-      @apply="callbacks.onRename"
-    />
+    <div class="object-details-title" aria-live="polite">
+      <UiInlineValue v-if="canRename" ref="nameEditor" :key="identity" @end="editing && callbacks.onCancelEdit?.()" label="名称" :display="title"
+        :editor="{value: editableName, maxLength: 48, apply: callbacks.onRename, className: 'object-name-editor'}" />
+      <template v-else>{{ title }}</template>
+    </div>
+    <UiDetailGrid :key="identity" class-name="object-details-list" :rows="detailRowsWithState" />
     <div class="object-details-actions" role="group" aria-label="对象操作">
       <UiButton v-if="actionPolicy.canLocate" class="ui-icon-action" title="定位到地图" aria-label="定位到地图" @click="callbacks.onLocate">
         <ElIcon aria-hidden="true"><Location /></ElIcon>
-      </UiButton>
-      <UiButton v-if="inlineEdit" class="ui-icon-action" :active="editing" :aria-pressed="editing" :title="editLabel" :aria-label="editLabel" @click="handleEditAction">
-        <ElIcon aria-hidden="true"><EditPen /></ElIcon>
       </UiButton>
       <UiButton v-if="canRenameFromNamebase" class="ui-icon-action" title="按名称库换名" aria-label="按名称库换名" @click="redrawName">
         <ElIcon aria-hidden="true"><MagicStick /></ElIcon>
@@ -28,11 +22,11 @@
 
 <script setup>
 import {computed, ref, watch} from "vue";
-import {EditPen, Location, MagicStick} from "@element-plus/icons-vue";
+import {Location, MagicStick} from "@element-plus/icons-vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatArea, formatDistance, formatMilitary, formatNumber, formatPopulation, formatPrecipitation, formatRiverFlow, formatRiverRunoffFlowRange} from "../../display-units.js";
+import UiInlineValue from "./base/UiInlineValue.vue";
+import {populationUnitsToPeople, peopleToPopulationUnits, formatArea, formatDistance, formatMilitary, formatNumber, formatPopulation, formatPrecipitation, formatRiverFlow, formatRiverRunoffFlowRange} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 import {describeObjectDetailsActions, OBJECT_DETAILS_EDIT_MODE} from "../../../runtime/object-details-actions.js";
@@ -58,15 +52,11 @@ const title = computed(() => formatObjectTitle(props.state.object));
 const actionPolicy = computed(() => describeObjectDetailsActions(props.state.object));
 const editAction = computed(() => actionPolicy.value.edit);
 const inlineEdit = computed(() => editAction.value?.mode === OBJECT_DETAILS_EDIT_MODE.INLINE_NAME);
-const editLabel = computed(() => editing.value ? editAction.value?.editingLabel : editAction.value?.label);
+const identity = computed(() => [props.state.object?.kind, props.state.object?.id, props.state.object?.targetKind, props.state.object?.targetId].join(":"));
 const nameEditor = ref(null);
 const renameMessage = ref("");
 watch([title, () => props.state.object?.kind, () => props.state.object?.id, () => props.state.object?.targetKind, () => props.state.object?.targetId], () => { renameMessage.value = ""; });
-watch(nameEditor, editor => {
-  const input = editor?.$el.querySelector("input");
-  input?.focus();
-  input?.select();
-}, {flush: "post"});
+watch([editing, nameEditor], ([active, editor]) => { if (active) editor?.start(); }, {flush: "post"});
 
 function redrawName() {
   renameMessage.value = props.callbacks.onRenameFromNamebase?.() || "";
@@ -77,8 +67,7 @@ const canRename = computed(() => canRenameObject(props.state.object));
 const canRenameFromNamebase = computed(() => canRenameObjectFromNamebase(props.state.object));
 const editableName = computed(() => props.state.object?.name || props.state.object?.text || props.state.object?.targetName || "");
 const detailRowsWithState = computed(() => normalizeObjectDetailRows([
-  ...detailRows(props.state.object),
-  {label: "状态", value: editing.value ? "编辑" : "查看"}
+  ...detailRows(props.state.object)
 ]));
 const unitPreferences = useUnitPreferences();
 
@@ -105,7 +94,9 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
 const OBJECT_DETAIL_ROWS = Object.freeze({
   [OBJECT_KIND.CITY]: object => [
     ...(object.type && object.type !== "city" ? [{label: "类型", value: {capital: "首都", provincial: "省会", port: "港口"}[object.type] || object.type}] : []),
-    {label: "人口", value: formatPopulationValue(object.population)},
+    {label: "人口", value: formatPopulationValue(object.population), editor: {type: "number", label: "城市人口（人）",
+      value: Math.round(populationUnitsToPeople(object.population, unitPreferences.value)), min: 0, max: 1000000000, step: 1,
+      invalid: "请输入 0～1,000,000,000 的整数人数。", apply: people => props.callbacks.onPopulationChange(object.id, peopleToPopulationUnits(people, unitPreferences.value))}},
     {label: "国家", value: object.state},
     {label: "省份", value: object.province},
     {label: "对象 id", value: object.id, debug: true}

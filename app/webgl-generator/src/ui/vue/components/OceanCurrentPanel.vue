@@ -31,15 +31,8 @@
   />
 
 
-  <UiDetailGrid class-name="ocean-current-panel-details" empty-text="未选中洋流" :rows="detailRows" />
+  <UiDetailGrid :key="selected?.id" class-name="ocean-current-panel-details" empty-text="未选中洋流" :rows="detailRows" />
 
-  <UiTextEditField
-    v-if="selected"
-    class-name="ocean-current-name-editor"
-    :model-value="selected.name"
-    :max-length="80"
-    @apply="name => callbacks.onRename?.(selected.id, name)"
-  />
 </template>
 
 <script setup>
@@ -51,7 +44,6 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 
 defineOptions({name: "OceanCurrentPanel"});
@@ -107,6 +99,8 @@ const summaryMetrics = computed(() => [
   {label: "模型", value: algorithmLabel.value}
 ]);
 const detailRows = computed(() => selected.value ? [
+  {label: "名称", value: selected.value.name,
+    editor: {value: selected.value.name, maxLength: 80, apply: value => props.callbacks.onRename?.(selected.value.id, value)}},
   {label: "海盆", value: `#${selected.value.basinFeatureId}`},
   {label: "性质", value: selected.value.temperatureLabel},
   {label: "半球", value: selected.value.hemisphereLabel},

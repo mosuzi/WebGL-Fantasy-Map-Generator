@@ -60,7 +60,7 @@
     @action="handleListAction"
   />
 
-  <UiDetailGrid class-name="culture-panel-details" empty-text="未选中文化" :rows="detailRows" />
+  <UiDetailGrid ref="detailGrid" :key="selected?.id" class-name="culture-panel-details" empty-text="未选中文化" :rows="detailRows" />
 
   <UiSelectField
     input-id="culture-assignment-target"
@@ -79,33 +79,8 @@
   />
 
   <UiActionDock v-if="selected" host-id="CulturePanel" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
-    <template #rename>
-      <UiTextEditField
-        class-name="culture-name-editor"
-        :model-value="selected.rawName"
-        :max-length="48"
-        @apply="name => callbacks.onRename(selected.id, name)"
-      />
-    </template>
 
-    <template #color>
-      <UiColorActionPanel
-        class-name="culture-color-field"
-        :model-value="selected.color"
-        @apply="color => callbacks.onColorChange(selected.id, color)"
-      />
-    </template>
 
-    <template #parent>
-      <UiSelectField
-        input-id="culture-parent-select"
-        class-name="culture-parent-select"
-        label="继承自"
-        :model-value="selected.parentId"
-        :options="parentOptions"
-        @update:model-value="parentId => callbacks.onParentChange(selected.id, parentId)"
-      />
-    </template>
 
     <template #expansion>
       <div class="social-expansion-editor" aria-label="文化中心与扩张编辑">
@@ -147,32 +122,21 @@
       </div>
     </template>
 
-    <template #note>
-      <UiNoteField
-        class-name="culture-note-editor"
-        :model-value="selected.noteBody"
-        @apply="body => callbacks.onNoteChange(selected.id, body)"
-        @clear="callbacks.onNoteChange(selected.id, '')"
-      />
-    </template>
   </UiActionDock>
 </template>
 
 <script setup>
-import {Aim, Brush, BrushFilled, Delete, Document, EditPen, MagicStick, Plus, Reading, RefreshLeft, Share} from "@element-plus/icons-vue";
+import {Aim, Brush, Delete, MagicStick, Plus, Reading, RefreshLeft} from "@element-plus/icons-vue";
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
-import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
-import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import UiTreeDisplayPanel from "./base/UiTreeDisplayPanel.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
@@ -221,6 +185,7 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);
 const treePanelOpen = computed({
@@ -242,12 +207,8 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   : null);
 const cultureActions = computed(() => [
   {key: "assign", resultClass: "toggle-canvas-mode", label: props.state.assignmentActive ? "退出文化归属笔刷" : "编辑文化归属", icon: Brush, panel: false, active: props.state.assignmentActive},
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen},
-  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: BrushFilled},
-  {key: "parent", resultClass: "open-secondary", label: "调整继承", icon: Share},
   {key: "expansion", resultClass: "open-secondary", label: "中心与扩张", icon: Aim},
   {key: "namebase", resultClass: "open-other-panel", label: "名称库绑定", icon: Reading},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: Document}
 ]);
 const assignmentOptions = computed(() => [
   {value: 0, label: "无文化"},
@@ -288,21 +249,30 @@ const summaryMetrics = computed(() => [
 ]);
 
 const detailRows = computed(() => selected.value ? [
+  {label: "颜色", value: selected.value.color,
+    editor: {type: "color", value: selected.value.color, apply: color => props.callbacks.onColorChange(selected.value.id, color)}},
+  {label: "名称", value: selected.value.rawName,
+    editor: {value: selected.value.rawName, maxLength: 48, apply: value => props.callbacks.onRename?.(selected.value.id, value)}},
   {label: "词根", value: selected.value.root},
-  {label: "类型", value: selected.value.typeLabel},
-  {label: "父级", value: selected.value.parentName},
+  {label: "类型", value: selected.value.typeLabel, editor: {type: "select", value: selected.value.type,
+    options: cultureTypeOptions.map(type => ({value: type, label: cultureTypeLabel(type)})), apply: value => props.callbacks.onApplyExpansion?.({mode: "save", type: value})}},
+  {label: "父级", value: selected.value.parentName,
+    editor: {type: "select", value: selected.value.parentId, options: parentOptions.value, apply: id => props.callbacks.onParentChange(selected.value.id, id)}},
   {label: "子级", value: formatNumber(selected.value.childCount)},
   {label: "继承路径", value: selected.value.treePath},
   {label: "命名风格", value: selected.value.nameStyleLabel},
-  {label: "扩张", value: formatNumber(selected.value.expansionism)},
-  {label: "中心 pack cell", value: selected.value.centerCell, debug: true},
+  {label: "扩张", value: formatNumber(selected.value.expansionism), editor: {type: "number", value: selected.value.expansionism,
+    min: 0.1, max: 10, step: 0.1, apply: value => props.callbacks.onApplyExpansion?.({mode: "save", expansionism: value})}},
+  {label: "中心 pack cell", value: selected.value.centerCell, debug: true, editor: {type: "number", value: selected.value.centerCell, min: 0, step: 1,
+    apply: value => props.callbacks.onApplyExpansion?.({mode: "save", center: value})}},
   {label: "中心 grid cell", value: selected.value.gridCenterCell, debug: true},
   {label: "覆盖区域", value: formatNumber(selected.value.cells)},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "乡村人口", value: formatPopulationValue(selected.value.rural)},
   {label: "城市人口", value: formatPopulationValue(selected.value.urban)},
   {label: "城市", value: formatNumber(selected.value.cities)},
-  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"},
+  {label: "备注", value: selected.value.noteBody || "无",
+    editor: {type: "note", value: selected.value.noteBody, maxLength: 1000, apply: body => props.callbacks.onNoteChange(selected.value.id, body)}},
   {label: "主要国家", value: selected.value.stateSummary}
 ] : []);
 
@@ -312,7 +282,7 @@ watch(() => selected.value?.id, id => {
   if (!sameObjectId(renameRequestId.value, id)) return;
   renameRequestId.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 }, {immediate: true});
 
@@ -367,7 +337,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;
-    activeAction.value = "rename";
+    detailGrid.value?.edit("名称");
   });
 }
 

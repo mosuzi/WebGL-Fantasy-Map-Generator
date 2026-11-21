@@ -120,7 +120,7 @@ try {
     assert.deepEqual(await snapshot(), keyboardBefore);
     await panel.screenshot({path: join(output, `${target}-desktop.png`)});
     await page.setViewportSize({width: 690, height: 960});
-    const layout = await panel.locator(".city-attribute-shortcuts").evaluate(element => ({width: element.clientWidth, scrollWidth: element.scrollWidth, buttons: [...element.querySelectorAll("button")].map(button => ({label: button.getAttribute("aria-label"), width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height}))}));
+    const layout = await panel.getByRole("group", {name: "城市属性"}).evaluate(element => ({width: element.clientWidth, scrollWidth: element.scrollWidth, buttons: [...element.querySelectorAll("button")].map(button => ({label: button.getAttribute("aria-label"), width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height}))}));
     assert.equal(layout.width, layout.scrollWidth, "窄面板图标组不得溢出");
     assert.equal(layout.buttons.length, 6);
     assert.ok(layout.buttons.every(button => button.width >= 32 && button.height >= 32));
@@ -188,8 +188,8 @@ async function verifyDevelopment(id) {
     const result = await window.webglGeneratorApi.edit.cities.setPopulation(id, 543.21);
     if (!result.ok) throw new Error(JSON.stringify(result.error));
   }, id);
-  await button("调整人口").click();
-  const dialog = panel.locator(".city-population-controls");
+
+  const dialog = panel;
   await dialog.getByRole("button", {name: "采用潜在人口", exact: true}).click();
   const regenerated = await read();
   assert.notEqual(regenerated.population, 543.21);

@@ -37,7 +37,7 @@ Wrapper 应负责：
 - 排序使用 `UiSortBar`。
 - 列表使用 `UiObjectTable`。
 - 只读字段使用 `UiDetailGrid`。
-- 名称、颜色、数字编辑分别使用 `UiTextEditField`、`UiColorField`、`UiNumberField`。
+- 详情中已有的单字段编辑使用 `UiDetailGrid` 的 `editor` 或独立的 `UiInlineValue`。点击数值或名称原位编辑，回车或失焦提交，Esc 取消，下拉选项选定即提交。颜色复用 `UiColorField`，需要预览影响的字段仍走原有预览。
 - 可撤销面板统一使用面板框架标题栏的撤销 / 重做入口；内容区不再重复放置大号历史按钮。高度编辑器的笔刷撤销 / 重做属于编辑工具本身，可保留在内容区。
 
 如果某个字段需要特殊交互，例如河流宽度滑动条，可以组合 `UiSliderField` 和 `UiButton`，但仍只通过 wrapper 回调提交命令。

@@ -74,7 +74,7 @@
     </div>
   </section>
 
-  <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
+  <UiDetailGrid ref="detailGrid" :key="selected?.id" class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
   <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
     v-bind="regenerationLocks.tableProps"
@@ -306,44 +306,6 @@
   </details>
 
   <UiActionDock v-if="selectedState" host-id="MilitaryPanel" v-model:active="activeAction" :actions="militaryActions">
-    <template #rename>
-      <UiTextEditField
-        class-name="military-name-editor"
-        data-ui-name-spacing="preserve"
-        label="军团"
-        :model-value="selected?.name || ''"
-        :max-length="40"
-        @apply="applyRename"
-      />
-    </template>
-    <template #status>
-      <div class="military-status-panel military-editor-panel">
-        <div class="military-status-heading">
-          <strong>{{ selected?.name || "未选中军团" }}</strong>
-          <span>{{ selected?.stateName || "无所属国家" }}</span>
-        </div>
-        <div class="military-editor-context">
-          <span>
-            <small>当前态势</small>
-            <b>{{ selected?.statusLabel || "无" }}</b>
-          </span>
-          <span>
-            <small>当前命令</small>
-            <b>{{ selected?.orderLabel || "无" }}</b>
-          </span>
-        </div>
-        <UiSelectField
-          input-id="military-status-editor"
-          class-name="military-status-editor"
-          label="态势"
-          :model-value="statusDraft"
-          :options="statusEditOptions"
-          :disabled="!selected"
-          @update:model-value="setStatusDraft"
-        />
-        <UiButton class="military-status-apply" variant="secondary" :disabled="!selected || statusDraft === selected.status" @click="applyStatus">应用态势</UiButton>
-      </div>
-    </template>
     <template #batchStatus>
       <div class="military-status-panel military-editor-panel">
         <div class="military-status-heading">
@@ -445,7 +407,7 @@
 </template>
 
 <script setup>
-import {EditPen, Flag, List, PieChart, Place, RefreshLeft} from "@element-plus/icons-vue";
+import {List, PieChart, Place, RefreshLeft} from "@element-plus/icons-vue";
 import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, nextTick, reactive, ref, watch} from "vue";
@@ -462,7 +424,6 @@ import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
-import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatMilitary, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
@@ -517,10 +478,10 @@ const militaryOverviewIcons = Object.freeze({
   mountain: "⌂",
   artillery: "✦"
 });
+const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);
 const ratioDraft = reactive({});
-const statusDraft = ref("garrisoned");
 const batchStatusDraft = ref("garrisoned");
 const stationDestinationDraft = ref("capital");
 const battleEventsImportStatus = ref("");
@@ -678,8 +639,6 @@ const statusEditOptions = computed(() => {
   return options;
 });
 const militaryActions = computed(() => [
-  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: EditPen, disabled: !selected.value},
-  {key: "status", resultClass: "open-secondary", label: "调整态势", icon: Flag, disabled: !selected.value},
   {key: "batchStatus", resultClass: "open-secondary", label: "批量态势", icon: List, disabled: !visibleRows.value.length},
   {key: "station", resultClass: "open-secondary", label: "驻地基地", icon: Place, disabled: !selected.value},
   {key: "ratios", resultClass: "open-secondary", label: "兵种比例", icon: PieChart, panelWidth: 620, panelHeight: 620}
@@ -738,8 +697,10 @@ const militaryDossierGroups = computed(() => selected.value ? [
 
 const detailRows = computed(() => selected.value ? [
   {label: "国家", value: selected.value.stateName},
-  {label: "军团", value: selected.value.name},
-  {label: "态势", value: selected.value.statusLabel},
+  {label: "军团", value: selected.value.name,
+    editor: {value: selected.value.name, maxLength: 40, apply: applyRename}},
+  {label: "态势", value: selected.value.statusLabel,
+    editor: {type: "select", value: selected.value.status, options: statusEditOptions.value, apply: value => props.callbacks.onStatusApply?.(militaryTarget(selected.value), value)}},
   {label: "命令", value: selected.value.orderLabel},
   {label: "兵力", value: formatMilitaryValue(selected.value.troops)},
   {label: "兵种", value: selected.value.unitSummary},
@@ -761,16 +722,14 @@ const selectedStationDestination = computed(() => stationDestinationOptions.valu
 
 watch(() => selectedState.value?.id, syncRatioDraft, {immediate: true});
 watch(() => props.state.version, syncRatioDraft);
-watch(() => selected.value?.id, syncStatusDraft, {immediate: true});
 watch(() => selected.value?.id, id => {
   activeAction.value = null;
   if (!sameObjectId(renameRequestId.value, id)) return;
   renameRequestId.value = null;
   nextTick(() => {
-    activeAction.value = "rename";
+    detailGrid.value?.edit("军团");
   });
 });
-watch(() => selected.value?.status, syncStatusDraft);
 watch(() => selected.value?.id, syncStationDestinationDraft, {immediate: true});
 watch(() => stationDestinationOptions.value.map(option => option.value).join("|"), syncStationDestinationDraft);
 watch(() => `${selected.value?.id || ""}|${selectedBattleChainOptions.value.map(option => option.value).join("|")}`, syncBattleChainFilter, {immediate: true});
@@ -946,14 +905,6 @@ function applyRatios() {
   activeAction.value = null;
 }
 
-function syncStatusDraft() {
-  statusDraft.value = selected.value?.status || "garrisoned";
-}
-
-function setStatusDraft(value) {
-  statusDraft.value = value;
-}
-
 function setBatchStatusDraft(value) {
   batchStatusDraft.value = value;
 }
@@ -987,15 +938,6 @@ function setEventApplyFilter(value) {
   props.callbacks.onEventApplyFilter?.(battleEventApplyFilterOptions.some(option => option.value === value) ? value : "all");
 }
 
-function applyStatus() {
-  if (!selected.value) return;
-  props.callbacks.onStatusApply?.({
-    id: selected.value.id,
-    stateId: selected.value.stateId,
-    regimentId: selected.value.regimentId
-  }, statusDraft.value);
-  activeAction.value = null;
-}
 
 function applyBatchStatus() {
   const targets = visibleRows.value.map(row => ({
@@ -1077,7 +1019,7 @@ function openRenameEditor(row) {
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;
-    activeAction.value = "rename";
+    detailGrid.value?.edit("军团");
   });
 }
 

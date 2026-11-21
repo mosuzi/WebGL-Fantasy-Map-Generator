@@ -2826,31 +2826,31 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .river-panel-summary div,
-.river-panel-details div,
+.river-panel-details > .ui-key-value-item,
 .lake-panel-summary div,
-.lake-panel-details div,
+.lake-panel-details > .ui-key-value-item,
 .measurement-panel-summary div,
-.measurement-panel-details div {
+.measurement-panel-details > .ui-key-value-item {
   display: grid;
   gap: 3px;
 }
 
 .river-panel-summary span,
-.river-panel-details span,
+.river-panel-details .ui-key-value-label,
 .lake-panel-summary span,
-.lake-panel-details span,
+.lake-panel-details .ui-key-value-label,
 .measurement-panel-summary span,
-.measurement-panel-details span {
+.measurement-panel-details .ui-key-value-label {
   color: var(--panel-text);
   font-size: 11px;
 }
 
 .river-panel-summary strong,
-.river-panel-details strong,
+.river-panel-details .ui-key-value-value,
 .lake-panel-summary strong,
-.lake-panel-details strong,
+.lake-panel-details .ui-key-value-value,
 .measurement-panel-summary strong,
-.measurement-panel-details strong {
+.measurement-panel-details .ui-key-value-value {
   color: var(--panel-text);
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -3152,53 +3152,6 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   padding: 10px;
 }
 
-.ui-secondary-action-panel.is-quick-input .ui-secondary-action-header {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 1;
-  width: 32px;
-  min-height: 32px;
-  padding: 0;
-  border: 0;
-}
-
-.ui-secondary-action-panel.is-quick-input .ui-secondary-action-close {
-  width: 32px;
-  height: 32px;
-  flex-basis: 32px;
-}
-
-.ui-secondary-action-panel.is-quick-input .ui-secondary-action-body {
-  padding: 8px 48px 8px 8px;
-}
-
-.ui-secondary-action-panel.is-quick-input .ui-secondary-action-body > * {
-  margin: 0;
-}
-
-.ui-secondary-action-panel.is-quick-input .ui-secondary-action-body label {
-  display: block;
-}
-
-.ui-secondary-action-panel.is-quick-input .ui-secondary-action-body label > span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-}
-
-.ui-secondary-action-panel.is-quick-input .el-input__wrapper {
-  padding: 0 8px;
-}
-
-.ui-secondary-action-panel.is-quick-input .el-input__inner {
-  padding: 0;
-}
 
 .ui-color-action-panel {
   min-width: 0;
@@ -4390,17 +4343,17 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   border-top: 1px solid var(--panel-border);
 }
 
-.state-panel-details div {
+.state-panel-details > .ui-key-value-item {
   display: grid;
   gap: 3px;
 }
 
-.state-panel-details span {
+.state-panel-details .ui-key-value-label {
   color: var(--panel-text);
   font-size: 11px;
 }
 
-.state-panel-details strong {
+.state-panel-details .ui-key-value-value {
   color: var(--panel-text);
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -4712,17 +4665,17 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   border-top: 1px solid var(--panel-border);
 }
 
-.province-panel-details div {
+.province-panel-details > .ui-key-value-item {
   display: grid;
   gap: 3px;
 }
 
-.province-panel-details span {
+.province-panel-details .ui-key-value-label {
   color: var(--panel-text);
   font-size: 11px;
 }
 
-.province-panel-details strong {
+.province-panel-details .ui-key-value-value {
   color: var(--panel-text);
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -4918,17 +4871,17 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   border-top: 1px solid var(--panel-border);
 }
 
-.route-panel-details div {
+.route-panel-details > .ui-key-value-item {
   display: grid;
   gap: 3px;
 }
 
-.route-panel-details span {
+.route-panel-details .ui-key-value-label {
   color: var(--panel-text);
   font-size: 11px;
 }
 
-.route-panel-details strong {
+.route-panel-details .ui-key-value-value {
   color: var(--panel-text);
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -7958,11 +7911,6 @@ input.ui-switch-native {
   border-top: 1px solid var(--panel-border);
 }
 
-.city-population-controls { display: grid; gap: 8px; margin: 12px 0; font-size: 12px; }
-.city-population-controls form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
-.city-population-controls label { display: grid; gap: 4px; max-width: 100%; }
-.city-population-controls input { width: 150px; max-width: 100%; padding: 6px 8px; color: inherit; background: var(--panel-surface); border: 1px solid var(--panel-border); border-radius: 4px; }
-.city-population-controls > span { opacity: .85; overflow-wrap: anywhere; }
 
 .city-attribute-shortcuts {
   display: flex;
@@ -7995,17 +7943,17 @@ input.ui-switch-native {
   color: var(--panel-text);
 }
 
-.city-panel-details div {
+.city-panel-details > .ui-key-value-item {
   display: grid;
   gap: 3px;
 }
 
-.city-panel-details span {
+.city-panel-details .ui-key-value-label {
   color: var(--panel-text);
   font-size: 11px;
 }
 
-.city-panel-details strong {
+.city-panel-details .ui-key-value-value {
   color: var(--panel-text);
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -8678,17 +8626,17 @@ input.ui-switch-native {
   background: var(--panel-surface-alt);
 }
 
-.government-panel-details div {
+.government-panel-details > .ui-key-value-item {
   display: grid;
   gap: 3px;
 }
 
-.government-panel-details span {
+.government-panel-details .ui-key-value-label {
   color: var(--panel-text);
   font-size: 11px;
 }
 
-.government-panel-details strong {
+.government-panel-details .ui-key-value-value {
   color: var(--panel-text);
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -9013,13 +8961,13 @@ input.ui-switch-native {
 }
 
 .military-panel-summary span,
-.military-panel-details span {
+.military-panel-details .ui-key-value-label {
   color: var(--panel-text);
   font-size: 11px;
 }
 
 .military-panel-summary strong,
-.military-panel-details strong {
+.military-panel-details .ui-key-value-value {
   overflow: hidden;
   color: var(--panel-text);
   font-size: 13px;
@@ -9228,7 +9176,7 @@ input.ui-switch-native {
   background: var(--panel-surface-alt);
 }
 
-.military-panel-details div {
+.military-panel-details > .ui-key-value-item {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -9844,23 +9792,23 @@ input.ui-switch-native {
   border-top: 1px solid var(--panel-border);
 }
 
-.culture-panel-details div,
-.religion-panel-details div,
-.diplomacy-panel-details div {
+.culture-panel-details > .ui-key-value-item,
+.religion-panel-details > .ui-key-value-item,
+.diplomacy-panel-details > .ui-key-value-item {
   display: grid;
   gap: 3px;
 }
 
-.culture-panel-details span,
-.religion-panel-details span,
-.diplomacy-panel-details span {
+.culture-panel-details .ui-key-value-label,
+.religion-panel-details .ui-key-value-label,
+.diplomacy-panel-details .ui-key-value-label {
   color: var(--panel-text);
   font-size: 11px;
 }
 
-.culture-panel-details strong,
-.religion-panel-details strong,
-.diplomacy-panel-details strong {
+.culture-panel-details .ui-key-value-value,
+.religion-panel-details .ui-key-value-value,
+.diplomacy-panel-details .ui-key-value-value {
   color: var(--panel-text);
   font-size: 13px;
   overflow-wrap: anywhere;

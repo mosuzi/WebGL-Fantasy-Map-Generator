@@ -25,7 +25,7 @@ const FILES = Object.freeze({
   cityWrapper: "app/webgl-generator/src/ui/panels/city-panel.js",
   objectTable: "app/webgl-generator/src/ui/vue/components/base/UiObjectTable.vue",
   filterInput: "app/webgl-generator/src/ui/vue/components/base/UiFilterInput.vue",
-  textEdit: "app/webgl-generator/src/ui/vue/components/base/UiTextEditField.vue",
+  textEdit: "app/webgl-generator/src/ui/vue/components/base/UiInlineValue.vue",
   objectDetailsVue: "app/webgl-generator/src/ui/vue/components/ObjectDetailsPanel.vue",
   objectDetailsWrapper: "app/webgl-generator/src/ui/panels/object-details-panel.js",
   editCommands: "app/webgl-generator/src/runtime/object-edit-commands.js"
@@ -204,7 +204,7 @@ function definitions() {
         step("解析与替换", FILES.runtime, ["async function importMapData", "importParsedMapDocumentViaApi"]),
         step("事务回滚", FILES.runtime, ["runMapReplace", "restoreMapReplaceSnapshot"]),
         step("历史与选择", FILES.runtime, ["state.editHistory.clear()", "state.selectionStore.clear()"]),
-        step("反馈与诊断", FILES.runtime, ["reportMapImportError", "正在${sourceLabel}导入地图数据", "导入地图数据：seed"])
+        step("反馈与诊断", FILES.runtime, ["reportMapImportError", "正在${sourceLabel}导入地图数据", "已${sourceLabel}导入地图数据。"])
       ],
       expectedResult: "验证、迁移并替换当前地图，刷新 renderer、对象索引和面板",
       history: "地图替换清空旧编辑历史",
@@ -334,7 +334,7 @@ function definitions() {
           recovery: "重复退出返回 false，不改变地图"
         }),
         visibleAction("details-rename", "对象详情：手工重命名", [
-          sourceRef(FILES.objectDetailsVue, ["@apply=\"callbacks.onRename\""]),
+          sourceRef(FILES.objectDetailsVue, ["apply: callbacks.onRename"]),
           sourceRef(FILES.objectDetailsWrapper, ["onRename: name => callbacks.onRename"]),
           sourceRef(FILES.runtime, ["onRename:", "createRenameObjectCommand", "executeEditCommand"], {anchor: "createObjectDetailsPanel(documentRef", end: "next-panel-factory"})
         ], {
@@ -347,7 +347,7 @@ function definitions() {
           sourceRef(FILES.objectDetailsVue, ["callbacks.onRenameFromNamebase?.()"]),
           sourceRef(FILES.objectDetailsWrapper, ["onRenameFromNamebase: () => callbacks.onRenameFromNamebase"]),
           sourceRef(FILES.runtime, ["onRenameFromNamebase:", "renameSelectedObjectFromNamebase"], {anchor: "createObjectDetailsPanel(documentRef", end: "next-panel-factory"}),
-          sourceRef(FILES.runtime, ["createSelectedNamebaseRenameCommand", "executeEditCommand", "noopStatus", "status:"], {anchor: "function renameSelectedObjectFromNamebase", span: 2200})
+          sourceRef(FILES.runtime, ["createNamebaseRenameObjectsCommand", "executeEditCommand", "noopStatus", "status:"], {anchor: "function renameSelectedObjectFromNamebase", span: 2200})
         ], {
           result: "按对象绑定名称库生成并应用新名称",
           historyEffect: "成功执行一条可撤销名称库重命名命令",
@@ -448,13 +448,13 @@ function definitions() {
       browser: ["F1 城市行定位并核对 selection / 相机"]
     }),
     flow("HF-13", "重命名选中对象", {
-      surfaces: ["panel:city-panel", "shared:ui-text-edit-field"],
+      surfaces: ["panel:city-panel", "shared:ui-inline-value"],
       actions: renameHostActions(),
-      entry: "领域面板或对象详情中的名称字段“应用”",
+      entry: "点击领域面板或对象详情中的名称",
       preconditions: "已选择可重命名对象且名称有效",
       chain: [
-        step("字段组件", FILES.textEdit, ["defineEmits", "apply"]),
-        step("领域 Vue", FILES.cityVue, ["@apply=\"name => callbacks.onRename(selected.id, name)\""]),
+        step("字段组件", FILES.textEdit, ["keyDown", "apply"]),
+        step("领域 Vue", FILES.cityVue, ["apply: value => callbacks.onRename(selected.id, value)"]),
         step("wrapper callback", FILES.cityWrapper, ["onRename: (cityId, name) => callbacks.onRename"]),
         step("runtime handler", FILES.runtime, ["onRename: (cityId, name)", "createRenameObjectCommand"]),
         step("命令执行", FILES.runtime, ["executeEditCommand(state, documentRef, command", "state.editHistory.execute"]),
@@ -464,7 +464,7 @@ function definitions() {
       history: "单次应用写一条可撤销编辑命令",
       feedback: "字段回显、地图标签和历史摘要更新",
       exitRecovery: "无变化视为 noop；失败不写历史；可撤销 / 重做",
-      firstUse: "明确的应用动作表示提交字段",
+      firstUse: "直接点击名称编辑，回车或失焦保存",
       expertUse: "面板与稳定 API 共用命令语义",
       decisions: [DECISIONS.commands, DECISIONS.feedback, DECISIONS.audit],
       browser: ["F1 城市重命名、撤销、重做后恢复原名"]
@@ -616,14 +616,14 @@ function renameHostActions() {
     State: "createRenameObjectCommand",
     OceanCurrent: "createRenameOceanCurrentCommand"
   };
-  return discoverVueHosts("UiTextEditField", {excludeBase: true}).map(({file, name}) => {
+  return discoverVueHosts("onRename", {excludeBase: true}).filter(({name}) => name === "NamebasePanel" || Object.hasOwn(commandByBase, name.replace(/Panel$/, ""))).map(({file, name}) => {
     const base = name.replace(/Panel$/, "");
     const panelSlug = slug(base);
     const wrapper = `app/webgl-generator/src/ui/panels/${panelSlug}-panel.js`;
     if (base === "Namebase") {
       return visibleAction("rename-namebase", "Namebase 用户名称库重命名", [
-        sourceRef(file, ["UiTextEditField", "@apply=\"value => callbacks.onRenameUser"]),
-        sourceRef(FILES.textEdit, ["@keydown.enter", "emit(\"apply\""]),
+        sourceRef(file, ["onRenameUser", "apply:"]),
+        sourceRef(FILES.textEdit, ["keyDown", "props.editor.apply(value)"]),
         sourceRef(wrapper, ["onRenameUser:", "callbacks.onRenameUser"]),
         sourceRef(FILES.runtime, ["onRenameUser:", "renameImportedNamebase"], {anchor: "createNamebasePanel(documentRef", end: "next-panel-factory"}),
         sourceRef(FILES.runtime, ["createRenameUserNamebaseCommand", "executeNamebaseEdit"], {anchor: "function renameImportedNamebase", span: 1800})
@@ -640,16 +640,16 @@ function renameHostActions() {
     if (!commandToken) throw new Error(`缺少 ${base} 重命名命令映射`);
     if (base === "OceanCurrent") {
       return visibleAction("rename-ocean-current", "OceanCurrent 重命名", [
-        sourceRef(file, ["UiTextEditField", "@apply"]),
-        sourceRef(FILES.textEdit, ["@keydown.enter", "emit(\"apply\""]),
+        sourceRef(file, ["onRename", "apply:"]),
+        sourceRef(FILES.textEdit, ["keyDown", "props.editor.apply(value)"]),
         sourceRef(wrapper, [`${callback}:`, `callbacks.${callback}`]),
         sourceRef(FILES.runtime, [`${callback}:`, "runtimeActions.oceanCurrents.rename"], {anchor, end: "next-panel-factory"}),
         sourceRef(FILES.runtime, ["function renameOceanCurrentViaApi", commandToken, "executeEditCommand"])
       ]);
     }
     return visibleAction(`rename-${panelSlug}`, `${base} 重命名`, [
-      sourceRef(file, ["UiTextEditField", "@apply"]),
-      sourceRef(FILES.textEdit, ["@keydown.enter", "emit(\"apply\""]),
+      sourceRef(file, ["onRename", "apply:"]),
+      sourceRef(FILES.textEdit, ["keyDown", "props.editor.apply(value)"]),
       sourceRef(wrapper, [`${callback}:`, `callbacks.${callback}`]),
       sourceRef(FILES.runtime, [`${callback}:`, commandToken, "executeEditCommand"], {anchor, end: "next-panel-factory"})
     ]);
@@ -680,16 +680,6 @@ function historyActions() {
     ];
   });
   actions.push(
-    visibleAction("undo-height-inline", "高度面板内容区撤销", [
-      sourceRef("app/webgl-generator/src/ui/vue/components/HeightPanel.vue", ["callbacks.onUndo?.()", "撤销上次"]),
-      sourceRef("app/webgl-generator/src/ui/panels/height-panel.js", ["onUndo:", "callbacks.onUndo"]),
-      sourceRef(FILES.runtime, ["onUndo:", "executeHistoryCommand"], {anchor: "createHeightPanel(documentRef", end: "next-panel-factory"})
-    ]),
-    visibleAction("redo-height-inline", "高度面板内容区重做", [
-      sourceRef("app/webgl-generator/src/ui/vue/components/HeightPanel.vue", ["callbacks.onRedo?.()", "重做上次"]),
-      sourceRef("app/webgl-generator/src/ui/panels/height-panel.js", ["onRedo:", "callbacks.onRedo"]),
-      sourceRef(FILES.runtime, ["onRedo:", "executeHistoryCommand"], {anchor: "createHeightPanel(documentRef", end: "next-panel-factory"})
-    ]),
     visibleAction("undo-shortcut", "Ctrl/Cmd+Z", [sourceRef(FILES.shortcuts, ["history.undo", "path: \"history.undo\""])]),
     visibleAction("redo-shift-shortcut", "Ctrl/Cmd+Shift+Z", [sourceRef(FILES.shortcuts, ["history.redo", "path: \"history.redo\""])]),
     visibleAction("redo-y-shortcut", "Ctrl/Cmd+Y", [sourceRef(FILES.shortcuts, ["history.redo", "binding(\"KeyY\""])]));
