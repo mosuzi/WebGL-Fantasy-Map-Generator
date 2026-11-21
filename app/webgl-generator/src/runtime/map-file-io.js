@@ -3,7 +3,7 @@ import {markerPresentationCount, markerPresentationRecords} from "../domains/mar
 import {normalizeVisualThemeDocument} from "../renderer/themes.js";
 import {ancientMetricStops} from "../renderer/ancient-colors.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
-import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
+import {LABEL_LAYOUT_VERSION, migrateLabelLayoutStore, normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
 import {PNG_FIXED_TEXT_ELEMENT_IDS, PNG_MILITARY_TEXT_SELECTOR, PNG_SEMANTIC_LABEL_SELECTORS} from "./canvas-text-contract.js";
 import {pngOutputSize, assertPngBudget} from "./png-export-size.js";
 import {preparePngDrawingResolution} from "./png-export-resolution.js";
@@ -403,7 +403,7 @@ function hasIncompleteLabelStore(labels) {
     || !Array.isArray(labels?.hidden?.city)
     || !Array.isArray(labels?.hidden?.state)
     || !Array.isArray(labels?.hidden?.province)
-    || labels.styles === undefined || labels.layout === undefined) return true;
+    || labels.styles === undefined || Number(labels.layout?.version) !== LABEL_LAYOUT_VERSION) return true;
   const hidden = labels.hidden.city.length + labels.hidden.state.length + labels.hidden.province.length;
   return labels.metadata?.custom !== labels.custom.length || labels.metadata?.hidden !== hidden;
 }
@@ -1438,7 +1438,7 @@ function normalizeLabelStoreV2(source) {
     custom,
     hidden: {...(source?.hidden || {}), city, state, province},
     styles: normalizeLabelStyleStore(source?.styles),
-    layout: normalizeLabelLayoutStore(source?.layout),
+    layout: normalizeLabelLayoutStore(migrateLabelLayoutStore(source?.layout)),
     metadata: {custom: custom.length, hidden: city.length + state.length + province.length}
   };
 }
@@ -1465,7 +1465,7 @@ function backfillLabelStoreV2(source) {
     custom,
     hidden,
     styles: source.styles === undefined ? normalizeLabelStyleStore() : source.styles,
-    layout: source.layout === undefined ? normalizeLabelLayoutStore() : source.layout,
+    layout: source.layout === undefined ? normalizeLabelLayoutStore() : migrateLabelLayoutStore(source.layout),
     metadata: {
       ...(source.metadata || {}),
       custom: Array.isArray(custom) ? custom.length : Number(source.metadata?.custom) || 0,
@@ -2975,7 +2975,8 @@ function drawTextOverlayElement(context, element, canvasRect, scale) {
   const isStateLabel = element.classList.contains("state-label");
   const isProvinceLabel = element.classList.contains("province-label");
   const content = element.querySelector(".map-label-content") || element;
-  const politicalGlyphs = isStateLabel || isProvinceLabel ? Array.from(element.querySelectorAll(".political-label-glyph")) : [];
+  const politicalGlyphs = isStateLabel || isProvinceLabel || element.classList.contains("manual-label-path")
+    ? Array.from(element.querySelectorAll(".political-label-glyph")) : [];
   const box = politicalGlyphs.length ? unionElementBoxes(politicalGlyphs, canvasRect, scale) : elementBox(content, canvasRect, scale);
   if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
   const outerStyle = element.ownerDocument.defaultView.getComputedStyle(element);

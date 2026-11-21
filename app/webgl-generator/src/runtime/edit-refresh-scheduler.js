@@ -153,6 +153,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
             ? state.renderer.activeRenderResourceBinding || retainedBinding
             : retainedBinding;
           measureStateBrush("refreshLabels", () => state.renderer.refreshLabels(labelBinding, {
+            positionTarget: sourceEffects?.labelPositionTarget,
             ...labelRefreshOptions(effects),
             politicalOnly: politicalLabelsOnly,
             stateIds: politicalLabelsOnly ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
@@ -293,6 +294,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
         const politicalLabelsOnly = stateNameOnly || politicalPatch && !effects.derived.includes("point-layers");
         await runStep(() => state.renderer.refreshLabels(retainedBinding, {
+          positionTarget: sourceEffects?.labelPositionTarget,
           ...labelRefreshOptions(effects),
           politicalOnly: politicalLabelsOnly,
           stateIds: politicalLabelsOnly ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds

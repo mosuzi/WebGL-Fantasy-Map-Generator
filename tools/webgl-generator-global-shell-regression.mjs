@@ -105,7 +105,7 @@ assert.match(appSource, /operation\?\.report\("read-storage", \{message: loading
 assert.match(appSource, /operation\?\.report\("decode-storage", \{message: loadingMessage\("map-import-decode"\)\}\)/, "浏览器存档解码阶段没有使用雅化加载文案");
 assert.doesNotMatch(appSource, /operation\?\.report\("(?:read|decode)-storage", \{message: "正在(?:读取|解码)浏览器存档"\}\)/, "启动加载页仍暴露浏览器存档技术动作");
 
-for (const id of ["open-generation-panel", "fit-view", "toggle-measurement", "open-development-panel", "collapse-global-tools", "expand-global-tools"]) {
+for (const id of ["open-generation-panel", "fit-view", "toggle-measurement", "edit-map-label-path", "open-development-panel", "collapse-global-tools", "expand-global-tools"]) {
   assert.equal(count(toolbarSource, new RegExp(`id="${id}"`, "g")), 1, `全局工具入口 ${id} 数量漂移`);
 }
 assert.match(toolbarSource, /v-show="!collapsed" class="map-toolbar-actions"/, "展开工具组没有统一受折叠状态控制");
@@ -115,7 +115,8 @@ assert.match(toolbarSource, /aria-label="展开全局工具"/, "展开入口缺�
 assert.doesNotMatch(toolbarSource, />\s*[‹›]\s*</, "工具栏收起入口仍依赖文本箭头字形");
 assert.equal(count(toolbarSource, /class="map-toolbar-chevron map-toolbar-chevron-(?:collapse|expand)"/g), 2, "收起与展开入口没有共用 SVG 箭头基类");
 assert.equal(count(toolbarSource, /viewBox="0 0 16 16"/g), 2, "SVG 箭头没有共用固定 viewBox");
-assert.equal(count(toolbarSource, /aria-hidden="true"/g), 2, "装饰性 SVG 箭头没有从可访问树隐藏");
+assert.equal(count(toolbarSource, /<svg\b[^>]*class="map-toolbar-chevron [^"]+"[^>]*aria-hidden="true"/g), 2, "装饰性 SVG 箭头没有从可访问树隐藏");
+assert.match(toolbarSource, /<svg\b[^>]*class="label-path-symbol"[^>]*aria-hidden="true"/, "标签排布图标应由按钮提供可访问名称");
 assert.equal(count(toolbarSource, /<path d="M10 3\.5 5\.5 8l4\.5 4\.5" \/>/g), 2, "两个方向没有复用同一条中心对称箭头路径");
 assert.match(storeSource, /toolbarCollapsed: false/, "旧偏好缺字段时没有默认展开");
 assert.match(storeSource, /typeof input\.toolbarCollapsed === "boolean"/, "折叠偏好没有严格布尔归一化");
@@ -206,7 +207,7 @@ console.log(JSON.stringify({
   version: packageJson.version,
   loadingVisual: "chinese-scroll",
   loadingLifecycle: ["loading", "ready", "error"],
-  globalToolEntries: 4,
+  globalToolEntries: 5,
   idleOpacity: 0.46,
   persistedPreference: "toolbarCollapsed"
 }, null, 2));

@@ -1,7 +1,7 @@
 import {LABEL_TARGET_KIND} from "./object-kinds.js";
 import {LABEL_STYLE_TYPE, labelStyleTypeForTarget} from "./label-style-registry.js";
 
-export const LABEL_LAYOUT_VERSION = 1;
+export const LABEL_LAYOUT_VERSION = 2;
 export const LABEL_PRIORITY_MIN = 0;
 export const LABEL_PRIORITY_MAX = 100;
 
@@ -15,7 +15,14 @@ export const LABEL_LAYOUT_DEFAULT_PRIORITY = Object.freeze({
 });
 
 const LABEL_TARGET_KINDS = new Set(Object.values(LABEL_TARGET_KIND));
-const OVERRIDE_FIELDS = new Set(["priority", "position"]);
+const OVERRIDE_FIELDS = new Set(["priority", "position", "path"]);
+
+// Version 1 contains only a priority and a fixed anchor. The absence of a path
+// in version 2 retains that placement, including the old position lock.
+export function migrateLabelLayoutStore(source) {
+  if (Number(source?.version) > LABEL_LAYOUT_VERSION) throw new Error("标签布局来自更新版本");
+  return Number(source?.version) === 1 ? {...source, version: 2} : source;
+}
 
 export function normalizeLabelLayoutStore(source, {strict = false} = {}) {
   if (strict && source !== undefined && (!source || typeof source !== "object" || Array.isArray(source))) throw new Error("标签布局存储无效");
@@ -70,8 +77,16 @@ export function patchLabelLayout(map, targetKind, targetId, patch) {
     else current.priority = normalizePriority(patch.priority, {strict: true});
   }
   if (Object.hasOwn(patch, "position")) {
-    if (patch.position === null || patch.position === undefined) delete current.position;
+    if (patch.position == null) {
+      delete current.position;
+      delete current.path;
+    }
     else current.position = normalizePosition(patch.position, {strict: true});
+  }
+  if (Object.hasOwn(patch, "path")) {
+    if (patch.path == null) delete current.path;
+    else if (current.position) current.path = normalizePath(patch.path);
+    else throw new Error("标签走向需要地图位置");
   }
   if (Object.keys(current).length) store.overrides[key] = current;
   else delete store.overrides[key];
@@ -139,7 +154,23 @@ function normalizeLabelLayoutOverride(source, {strict = false} = {}) {
     const position = normalizePosition(source.position, {strict});
     if (position) result.position = position;
   }
+  if (Object.hasOwn(source, "path")) {
+    if (!result.position) throw new Error("标签走向需要地图位置");
+    result.path = normalizePath(source.path);
+  }
   return result;
+}
+
+function normalizePath(source) {
+  const point = value => {
+    if (!Number.isFinite(value?.x) || !Number.isFinite(value?.y)) throw new Error("标签路径坐标无效");
+    return {x: value.x, y: value.y};
+  };
+  const start = point(source?.start), end = point(source?.end);
+  const {fontScale, breakAt} = source;
+  if ((start.x === end.x && start.y === end.y) || !Number.isFinite(fontScale) || fontScale <= 0
+    || !Number.isSafeInteger(breakAt) || breakAt < 0) throw new Error("标签路径无效");
+  return {start, end, fontScale, breakAt};
 }
 
 function parseLabelTargetKey(value, {strict = false} = {}) {
@@ -180,6 +211,7 @@ function cloneLayoutOverride(override) {
   if (!override) return {};
   return {
     ...(Number.isInteger(override.priority) ? {priority: override.priority} : {}),
-    ...(override.position ? {position: {...override.position}} : {})
+    ...(override.position ? {position: {...override.position}} : {}),
+    ...(override.path ? {path: normalizePath(override.path)} : {})
   };
 }

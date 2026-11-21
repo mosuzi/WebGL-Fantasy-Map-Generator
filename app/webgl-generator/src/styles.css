@@ -937,6 +937,13 @@ select:disabled {
   flex-grow: 0;
 }
 
+.label-path-symbol { display: none; }
+@media (max-width: 510px) {
+  .label-path-caption { display: none; }
+  .label-path-symbol { display: block; width: 21px; height: 21px; }
+  .map-toolbar #edit-map-label-path { min-width: 28px; padding-inline: 3px; }
+}
+
 .map-toolbar .debug-action[hidden] {
   display: none;
 }
@@ -1933,6 +1940,72 @@ select:disabled {
   transform-origin: center;
   white-space: pre;
 }
+
+.map-overlay .manual-label-path {
+  width: var(--label-box-width);
+  height: var(--label-box-height);
+  max-width: none;
+}
+
+.map-overlay .manual-label-path .map-label-content {
+  position: absolute;
+  inset: 0;
+  display: block;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+}
+
+.manual-label-path .political-label-glyph { letter-spacing: 0; }
+
+.label-path-editor[open] {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+.label-path-editor::backdrop { background: transparent; }
+body:has(.label-path-editor[open]) :is(.floating-panel-layer, .map-toolbar) { visibility: hidden; }
+body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
+.label-path-editor > svg { width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.label-path-editor svg:not(.has-label) > * { display: none; }
+.label-path-editor svg text { text-anchor: middle; dominant-baseline: central; user-select: none; cursor: move; }
+.label-path-guide { fill: none; stroke: #256865; stroke-width: 2; stroke-dasharray: 4 3; cursor: move; }
+.label-path-editor circle { fill: #fff8e9; stroke: #245f60; stroke-width: 2; cursor: grab; }
+.label-path-editor circle:focus-visible { stroke: #923d21; stroke-width: 3; }
+.label-path-source { visibility: hidden !important; }
+.label-path-tools {
+  position: absolute;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 20px);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #b4a794;
+  border-radius: 6px;
+  background: #fbf5e9;
+  color: #423a30;
+  font-size: 13px;
+}
+.label-path-tools button { width: auto; min-height: 32px; padding: 3px 12px; white-space: nowrap; }
+.label-path-tools button[hidden] { display: none; }
 
 .state-label.visible {
   opacity: calc(var(--label-opacity, 1) * var(--state-label-preview-opacity, var(--state-label-opacity, 1)));

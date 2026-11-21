@@ -5,6 +5,13 @@
       <UiButton id="fit-view" variant="secondary">适配视图</UiButton>
       <UiButton id="toggle-measurement" variant="secondary" aria-pressed="false">测量</UiButton>
       <MapContentSearch />
+      <UiButton id="edit-map-label-path" variant="secondary" aria-label="标签排布" title="标签排布" aria-haspopup="dialog">
+        <span class="label-path-caption">标签排布</span>
+        <svg class="label-path-symbol" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M3 17Q10 2 21 10" fill="none" stroke="currentColor" stroke-width="1.8" />
+          <g fill="currentColor"><circle cx="3" cy="17" r="2.3"/><circle cx="11" cy="8" r="2.3"/><circle cx="21" cy="10" r="2.3"/></g>
+        </svg>
+      </UiButton>
       <UiButton id="open-development-panel" class="debug-action" variant="secondary" hidden>开发模式</UiButton>
       <UiButton
         id="collapse-global-tools"

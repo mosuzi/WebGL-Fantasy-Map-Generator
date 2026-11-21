@@ -7,6 +7,8 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {MAP_SCHEMA_VERSION} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {LABEL_LAYOUT_VERSION} from "../app/webgl-generator/src/runtime/label-layout-registry.js";
 import {closeTask350BrowserResource, createTask350BrowserArtifact} from "./task-350-browser-artifact.mjs";
 import {collectTask350LongTaskWindow, partitionTask350StartupLongTasks, prepareTask350LongTaskObserver, resetTask350LongTaskWindow, summarizeTask350LongTasks} from "./task-350-browser-long-task.mjs";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
@@ -187,6 +189,7 @@ try {
       firstHeight: map.grid?.cells?.h?.[0] ?? null,
       heightType: map.grid?.cells?.h?.constructor?.name || "",
       documentSchemaVersion: map.metadata?.schemaVersion,
+      labelLayoutVersion: map.labels?.layout?.version,
       notesFormatVersion: map.notes?.metadata?.formatVersion,
       measurementVersion: map.measurements?.version,
       labelHiddenTables: [map.labels?.hidden?.city, map.labels?.hidden?.state, map.labels?.hidden?.province].map(Array.isArray),
@@ -216,7 +219,8 @@ try {
   assert.equal(restored.stateName, legacyPreparation.expected.stateName, "旧 v2 浏览器存档没有保留国家数据");
   assert.equal(restored.firstHeight, legacyPreparation.expected.firstHeight, "旧 v2 浏览器存档没有保留高度数据");
   assert.equal(restored.heightType, legacyPreparation.expected.heightType, "旧 v2 浏览器存档改变了高度数组类型");
-  assert.equal(restored.documentSchemaVersion, 3, "旧 v2 浏览器存档没有升级到当前地图 schema 版本");
+  assert.equal(restored.documentSchemaVersion, MAP_SCHEMA_VERSION, "旧 v2 浏览器存档没有升级到当前地图 schema 版本");
+  assert.equal(restored.labelLayoutVersion, LABEL_LAYOUT_VERSION, "旧 v2 浏览器存档没有升级到当前标签布局版本");
   assert.deepEqual(restored.brushRadii, {state: 28, province: 28, culture: 28, religion: 28, biome: 28, suitability: 28}, "旧 v2 浏览器存档没有补齐画笔大小");
   assert.equal(restored.notesFormatVersion, 1, "旧 v2 浏览器存档没有补回备注存储");
   assert.equal(restored.measurementVersion, 1, "旧 v2 浏览器存档没有补回测量存储");

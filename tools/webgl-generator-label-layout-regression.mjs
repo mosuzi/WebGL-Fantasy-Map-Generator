@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {manualLabelPlacement} from "../app/webgl-generator/src/renderer/manual-label-path.js";
 import {createDeleteLabelCommand, createMoveCustomLabelCommand, ensureLabelStore} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
 import {createPatchLabelLayoutCommand} from "../app/webgl-generator/src/runtime/label-layout-edit-commands.js";
 import {
@@ -16,7 +17,7 @@ import {
   sortLabelItemsByPriority,
   validateLabelLayoutStore
 } from "../app/webgl-generator/src/runtime/label-layout-registry.js";
-import {createCompressedMapDocumentBlob, createMapDocument, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {createCompressedMapDocumentBlob, createMapDocument, parseMapDocument, parseMapDocumentFile, parseMapDocumentPayload, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {LABEL_TARGET_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 
 const map = {
@@ -35,7 +36,7 @@ const map = {
 };
 const store = ensureLabelStore(map);
 store.custom.push({id: 1, text: "古道", x: 40, y: 50});
-assert.equal(ensureLabelLayoutStore(map).version, 1);
+assert.equal(ensureLabelLayoutStore(map).version, 2);
 assert.deepEqual(map.labels.layout.overrides, {});
 assert.equal(hasManualLabelPriorities(map), false, "旧图空覆盖必须继续走自动布局");
 
@@ -56,8 +57,8 @@ assert.equal(cityAuto.minScale, 1.2, "自动优先级不得改变旧 LOD");
 
 assert.throws(() => patchLabelLayout(map, "city", 1, {priority: 101}), /0 到 100/);
 assert.throws(() => patchLabelLayout(map, "city", 1, {position: {x: NaN, y: 2}}), /有限 x \/ y/);
-assert.throws(() => validateLabelLayoutStore({version: 1, overrides: {"route:1": {priority: 10}}}), /目标键无效/);
-assert.deepEqual(normalizeLabelLayoutStore({version: 99, overrides: {"city:1": {priority: 55}, "route:1": {priority: 90}}}), {version: 1, overrides: {"city:1": {priority: 55}}}, "宽容读取必须丢弃未知目标并回填当前版本");
+assert.throws(() => validateLabelLayoutStore({version: 2, overrides: {"route:1": {priority: 10}}}), /目标键无效/);
+assert.deepEqual(normalizeLabelLayoutStore({version: 99, overrides: {"city:1": {priority: 55}, "route:1": {priority: 90}}}), {version: 2, overrides: {"city:1": {priority: 55}}}, "宽容读取必须丢弃未知目标并回填当前版本");
 
 const history = new EditHistory();
 const context = {map};
@@ -107,16 +108,39 @@ history.undo(context);
 assert.deepEqual(readLabelLayoutOverride(map, "custom", 1).position, {x: 40, y: 50}, "撤销删除没有恢复布局覆盖");
 
 const document = createMapDocument(map, map.options);
+const oldBytes = await readFile(new URL("./fixtures/webgl-label-layout-v1-0.5.169.webfmg", import.meta.url));
+const imported = await parseMapDocumentFile({defaultView: globalThis}, new Blob([oldBytes]));
+assert.equal(imported.map.labels.layout.version, 2);
+assert.deepEqual(readLabelLayoutOverride(imported.map, "city", 0), {priority: 77, position: {x: 23, y: 31}});
+const curve = {start: {x: -25, y: 3}, end: {x: 30, y: 5}, fontScale: 1, breakAt: 0};
+const applyPath = createPatchLabelLayoutCommand({targetKind: "city", targetId: 0}, {path: curve});
+const singleGlyph = manualLabelPlacement({text: "燕", resolvedStyle: {fontSize: 15}}, {x: 80, y: 60},
+  {...curve, start: {x: -60, y: 21}, end: {x: 20, y: 10}}, 1, 1, 1).glyphs[0];
+assert.ok(Math.hypot(singleGlyph.x, singleGlyph.y) < 1e-9, "单字应落在中点手柄上");
+const oldContext = {map: imported.map};
+history.execute(applyPath, oldContext);
+history.undo(oldContext);
+assert.deepEqual(readLabelLayoutOverride(imported.map, "city", 0), {priority: 77, position: {x: 23, y: 31}});
+history.redo(oldContext);
+const saved = createMapDocument(imported.map, imported.options);
+assert.deepEqual(parseMapDocument(stringifyMapDocument(saved)).map.labels.layout.overrides["city:0"].path, curve);
+const binary = await createCompressedMapDocumentBlob({defaultView: globalThis}, saved);
+assert.deepEqual((await parseMapDocumentFile({defaultView: globalThis}, binary.blob)).map.labels.layout.overrides["city:0"].path, curve);
+assert.throws(() => patchLabelLayout(imported.map, "city", 0, {path: {...curve, start: {x: Infinity, y: 0}}}), /坐标无效/);
+const future = structuredClone(saved);
+future.map.labels.layout.version = 3;
+assert.throws(() => parseMapDocument(JSON.stringify(future)), /更新版本/);
+assert.throws(() => createMapDocument(future.map), /更新版本/);
 const roundTrip = parseMapDocument(stringifyMapDocument(document));
 assert.deepEqual(roundTrip.map.labels.layout, document.map.labels.layout, "完整地图往返没有保留标签布局");
 const oldV2 = structuredClone(document);
 delete oldV2.map.labels.layout;
 const parsedOldV2 = parseMapDocument(stringifyMapDocument(oldV2));
-assert.deepEqual(parsedOldV2.map.labels.layout, {version: 1, overrides: {}}, "旧 v2 缺字段没有在读取时回填布局存储");
-assert.deepEqual(createMapDocument(parsedOldV2.map, parsedOldV2.options).map.labels.layout, {version: 1, overrides: {}}, "旧 v2 再导出没有保留回填后的布局存储");
+assert.deepEqual(parsedOldV2.map.labels.layout, {version: 2, overrides: {}}, "旧 v2 缺字段没有在读取时回填布局存储");
+assert.deepEqual(createMapDocument(parsedOldV2.map, parsedOldV2.options).map.labels.layout, {version: 2, overrides: {}}, "旧 v2 再导出没有保留回填后的布局存储");
 const oldV1 = JSON.parse(await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8"));
 const migratedV1 = parseMapDocument(JSON.stringify(oldV1));
-assert.deepEqual(migratedV1.map.labels.layout, {version: 1, overrides: {}}, "v1 地图没有回填自动布局");
+assert.deepEqual(migratedV1.map.labels.layout, {version: 2, overrides: {}}, "v1 地图没有回填自动布局");
 const documentRef = {defaultView: globalThis};
 const compressed = await createCompressedMapDocumentBlob(documentRef, document);
 const gzipBase64 = Buffer.from(await compressed.blob.arrayBuffer()).toString("base64");

@@ -159,6 +159,7 @@ import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomL
 import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createResetLabelStyleCommand} from "./label-style-edit-commands.js";
 import {LABEL_STYLE_TYPES, readLabelStyleOverride, resolveLabelStyle} from "./label-style-registry.js";
 import {createPatchLabelLayoutCommand} from "./label-layout-edit-commands.js";
+import {bindLabelPathEditor} from "../ui/label-path-editor.js";
 import {readLabelLayoutOverride} from "./label-layout-registry.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
@@ -2918,6 +2919,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   state.riverEdit.controlPointDrag = bindRiverControlPointEditing(canvas, state, documentRef);
   bindObjectCreationTools(canvas, state, documentRef);
   bindCustomLabelDrag(state, documentRef);
+  state.labelPathEditor = bindLabelPathEditor(documentRef, state, (object, patch) => applyLabelLayoutPatch(state, documentRef, object, patch));
   bindEditingInteractionLock(canvas, state);
 
   const runtimePanelHandlers = {
@@ -5339,6 +5341,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
     await yieldMapLoadToBrowser(documentRef);
   }
   cancelAllDirectManipulationSessions("map-replace");
+  state.labelPathEditor?.close();
   cancelCityPopulationPointRefresh(state, documentRef);
   state.cityEdit.populationRefreshToken++;
   state.pendingCustomLabelPlacement = null;
@@ -12920,7 +12923,7 @@ function applyLabelLayoutPatch(state, documentRef, object, patch) {
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     noopStatus: "标签布局没有变化。",
-    status: `已更新标签 ${object.targetKind} #${object.targetId ?? object.id} 的显示布局。`,
+    status: "已更新标签排布。",
     throwOnError: false
   });
   updateRuntimePanel(documentRef, state);

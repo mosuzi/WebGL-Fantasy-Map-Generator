@@ -1,5 +1,6 @@
 import {buildObjectPickingIndex, CITY_PICK_RADIUS_CSS_PX, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRiverControlPoint, pickRoute, rebuildRoutesInPickingIndex, refreshNonRoutePickingIndexPreservingRoutes, refreshRiversInPickingIndex, refreshRoutesInPickingIndex, relocateCityInPickingIndex} from "./picking.js";
 import {goodDisplayName} from "../generator/economy-display-properties.js";
+import {manualLabelPlacement} from "./manual-label-path.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
@@ -2407,7 +2408,7 @@ export class PlaceholderMapRenderer {
     if (!this.map) return;
     const startedAt = performance.now();
     const resourceBinding = binding || this.labelLayoutResourceOwner || this.activeRenderResourceBinding || this.surfaceResourceOwner;
-    this.buildLabels(this.map, options);
+    if (!options.positionTarget || !this.refreshLabelPosition(options.positionTarget)) this.buildLabels(this.map, options);
     const builtAt = performance.now();
     if (resourceBinding) adoptOverlayLabelResourceBinding(this, resourceBinding);
     this.updateLabels();
@@ -2436,6 +2437,30 @@ export class PlaceholderMapRenderer {
       minScale: item.minScale,
       visible: item.visible
     };
+  }
+
+  refreshLabelPosition({targetKind, targetId}) {
+    const item = this.labelItems.find(label => label.targetKind === targetKind && label.targetId === targetId);
+    if (!item?.node.isConnected) return false;
+    const override = this.map.labels?.layout?.overrides?.[item.layout.key];
+    const point = override?.position || item.city || item.custom
+      || (item.state && stateLabelPlacement(this.map, item.state, item.text))
+      || (item.province && provinceLabelPlacement(this.map, item.province))
+      || (item.zone && wildernessLabelAnchor(this.map.pack, item.zone));
+    if (!point) return false;
+    item.x = point.x;
+    item.y = point.y;
+    const locked = Boolean(override?.position);
+    item.layout = {...item.layout, position: {...item.layout.position, x: point.x, y: point.y}, locked};
+    item.manualPath = override?.path;
+    item.node.dataset.labelPositionLocked = String(locked);
+    item.node.classList.toggle("position-locked", locked);
+    applyResolvedLabelStyle(item.node, item.resolvedStyle);
+    item.node.replaceChildren();
+    Object.assign(item, appendLabelNodeText(item.node, item, item.node.ownerDocument, item.styleType, item.manualPath));
+    item.displayText = item.text;
+    item.politicalPlacementSnapshot = null;
+    return true;
   }
 
   refreshTerrainCaches({draw = true, refreshSurface = true, refreshLines = true} = {}) {
@@ -4884,7 +4909,8 @@ export class PlaceholderMapRenderer {
       const node = documentRef.createElement("span");
       node.className = semanticLabelClassName(item.targetKind, item.city);
       markDynamicCanvasTextNode(node, item.styleType);
-      const {contentNode, glyphNodes} = appendLabelNodeText(node, item, documentRef, item.styleType);
+      const manualPath = map.labels?.layout?.overrides?.[item.layout.key]?.path;
+      const {contentNode, glyphNodes} = appendLabelNodeText(node, item, documentRef, item.styleType, manualPath);
       node.dataset.labelTargetKind = item.targetKind;
       node.dataset.labelTargetId = String(item.targetId);
       if (item.targetKind === LABEL_TARGET_KIND.ZONE) node.addEventListener("click", event => {
@@ -4899,7 +4925,7 @@ export class PlaceholderMapRenderer {
       node.classList.toggle("position-locked", item.layout.locked);
       applyResolvedLabelStyle(node, item.resolvedStyle);
       fragment.append(node);
-      labels.push({...item, node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null});
+      labels.push({...item, manualPath, node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null});
       await gate.checkpoint("labels", index + 1, descriptors.length);
     }
 
@@ -5055,7 +5081,8 @@ export class PlaceholderMapRenderer {
       const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
       node.className = semanticLabelClassName(item.targetKind, item.city);
       markDynamicCanvasTextNode(node, styleType);
-      const {contentNode, glyphNodes} = appendLabelNodeText(node, item, documentRef, styleType);
+      const manualPath = map.labels?.layout?.overrides?.[`${item.targetKind}:${item.targetId}`]?.path;
+      const {contentNode, glyphNodes} = appendLabelNodeText(node, item, documentRef, styleType, manualPath);
       node.dataset.labelTargetKind = item.targetKind;
       node.dataset.labelTargetId = String(item.targetId);
       if (item.targetKind === LABEL_TARGET_KIND.ZONE) node.addEventListener("click", event => {
@@ -5077,7 +5104,7 @@ export class PlaceholderMapRenderer {
       node.classList.toggle("position-locked", layout.locked);
       applyResolvedLabelStyle(node, resolvedStyle);
       fragment.append(node);
-      return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null};
+      return {...item, manualPath, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null};
     });
     this.labelItems = hasManualLabelPriorities(map) ? sortLabelItemsByPriority(labels) : labels;
     const cityLabelWidths = politicalOnly ? null : new Map(labels
@@ -5237,7 +5264,10 @@ export class PlaceholderMapRenderer {
       const politicalSnapshot = unchangedObstacles && (item.visible || item.buffered)
         ? restorePoliticalLabelPlacementSnapshot(item, baseScreen)
         : null;
-      const politicalPlacement = politicalSnapshot || (autoState
+      const politicalPlacement = item.manualPath
+        ? manualLabelPlacement(item, baseScreen, item.manualPath, rect.width * scale / this.map.metadata.graphWidth,
+          rect.height * scale / this.map.metadata.graphHeight, scale)
+        : politicalSnapshot || (autoState
         ? layoutStateInHomeland(this, item, baseScreen, rect, occupied, occupiedStates, padding)
         : politicalLabel ? resolvePoliticalLabelPlacement({
         item,
@@ -5251,9 +5281,9 @@ export class PlaceholderMapRenderer {
         retainPreferred: false
       }) : null);
       const screen = politicalPlacement?.anchor || baseScreen;
-      const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
+      const labelAnchor = politicalPlacement ? screen : overlayLabelAnchor(this, item, screen, scale);
       const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
-      if (stateLabel && politicalPlacement) box.parts = politicalPlacement.glyphs.map(glyph => glyph.box);
+      if ((stateLabel || item.manualPath) && politicalPlacement) box.parts = politicalPlacement.glyphs.map(glyph => glyph.box);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const prewarm = politicalLabel ? politicalPrewarm : labelPrewarm;
       const canBuffer = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;
@@ -5265,7 +5295,7 @@ export class PlaceholderMapRenderer {
         : provinceLabel
           ? false
           : (stateLabelScale.blocksCities && boxesOverlapAny(occupiedStates, box, padding)) || boxesOverlapAny(occupiedProvinces, box, padding) || boxesOverlapAny(occupied, box, padding));
-      const shouldRender = canRender && (forceVisible || !blocked);
+      const shouldRender = canRender && (item.manualPath || forceVisible || !blocked);
       const shouldShow = onScreen && shouldRender;
       const shouldBuffer = !onScreen && shouldRender;
       const wasRendered = item.visible || item.buffered;
@@ -5704,7 +5734,7 @@ export class PlaceholderMapRenderer {
     const x = clientX - rect.left;
     const y = clientY - rect.top;
     for (const item of this.labelItems) {
-      if (item.targetKind === LABEL_TARGET_KIND.CITY) continue;
+      if (item.targetKind === LABEL_TARGET_KIND.CITY && !item.manualPath) continue;
       if (!item.visible || !item.box) continue;
       if (x < item.box.left || x > item.box.right || y < item.box.top || y > item.box.bottom) continue;
       if (item.box.parts && !item.box.parts.some(part => x >= part.left && x <= part.right && y >= part.top && y <= part.bottom)) continue;
@@ -6214,8 +6244,9 @@ function expandedViewport(rect, padding) {
   return {left: -padding, top: -padding, right: rect.width + padding, bottom: rect.height + padding};
 }
 
-function appendLabelNodeText(node, item, documentRef, styleType) {
-  const political = item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE;
+function appendLabelNodeText(node, item, documentRef, styleType, manualPath) {
+  node.classList.toggle("manual-label-path", Boolean(manualPath));
+  const political = manualPath || item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE;
   const contentNode = documentRef.createElement("span");
   contentNode.className = `map-label-content${political ? " map-label-content--political" : ""}`;
   node.append(contentNode);
@@ -6269,6 +6300,8 @@ function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.an
       item.glyphNodes = appendPoliticalGlyphs(item.contentNode, placement.glyphs.map(glyph => glyph.character), "state");
     }
     item.displayText = text;
+  }
+  if (item.targetKind === "state" || item.manualPath) {
     const fontSize = placement.fontSize ?? item.resolvedStyle.fontSize;
     setStylePropertyIfChanged(item.contentNode, "font-size", `${fontSize}px`);
     applyLabelEffectDimensions(item.node, item.resolvedStyle, placement.mapScale ?? 1, fontSize / item.resolvedStyle.fontSize);

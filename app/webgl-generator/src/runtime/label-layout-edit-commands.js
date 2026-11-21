@@ -23,7 +23,8 @@ export function createPatchLabelLayoutCommand(label, patch) {
   return {
     label: `修改标签布局 ${labelTargetKey(target.targetKind, target.targetId)}`,
     domain: OBJECT_KIND.LABEL,
-    effects: {...LABEL_LAYOUT_EFFECTS, affected: objectAffected(OBJECT_KIND.LABEL, target.targetId)},
+    effects: {...LABEL_LAYOUT_EFFECTS, affected: objectAffected(OBJECT_KIND.LABEL, target.targetId),
+      labelPositionTarget: patch && !Object.hasOwn(patch, "priority") ? target : null},
     apply(context) {
       if (!labelTargetExists(context.map, target)) throw new Error(`找不到标签 ${labelTargetKey(target.targetKind, target.targetId)}`);
       previous ??= readLabelLayoutOverride(context.map, target.targetKind, target.targetId);
@@ -52,6 +53,7 @@ function normalizeTarget(label) {
 function labelTargetExists(map, target) {
   const {targetKind, targetId} = target;
   if (targetKind === "custom") return Boolean(map?.labels?.custom?.some(label => label?.id === targetId));
+  if (targetKind === "zone") return Boolean((map?.zones?.zones || map?.pack?.zones)?.some(zone => zone && !zone.removed && (zone.i ?? zone.id) === targetId));
   if (targetKind === "city") return Boolean(map?.settlements?.cities?.[targetId]);
   if (targetKind === "state") return Boolean(map?.politics?.states?.[targetId] && !map.politics.states[targetId].removed);
   if (targetKind === "province") return Boolean(map?.politics?.provinces?.[targetId] && !map.politics.provinces[targetId].removed);
