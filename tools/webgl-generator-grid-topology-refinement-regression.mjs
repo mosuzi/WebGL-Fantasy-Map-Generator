@@ -44,6 +44,14 @@ assert.equal(primeGridStructureFingerprint(cacheFixture.grid, {...cacheBinding, 
 assert.equal(cachedGridStructureFingerprint(cacheFixture.grid, {...cacheBinding, mapRevision: 3}), cacheFingerprint);
 
 const workerSource = generatePlaceholderMap({seed: "grid-topology-worker-parity", cellsTarget: 1_000});
+// A shared corner must lie on the bisectors of all three generating sites, including coastal pack sites.
+for (const [mesh, sites] of [[workerSource.grid, workerSource.grid.points], [workerSource.pack, workerSource.pack.cells.p]]) {
+  const allSites = sites.concat(workerSource.grid.boundary);
+  for (const [vertex, [x, y]] of mesh.vertices.p.entries()) {
+    const distances = mesh.vertices.c[vertex].map(id => Math.hypot(allSites[id][0] - x, allSites[id][1] - y));
+    assert.ok(Math.max(...distances) - Math.min(...distances) < 1e-8, `Voronoi 顶点 ${vertex} 偏离共享边的中垂线`);
+  }
+}
 const workerRevision = {getSnapshot: () => ({mapIdentity: "grid-topology-worker-parity", mapRevision: 0, topologyRevision: 0})};
 const workerInspection = inspectGridRefinement(workerSource, workerRevision, {targetCells: 2_000});
 const workerOptions = {targetCells: 2_000, confirm: true, inspectionToken: workerInspection.inspectionToken};
@@ -266,7 +274,8 @@ const controlledInspection = inspectGridStructureWrite(rollbackMap, rollbackRevi
 const controlledPrepared = prepareGridStructureWrite(rollbackMap, rollbackRevision, controlledDocument, {confirm: true, inspectionToken: controlledInspection.inspectionToken});
 assert.equal(controlledPrepared.map.grid.points.length, rollbackMap.grid.points.length, "受控结构写入准备改变了 cell 数");
 assert.deepEqual(controlledPrepared.map.grid.cells.h, rollbackMap.grid.cells.h, "受控结构写入准备改变了高度");
-const [sharedCellAnchor, sharedCellMover] = rollbackMap.settlements.cities.filter(city => city && !city.removed).slice(0, 2);
+// Ports may be relocated during refinement to keep their individual water access.
+const [sharedCellAnchor, sharedCellMover] = rollbackMap.settlements.cities.filter(city => city && !city.removed && !city.port).slice(0, 2);
 assert(sharedCellAnchor && sharedCellMover, "grid 细分样本缺少同 cell 多城候选");
 Object.assign(sharedCellMover, {cell: sharedCellAnchor.cell, packCell: sharedCellAnchor.packCell, x: sharedCellAnchor.x, y: sharedCellAnchor.y});
 Object.assign(rollbackMap.pack.burgs[sharedCellMover.burgId], {cell: sharedCellAnchor.packCell, x: sharedCellAnchor.x, y: sharedCellAnchor.y});

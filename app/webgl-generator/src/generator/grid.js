@@ -177,15 +177,15 @@ function nextHalfedge(edge) {
 
 function circumcenter(a, b, c) {
   const [ax, ay] = a;
-  const [bx, by] = b;
-  const [cx, cy] = c;
-  const ad = ax * ax + ay * ay;
-  const bd = bx * bx + by * by;
-  const cd = cx * cx + cy * cy;
-  const divisor = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  const bx = b[0] - ax, by = b[1] - ay;
+  const cx = c[0] - ax, cy = c[1] - ay;
+  const bSquared = bx * bx + by * by;
+  const cSquared = cx * cx + cy * cy;
+  const divisor = 2 * (bx * cy - by * cx);
+  // Keep shared corners on the bisectors. Snapping them can fold short edges into a cell.
   return [
-    Math.floor((ad * (by - cy) + bd * (cy - ay) + cd * (ay - by)) / divisor),
-    Math.floor((ad * (cx - bx) + bd * (ax - cx) + cd * (bx - ax)) / divisor)
+    ax + (cy * bSquared - by * cSquared) / divisor,
+    ay + (bx * cSquared - cx * bSquared) / divisor
   ];
 }
 
