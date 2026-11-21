@@ -36,7 +36,7 @@ try {
   const markPhase = label => page.evaluate(name => window.__naturalViewPhases.push({name, time: performance.now()}), label);
 
   const modes = await page.locator("[data-mode]").evaluateAll(items => items.map(item => item.dataset.mode));
-  assert.equal(modes.length, 12, "正式视图分母已变化，应重新核对操作范围");
+  assert.equal(modes.length, 13, "正式视图分母已变化，应重新核对操作范围");
   await page.locator("#open-generation-panel").click();
   await page.locator('[data-control-tab="themes"]').click();
   for (const [index, mode] of modes.entries()) {

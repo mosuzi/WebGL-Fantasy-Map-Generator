@@ -7,6 +7,7 @@ const WATER_LEVEL = 20;
 const BIOME_ASSIGNMENT_STALE = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
 
 export const BIOME_ASSIGNMENT_PREVIEW_EFFECTS = Object.freeze({
+  cellAttributePatch: true,
   render: "draw",
   selection: "none",
   runtimeStats: false,
@@ -102,6 +103,8 @@ export function createApplyBiomeAssignmentCommand(changes, {label = "生物群�
       selection: "refresh",
       runtimeStats: true,
       pickPanel: true,
+      cellAttributePatch: true,
+      changedGridCells: normalized.map(change => change.gridCell),
       affected: systemAffected("biome-assignment", [{kind: "grid-cells", id: normalized.length}]),
       derived: ["biome-cells", "cell-colors", "population-carrying", "object-panels", "derived-stale"]
     },

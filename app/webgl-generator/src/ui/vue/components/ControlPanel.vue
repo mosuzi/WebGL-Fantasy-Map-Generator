@@ -1033,7 +1033,8 @@ const themes = Object.freeze([
   {value: "states", label: "国家"},
   {value: "provinces", label: "省份"},
   {value: "regions", label: "区域"},
-  {value: "population", label: "人口"}
+  {value: "population", label: "人口"},
+  {value: "terrain", label: "地形"}
 ]);
 
 const layerGroups = Object.freeze([
@@ -1041,6 +1042,7 @@ const layerGroups = Object.freeze([
     {id: "coastline", label: "水陆线"},
     {id: "rivers", label: "河流"},
     {id: "precipitationDots", label: "降雨量"},
+    {id: "iceFields", label: "冰原"},
     {id: "oceanCurrents", label: "洋流"}
   ]),
   layerGroup("politics", "政治边界", [

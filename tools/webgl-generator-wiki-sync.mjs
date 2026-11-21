@@ -215,7 +215,7 @@ function auditUiCoverage(matrix, errors) {
     managementActions: managementActions.length,
     registeredPanels: registeredPanels.ids.size
   };
-  const expected = {tabs: 7, themes: 12, layerGroups: 5, layerToggles: 22, managementGroups: 5, managementActions: 24, registeredPanels: 29};
+  const expected = {tabs: 7, themes: 13, layerGroups: 5, layerToggles: 25, managementGroups: 5, managementActions: 24, registeredPanels: 29};
   for (const [key, value] of Object.entries(expected)) {
     if (uiCounts[key] !== value) errors.push(`当前 UI 分母漂移：${key}=${uiCounts[key]}，应为 ${value}`);
   }
@@ -228,7 +228,7 @@ function auditUiCoverage(matrix, errors) {
   const layerMembers = new Set(layerToggles.flatMap(item => item.members));
   for (const layer of layerMembers) if (!Object.hasOwn(DEFAULT_LAYER_VISIBILITY, layer)) errors.push(`可见图层缺少默认状态：${layer}`);
   const compatibilityOnlyLayers = Object.keys(DEFAULT_LAYER_VISIBILITY).filter(layer => !layerMembers.has(layer)).sort();
-  if (!sameOrderedValues(compatibilityOnlyLayers, ["lakeShore", "population", "tradeFlows"])) errors.push(`图层默认状态与 22 个可见开关的差集漂移：${compatibilityOnlyLayers.join("、")}`);
+  if (!sameOrderedValues(compatibilityOnlyLayers, ["lakeShore", "population", "tradeFlows"])) errors.push(`图层默认状态与 可见开关的差集漂移：${compatibilityOnlyLayers.join("、")}`);
   auditUniqueIds("管理组", managementGroups.map(item => item.id), errors);
   auditUniqueIds("管理入口", managementActions.map(item => item.id), errors);
   const managementPanelIds = new Set(managementActions.map(item => item.id.slice("open-".length)));

@@ -1,9 +1,14 @@
+import {TERRAIN_CLASSES, terrainClassAt} from "./terrain-classes.js";
 import {mix} from "./geometry.js";
 import {diplomacyRelationColor} from "../generator/diplomacy.js";
 import {DEFAULT_HEIGHT_RAMP} from "./themes.js";
 import {isAncientTheme} from "./ancient-colors.js";
 
 export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
+  if (colorMode === "terrain") {
+    const id = terrainClassAt(map.grid, cellIndex);
+    return id ? TERRAIN_CLASSES[id].color : colorForHeight(map.grid.cells.h[cellIndex], map.layers, viewOptions);
+  }
   if (colorMode !== "height" && colorMode !== "temperature" && !isLandCell(cellIndex, map)) {
     return colorForHeight(map.grid.cells.h[cellIndex], map.layers, viewOptions);
   }

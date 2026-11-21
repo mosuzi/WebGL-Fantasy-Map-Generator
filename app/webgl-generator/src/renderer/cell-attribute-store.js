@@ -1,3 +1,4 @@
+import {terrainClassAt} from "./terrain-classes.js";
 import {colorForCell, isLandCell} from "./color-modes.js";
 
 export const CELL_ATTRIBUTE_CHANNELS = 4;
@@ -44,14 +45,24 @@ export function restoreCellAttributeStore(gl, snapshot) {
 
 export function prepareCellAttributePatch(store, map, changedCells) {
   const current = assertStore(store);
-  const cells = [...new Set((changedCells || []).map(Number))].sort((left, right) => left - right);
+  const requested = new Set(Array.from(changedCells || [], Number));
+  const cells = [...requested];
   if (!cells.length) throw new RangeError("cell attribute patch 不能为空");
   if (cells.some(cell => !Number.isInteger(cell) || cell < 0 || cell >= current.snapshot.cellCount)) throw new RangeError("cell attribute patch 包含越界 cell");
   if (String(map?.metadata?.mapIdentity || map?.metadata?.id || "") !== current.snapshot.mapIdentity) throw new Error("cell attribute patch 地图 identity 已变化");
-  const before = captureCells(current.snapshot, cells);
-  const after = createPatchValues(map, cells);
+  // 高度变化也可能使相邻格成为谷底或失去谷壁。
+  for (const cell of cells) {
+    if (encodeHeight(map.grid.cells.h[cell]) === current.snapshot.terrain[cell * 4]) continue;
+    for (const neighbor of map.grid.cells.c?.[cell] || []) {
+      if (neighbor < 0 || neighbor >= current.snapshot.cellCount || requested.has(neighbor)) continue;
+      if ((current.snapshot.terrain[neighbor * 4 + 3] >>> 1) !== terrainClassAt(map.grid, neighbor)) requested.add(neighbor);
+    }
+  }
+  const affected = [...requested].sort((a, b) => a - b);
+  const before = captureCells(current.snapshot, affected);
+  const after = createPatchValues(map, affected);
   const changedKeys = Object.freeze(["identities", "terrain", "numeric"].filter(key => !sameAttributeBytes(before[key], after[key])));
-  return Object.freeze({store: current, map, cells: Uint32Array.from(cells), before, after, changedKeys, applied: {value: false}});
+  return Object.freeze({store: current, map, cells: Uint32Array.from(affected), before, after, changedKeys, applied: {value: false}});
 }
 
 export function applyCellAttributePatch(gl, patch) {
@@ -252,7 +263,7 @@ function writeCellAttributes(map, cell, identities, terrain, numeric, offset) {
   ], offset);
   const feature = Number(cells.f?.[cell]);
   const land = Boolean(map.features?.features?.[feature]?.land) || Number(cells.h?.[cell]) >= 20;
-  terrain.set([encodeHeight(cells.h?.[cell]), toUint(cells.biome?.[cell]), encodeSignedId(feature), land ? 1 : 0], offset);
+  terrain.set([encodeHeight(cells.h?.[cell]), toUint(cells.biome?.[cell]), encodeSignedId(feature), (terrainClassAt(map.grid, cell) << 1) | Number(land)], offset);
   numeric.set([
     finite(cells.pop?.[cell]), finite(cells.temp?.[cell]), finite(cells.prec?.[cell]), finite(cells.region?.[cell])
   ], offset);

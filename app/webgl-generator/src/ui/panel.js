@@ -1,3 +1,4 @@
+import {TERRAIN_CLASSES} from "../renderer/terrain-classes.js";
 import {patchGlobalConfigPreferences, readGlobalConfigPreferences, setGlobalConfigLayerVisible} from "./vue/state-bridge.js";
 import {bindLabelNamingPanelTrigger} from "./label-naming-panel-trigger.js";
 import {OBJECT_KIND} from "../runtime/object-kinds.js";
@@ -875,6 +876,17 @@ function updateMapLegend(documentRef, map, stats) {
     return;
   }
 
+  if (colorMode === "terrain") {
+    const list = documentRef.createElement("div");
+    list.className = "legend-list biomes";
+    for (const terrain of TERRAIN_CLASSES.slice(1)) {
+      const color = ancient ? ancientDisplayColor(terrain.color) : terrain.color;
+      list.append(legendSwatch(documentRef, biomeColorCss(color), terrain.label));
+    }
+    legend.hidden = false;
+    legend.replaceChildren(legendTitle(documentRef, "地形"), list);
+    return;
+  }
   if (colorMode === "biomes") {
     legend.hidden = false;
     legend.replaceChildren(

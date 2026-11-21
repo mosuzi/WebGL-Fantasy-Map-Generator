@@ -790,7 +790,7 @@ function inferResultSchema(method) {
 }
 
 function inferEnumValues(method) {
-  if (method === "layers.setViewMode") return {mode: ["height", "temperature", "precipitation", "biomes", "cultures", "religions", "diplomacy", "governments", "states", "provinces", "regions", "population"]};
+  if (method === "layers.setViewMode") return {mode: ["height", "temperature", "precipitation", "biomes", "cultures", "religions", "diplomacy", "governments", "states", "provinces", "regions", "population", "terrain"]};
   if (method === "selection.startEditing" || method === "selection.toggleEditing") return {editing: [true, false]};
   return {};
 }

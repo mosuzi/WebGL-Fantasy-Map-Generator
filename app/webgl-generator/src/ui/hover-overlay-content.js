@@ -1,3 +1,4 @@
+import {TERRAIN_CLASSES, terrainClassAt} from "../renderer/terrain-classes.js";
 import {OBJECT_KIND} from "../runtime/object-kinds.js";
 import {
   formatHeight as formatDisplayHeight,
@@ -37,12 +38,14 @@ export const HOVER_VIEW_MODES = Object.freeze([
   "states",
   "provinces",
   "regions",
-  "population"
+  "population",
+  "terrain"
 ]);
 
 const RELATION_LABELS = Object.freeze({Ally: "盟友", Friendly: "友好", Neutral: "中立", Suspicion: "猜疑", Rival: "宿敌", Enemy: "战争", Vassal: "附庸", Suzerain: "宗主", Unknown: "未知"});
 
 const HOVER_VIEW_ROW_REGISTRY = Object.freeze({
+  terrain: ({pick, map}) => [row("地形", map?.grid ? TERRAIN_CLASSES[terrainClassAt(map.grid, pick.gridCell)].label : "未知")],
   height: context => [
     row("高度", formatDisplayHeight(context.pick.packHeight ?? context.pick.height, context.units)),
     row("地貌", formatFeatureName(context.pick))
@@ -111,6 +114,7 @@ export function buildHoverRowEntries(pick, unitPreferences = {}, options = {}) {
 
 export function hoverViewTitle(colorMode) {
   return {
+    terrain: "地形",
     height: "高度",
     temperature: "温度",
     precipitation: "降水",

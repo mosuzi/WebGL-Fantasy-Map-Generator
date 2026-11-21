@@ -1,3 +1,4 @@
+import {TERRAIN_ID} from "../app/webgl-generator/src/renderer/terrain-classes.js";
 import assert from "node:assert/strict";
 import {
   applyCellAttributePatch,
@@ -48,7 +49,7 @@ const map = createMap();
 const snapshot = buildCellAttributeSnapshot(map);
 assert.equal(snapshot.cellCount, 7);
 assert.deepEqual([...snapshot.identities.subarray(0, 8)], [0, 1, 1, 1, 2, 2, 2, 2]);
-assert.deepEqual([...snapshot.terrain.subarray(0, 8)], [10, 0, 1, 0, 30, 1, 2, 1]);
+assert.deepEqual([...snapshot.terrain.subarray(0, 8)], [10, 0, 1, 0, 30, 1, 2, (TERRAIN_ID.desert << 1) | 1]);
 assert.deepEqual([...snapshot.numeric.subarray(0, 8)], [0, -2, 10, 0, 5, 3, 20, 1]);
 assert.equal(snapshot.palettes.states.length, 16);
 assert.deepEqual([...snapshot.palettes.states.subarray(8, 12)], [17, 34, 51, 255]);
@@ -64,6 +65,23 @@ assert.deepEqual(
   [19, 20, 19, 21],
   "GPU 高度量化不得让合法水域跨过 20 的水陆阈值"
 );
+
+const valleyMap = createMap();
+valleyMap.grid.points = [[0,0], [1,0], [0,1], [-1,0], [0,-1], [3,1], [3,2]];
+valleyMap.grid.cells.c = [[1,2,3,4], [0], [0], [0], [0], [], []];
+valleyMap.grid.cells.h.set([34,45,33,39,34,34,34]);
+valleyMap.grid.cells.biome.fill(4);
+const valleyGl = new FakeGl();
+const valleySnapshot = buildCellAttributeSnapshot(valleyMap);
+const valleyStore = createCellAttributeStore(valleyGl, valleySnapshot);
+assert.equal(valleySnapshot.terrain[3] >>> 1, TERRAIN_ID.hills);
+valleyMap.grid.cells.h[3] = 46;
+const valleyPatch = prepareCellAttributePatch(valleyStore, valleyMap, [3]);
+assert.deepEqual([...valleyPatch.cells], [0, 3]);
+applyCellAttributePatch(valleyGl, valleyPatch);
+assert.equal(valleyStore.textures.terrain.values[3] >>> 1, TERRAIN_ID.canyon);
+rollbackCellAttributePatch(valleyGl, valleyPatch);
+assert.equal(valleyStore.textures.terrain.values[3] >>> 1, TERRAIN_ID.hills);
 
 const gl = new FakeGl();
 const store = createCellAttributeStore(gl, snapshot);

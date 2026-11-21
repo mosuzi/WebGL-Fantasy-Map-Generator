@@ -17158,7 +17158,7 @@ function rollbackCanvasToolStroke(state, kind) {
   if (kind === "state") state.editRefreshScheduler?.run({...STATE_BRUSH_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
   else if (kind === "province") state.editRefreshScheduler?.run(PROVINCE_BRUSH_PREVIEW_EFFECTS);
   else if (kind === "biome") {
-    state.editRefreshScheduler?.run(BIOME_ASSIGNMENT_PREVIEW_EFFECTS);
+    state.editRefreshScheduler?.run({...BIOME_ASSIGNMENT_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
     state.biomeEdit.preview = null;
     state.panels.biome?.updateAssignment({preview: null});
   }
@@ -19597,7 +19597,7 @@ function applyBiomeAssignmentAtEvent(state, event) {
   }
   state.biomeEdit.lastAffected = gridCells.length;
   state.biomeEdit.preview = preview;
-  state.editRefreshScheduler.run(BIOME_ASSIGNMENT_PREVIEW_EFFECTS);
+  state.editRefreshScheduler.run({...BIOME_ASSIGNMENT_PREVIEW_EFFECTS, changedGridCells: changes.map(change => change.gridCell)});
   updateBiomePanel(state);
 }
 
@@ -19777,7 +19777,7 @@ function finishBiomeAssignmentStroke(state, documentRef) {
     }
   }
   restoreCanvasToolStrokePreview(state.map, "biome", stroke);
-  state.editRefreshScheduler.run(BIOME_ASSIGNMENT_PREVIEW_EFFECTS);
+  state.editRefreshScheduler.run({...BIOME_ASSIGNMENT_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
   const command = createApplyBiomeAssignmentCommand(changes);
   const execution = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},

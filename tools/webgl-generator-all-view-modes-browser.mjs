@@ -13,7 +13,7 @@ const requestedCells = Number(process.argv.find(value => value.startsWith("--cel
 const diagnoseStateCold = process.argv.includes("--diagnose-state-cold");
 if (requestedCells !== 10_000 && requestedCells !== 100_000) throw new Error("--cells 仅支持 10000 或 100000");
 const port = 5586;
-const outputDir = join(root, "work", `task351-all-view-modes-${requestedCells}`);
+const outputDir = join(process.env.FMG_VIEW_OUTPUT || join(root, "work"), `task351-all-view-modes-${requestedCells}`);
 const server = spawn(process.execPath, [join(root, "tools", "serve-prototype.mjs"), "--host", "127.0.0.1", "--port", String(port), "--dir", join(root, "dist", "webgl-generator")], {stdio: "ignore"});
 const playwright = createRequire(join(source, "package.json"))("playwright");
 let browser;
@@ -38,13 +38,13 @@ try {
     console.log(JSON.stringify({ok: true, diagnostic: true, artifact: join(outputDir, "result.json"), entry: result.cold[0]}, null, 2));
     process.exitCode = 0;
   } else {
-  assert.deepEqual(applicationErrors, [], "十二类视图出现应用 console.error");
-  assert.deepEqual(pageErrors, [], "十二类视图出现 pageerror");
-  assert.deepEqual(result.health, [], "十二类视图出现 health error");
-  assert.equal(result.loadingVisible, false, "十二类视图结束后仍有 Loading");
-  assert.equal(result.glError, 0, "十二类视图出现 WebGL error");
-  assert.equal(result.cold.length, 12);
-  assert.equal(result.warm.length, 12);
+  assert.deepEqual(applicationErrors, [], "专题视图出现应用 console.error");
+  assert.deepEqual(pageErrors, [], "专题视图出现 pageerror");
+  assert.deepEqual(result.health, [], "专题视图出现 health error");
+  assert.equal(result.loadingVisible, false, "专题视图结束后仍有 Loading");
+  assert.equal(result.glError, 0, "专题视图出现 WebGL error");
+  assert.equal(result.cold.length, 13);
+  assert.equal(result.warm.length, 13);
   for (const entry of [...result.cold, ...result.warm]) {
     assert.equal(entry.ok, true, `${entry.pass}:${entry.mode} 切换失败`);
     assert.equal(entry.rendererMode, entry.mode, `${entry.pass}:${entry.mode} renderer 未收敛`);
@@ -81,7 +81,7 @@ async function runAllModes({requestedCells, diagnoseStateCold}) {
   const prewarm = {...(app.viewPrewarmScheduler?.getSnapshot?.() || {}), stats: structuredClone(app.viewPrewarmStats || null)};
   if (prewarm.status !== "ready") throw new Error(`视图预热未在时限内 ready：${JSON.stringify(prewarm)}`);
   window.__webglGeneratorHealth?.clear?.();
-  const modes = diagnoseStateCold ? ["states"] : ["states", "provinces", "biomes", "population", "temperature", "precipitation", "cultures", "religions", "regions", "governments", "diplomacy", "height"];
+  const modes = diagnoseStateCold ? ["states"] : ["states", "provinces", "biomes", "population", "temperature", "precipitation", "cultures", "religions", "regions", "governments", "diplomacy", "terrain", "height"];
   const calls = {surface: 0, line: 0, picking: 0, labels: 0};
   const spans = [];
   const restores = [];

@@ -53,7 +53,8 @@ const expectedLabels = {
   states: ["国家", "省份", "高度", "地貌", "温度", "降水"],
   provinces: ["省份", "国家", "高度", "地貌", "温度", "降水"],
   regions: ["区域", "国家", "高度", "地貌", "温度", "降水"],
-  population: ["人口", "适居度", "高度", "地貌", "温度", "降水"]
+  population: ["人口", "适居度", "高度", "地貌", "温度", "降水"],
+  terrain: ["地形", "高度", "地貌", "温度", "降水"]
 };
 const basicLabels = ["高度", "地貌", "温度", "降水"];
 
@@ -94,7 +95,8 @@ const [controlSource, pickingSource, panelSource, appSource] = await Promise.all
   readFile(new URL("../app/webgl-generator/src/ui/panel.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8")
 ]);
-const controlModes = [...controlSource.matchAll(/\{value: "([^"]+)", label: "(?:高度|温度|降水|生物群系|文化|宗教|外交|政体|国家|省份|区域|人口)"\}/g)].map(match => match[1]);
+const themes = controlSource.slice(controlSource.indexOf("const themes ="), controlSource.indexOf("const layerGroups ="));
+const controlModes = [...themes.matchAll(/\{value: "([^"]+)"/g)].map(match => match[1]);
 assert.deepEqual(controlModes, HOVER_VIEW_MODES, "控制面板视图与悬停 registry 漂移");
 for (const id of ["cultureId", "religionId", "stateId", "provinceId", "regionId", "packBiomeDescription"]) assert.match(pickingSource, new RegExp(`\\b${id}\\b`), `pick 结果缺少 ${id}`);
 assert.match(panelSource, /buildHoverRowEntries\(pick, preferences\.units, \{[\s\S]*debugEnabled,[\s\S]*colorMode,[\s\S]*map: state\?\.map,[\s\S]*viewOptions: rendererStats\.viewOptions,[\s\S]*gridCellsVisible: rendererStats\.layerVisibility\?\.gridCells === true[\s\S]*\}\)/);

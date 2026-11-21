@@ -26,7 +26,7 @@ const bindRuntimePanelSource = panelSource.slice(
 assert.match(bindRuntimePanelSource, /documentRef\.addEventListener\("click", event => \{[\s\S]*?event\.target\?\.closest\?\.\(VIEW_MODE_SELECTOR\)[\s\S]*?handlers\.onMode\(button\.dataset\.mode\)/);
 assert.doesNotMatch(bindRuntimePanelSource, /querySelectorAll\(VIEW_MODE_SELECTOR\)/);
 assert.doesNotMatch(bindRuntimePanelSource, /setActiveModeButton\(documentRef, button\.dataset\.mode\)/);
-assert.match(schemaSource, /\["height", "temperature", "precipitation", "biomes", "cultures", "religions", "diplomacy", "governments", "states", "provinces", "regions", "population"\]/);
+assert.match(schemaSource, /\["height", "temperature", "precipitation", "biomes", "cultures", "religions", "diplomacy", "governments", "states", "provinces", "regions", "population", "terrain"\]/);
 assert.match(appSource, /stage === lastProgressStage && current - lastProgressAt < 80/);
 const commit = appSource.slice(appSource.indexOf("const onCommitted = () => {"), appSource.indexOf('if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName'));
 assert.match(commit, /if \(state\.renderer\?\.workerRenderInstallSuspended > 0\) return;/);

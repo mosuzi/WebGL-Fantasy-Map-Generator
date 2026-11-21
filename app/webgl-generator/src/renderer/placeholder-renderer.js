@@ -1,3 +1,4 @@
+import {GLACIER_BIOME, TERRAIN_CLASSES, TERRAIN_ID} from "./terrain-classes.js";
 import {buildObjectPickingIndex, CITY_PICK_RADIUS_CSS_PX, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRiverControlPoint, pickRoute, rebuildRoutesInPickingIndex, refreshNonRoutePickingIndexPreservingRoutes, refreshRiversInPickingIndex, refreshRoutesInPickingIndex, relocateCityInPickingIndex} from "./picking.js";
 import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {manualLabelPlacement} from "./manual-label-path.js";
@@ -216,7 +217,7 @@ const VIEWPORT_LINE_OVERSCAN_MAX_CSS_PX = 720;
 const RETIRED_MAP_LAYERS = new Set(["tradeFlows"]);
 const GPU_RESIDENT_COLOR_MODES = Object.freeze({
   height: 1, biomes: 2, population: 3, states: 4, provinces: 5, temperature: 6,
-  precipitation: 7, cultures: 8, religions: 9, regions: 10, governments: 11, diplomacy: 12
+  precipitation: 7, cultures: 8, religions: 9, regions: 10, governments: 11, diplomacy: 12, terrain: 13
 });
 const HEIGHT_COLOR_TABLE_SIZE = 101;
 
@@ -435,6 +436,7 @@ function initializeWebGlBindingsAndBuffers(renderer) {
     position: gl.getAttribLocation(renderer.surfaceProgram, "a_position"), identity: gl.getAttribLocation(renderer.surfaceProgram, "a_packedCellIdAndSide"),
     color: gl.getAttribLocation(renderer.surfaceProgram, "a_color"), scale: gl.getUniformLocation(renderer.surfaceProgram, "u_scale"),
     offset: gl.getUniformLocation(renderer.surfaceProgram, "u_offset"), pointMode: gl.getUniformLocation(renderer.surfaceProgram, "u_pointMode"),
+    iceOverlay: gl.getUniformLocation(renderer.surfaceProgram, "u_iceOverlay"),
     surfaceSideMode: gl.getUniformLocation(renderer.surfaceProgram, "u_surfaceSideMode"), cellColorMode: gl.getUniformLocation(renderer.surfaceProgram, "u_cellColorMode"),
     cellCount: gl.getUniformLocation(renderer.surfaceProgram, "u_cellCount"), cellTextureSize: gl.getUniformLocation(renderer.surfaceProgram, "u_cellTextureSize"),
     terrainTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_terrainTexture"), numericTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_numericTexture"),
@@ -1690,7 +1692,7 @@ export class PlaceholderMapRenderer {
   canApplyGpuResidentLayerVisibility(entries = []) {
     const requested = normalizeRequestedLayerVisibility(this.layerVisibility, entries);
     const pointLayers = new Set(["cities", "population", "markers", "resources", "military"]);
-    const directLayers = new Set(["routes", "rivers", "labels", "stateLabels", "provinceLabels", "zoneLabels", "measurements", "scaleBar", "mapBadge", ...pointLayers]);
+    const directLayers = new Set(["iceFields", "routes", "rivers", "labels", "stateLabels", "provinceLabels", "zoneLabels", "measurements", "scaleBar", "mapBadge", ...pointLayers]);
     for (const [layer, visible] of requested) {
       if (!directLayers.has(layer)) return false;
       if (pointLayers.has(layer) && (!Array.isArray(this.pointDrawRanges) || !Number.isInteger(this.pointBufferVertexCount) || this.pointBufferVertexCount < 0)) return false;
@@ -2295,8 +2297,10 @@ export class PlaceholderMapRenderer {
     if (!this.map || !normalizedCells.length) return {incremental: false, cells: 0, spans: 0};
     // 底图着色从地形纹理取高度。首次预览、取消和历史回放共用这份数据。
     const terrain = this.cellAttributeStore?.snapshot.terrain;
-    const heights = this.map.grid.cells.h;
-    const textureChanges = terrain ? normalizedCells.filter(cell => terrain[cell * 4] !== encodeHeight(heights[cell])) : [];
+    const {h: heights, biome} = this.map.grid.cells;
+    const textureChanges = terrain ? normalizedCells.filter(cell =>
+      terrain[cell * 4] !== encodeHeight(heights[cell]) || terrain[cell * 4 + 1] !== (biome?.[cell] ?? 0)
+    ) : [];
     if (textureChanges.length) this.refreshCellAttributeCells(textureChanges);
     if (this.colorMode !== "height" || !(this.surfaceVertices instanceof Float32Array)) {
       this.refreshCellSurface({draw, binding});
@@ -3576,10 +3580,17 @@ export class PlaceholderMapRenderer {
     drawSurfaceDepthBatch(gl, this, this.waterCorrectionBuffer, this.waterCorrectionVertexCount, gl.GREATER);
     drawSurfaceDepthBatch(gl, this, this.landCoverBuffer, this.landCoverVertexCount, gl.LESS);
     drawSurfaceDepthBatch(gl, this, this.waterCoverBuffer, this.waterCoverVertexCount, gl.GREATER);
-    gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
-    gl.uniform1i(this.locations.surfaceSideMode, 0);
     const layerOrder = ["surface"];
+    if (this.layerVisibility.iceFields && this.cellAttributeStore) {
+      gl.enable(gl.BLEND);
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      drawSurfaceBase(gl, this, gl.EQUAL, true);
+      gl.disable(gl.BLEND);
+      layerOrder.push("iceFields");
+    }
+    gl.disable(gl.DEPTH_TEST);
+    gl.uniform1i(this.locations.surfaceSideMode, 0);
     const stateBorderHaze = this.stateBorderHazeCompositor.render({
       map: this.map,
       paths: this.stateVisualPaths,
@@ -7584,15 +7595,16 @@ function uploadSurfaceBaseRanges(renderer, ranges) {
   return {ranges: ranges.length, uploads: ranges.length, floats, bytes: floats * Float32Array.BYTES_PER_ELEMENT};
 }
 
-function drawSurfaceBase(gl, renderer, depthFunction) {
+function drawSurfaceBase(gl, renderer, depthFunction, iceOverlay = false) {
   const bufferSet = currentSurfaceBaseBufferSet(renderer);
   if (!bufferSet) return;
   gl.useProgram(renderer.surfaceProgram);
   gl.uniform1i(renderer.surfaceLocations.pointMode, 0);
-  gl.uniform1i(renderer.surfaceLocations.surfaceSideMode, 1);
+  gl.uniform1i(renderer.surfaceLocations.surfaceSideMode, iceOverlay ? 0 : 1);
   gl.uniform1f(renderer.surfaceLocations.scale, renderer.camera.scale);
   gl.uniform2f(renderer.surfaceLocations.offset, renderer.camera.offsetX, renderer.camera.offsetY);
   configureGpuResidentSurfaceColors(gl, renderer);
+  gl.uniform1i(renderer.surfaceLocations.iceOverlay, iceOverlay ? 1 : 0);
   gl.depthFunc(depthFunction);
   for (const segment of bufferSet.segments) {
     if (!segment.vertexCount) continue;
@@ -7611,6 +7623,7 @@ function drawSurfaceBase(gl, renderer, depthFunction) {
     }
     gl.drawArrays(gl.TRIANGLES, 0, segment.vertexCount);
   }
+  gl.uniform1i(renderer.surfaceLocations.iceOverlay, 0);
   gl.useProgram(renderer.program);
   gl.uniform1i(renderer.locations.pointMode, 0);
   gl.uniform1i(renderer.locations.surfaceSideMode, 1);
@@ -9161,6 +9174,7 @@ uniform vec2 u_offset;
 uniform bool u_pointMode;
 uniform bool u_surfaceSideMode;
 uniform bool u_ancientPalette;
+uniform bool u_iceOverlay;
 uniform int u_cellColorMode;
 uniform uint u_cellCount;
 uniform ivec2 u_cellTextureSize;
@@ -9175,10 +9189,15 @@ uniform vec4 u_oceanColor;
 out vec4 v_color;
 ${ANCIENT_COLOR_PROJECTION_GLSL}
 
+const vec4 terrainColors[${TERRAIN_CLASSES.length}] = vec4[](${TERRAIN_CLASSES.map(({color}) => `vec4(${color.map(v => v.toFixed(6)).join(", ")})`).join(", ")});
+ivec2 attributeCoord(uint cellId) {
+  uint textureWidth = uint(u_cellTextureSize.x);
+  return ivec2(int(cellId % textureWidth), int(cellId / textureWidth));
+}
+
 vec4 resolveCellColor(uint cellId) {
   if (u_cellColorMode == 0 || cellId >= u_cellCount) return a_color;
-  uint textureWidth = uint(u_cellTextureSize.x);
-  ivec2 coord = ivec2(int(cellId % textureWidth), int(cellId / textureWidth));
+  ivec2 coord = attributeCoord(cellId);
   uvec4 terrain = texelFetch(u_terrainTexture, coord, 0);
   uint height = min(terrain.r, 100u);
   vec4 heightColor = u_heightColors[int(height)];
@@ -9187,7 +9206,8 @@ vec4 resolveCellColor(uint cellId) {
     float amount = clamp((numeric.g + 18.0) / 54.0, 0.0, 1.0);
     return mix(vec4(0.2, 0.38, 0.72, 1.0), vec4(0.82, 0.32, 0.2, 1.0), amount);
   }
-  if (terrain.a == 0u || u_cellColorMode == 1) return heightColor;
+  if ((terrain.a & 1u) == 0u || u_cellColorMode == 1) return heightColor;
+  if (u_cellColorMode == 13) return height < 20u ? heightColor : terrainColors[int(terrain.a >> 1u)];
   if (u_cellColorMode == 7) {
     float amount = clamp(numeric.b / 100.0, 0.0, 1.0);
     return mix(vec4(0.72, 0.62, 0.36, 1.0), vec4(0.16, 0.48, 0.68, 1.0), amount);
@@ -9216,6 +9236,17 @@ vec4 resolveCellColor(uint cellId) {
 
 void main() {
   uint cellId = a_packedCellIdAndSide >> 1u;
+  if (u_iceOverlay) {
+    gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+    v_color = vec4(0.0);
+    if (cellId >= u_cellCount || (a_packedCellIdAndSide & 1u) != 0u) return;
+    uvec4 terrain = texelFetch(u_terrainTexture, attributeCoord(cellId), 0);
+    if (terrain.r < 20u || terrain.g != ${GLACIER_BIOME}u) return;
+    vec4 ice = terrainColors[${TERRAIN_ID.ice}];
+    v_color = vec4(u_ancientPalette ? projectAncientColor(ice).rgb : ice.rgb, 0.80);
+    gl_Position = vec4(a_position * u_scale + u_offset, -0.5, 1.0);
+    return;
+  }
   vec4 color = resolveCellColor(cellId);
   v_color = u_ancientPalette ? projectAncientColor(color) : color;
   gl_PointSize = 4.0;
