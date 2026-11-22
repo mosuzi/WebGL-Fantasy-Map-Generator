@@ -1110,6 +1110,7 @@ function trimStateForm(name) {
 
 function cleanStateRootCandidate(name) {
   const rawRoot = trimPoliticalForm(name).replace(/\s+/g, "");
+  if (/青[楼樓]/u.test(rawRoot)) return "";
   const trimmedRoot = trimStateForm(name).replace(/\s+/g, "");
   if (Array.from(trimmedRoot).length >= 2) return trimmedRoot;
   if (isAncientStateRoot(trimmedRoot)) return trimmedRoot;
