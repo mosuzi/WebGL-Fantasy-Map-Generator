@@ -1,5 +1,5 @@
 import {systemAffected} from "./edit-command-effects.js";
-import {createChineseNameGenerator} from "../generator/names.js";
+import {createChineseNameGenerator, isUnsuitableGeneratedStateName} from "../generator/names.js";
 import {MinPriorityQueue} from "../generator/priority-queue.js";
 import {provinceFormForState} from "../generator/province-naming.js";
 import {
@@ -2924,6 +2924,13 @@ function packCellSuitability(map, cell) {
 function deterministicSplitStateName(map, cityId, stateIdValue) {
   const city = findCity(map, cityId);
   const base = String(city?.name || `新国${stateIdValue}`).trim().replace(/(城|镇|州|郡)$/u, "");
+  if (isUnsuitableGeneratedStateName(base)) {
+    const culture = map.society?.cultures?.[city.culture] || map.pack?.cultures?.[city.culture];
+    const generator = createChineseNameGenerator(map.metadata?.seed || map.options?.seed, {
+      namebases: map.namebases, stateNames: activeStates(map).map(state => state.name)
+    });
+    return generator.makeStateRoot({id: stateIdValue, culture: city.culture, cultureType: culture?.nameStyle || culture?.type});
+  }
   return base || `新国${stateIdValue}`;
 }
 

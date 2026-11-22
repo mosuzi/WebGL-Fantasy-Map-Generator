@@ -249,6 +249,7 @@ const REAL_PREFIXES = ["青", "清", "云", "白", "苍", "南", "北", "东", "
 const HYDRO_PREFIXES = ["青", "清", "云", "白", "苍", "洛", "澄", "月", "星", "玉", "金", "龙", "灵", "玄", "镜", "寒", "秋", "明", "丹", "素"];
 const LIGHT_FANTASY_PREFIXES = ["云", "青", "苍", "玄", "灵", "玉", "星", "月", "霜", "岚", "曜", "澜"];
 const HIGH_FANTASY_STEMS = ["太微", "扶摇", "归墟", "烛龙", "昆吾", "瑶光"];
+const ORIENTAL_STATE_ROOTS = cultureNamingStyleConfig("oriental").cultureRoots;
 const ANCIENT_STATE_ROOTS = [
   "齐", "晋", "秦", "楚", "鲁", "宋", "卫", "郑", "陈", "蔡", "曹", "燕", "吴", "越", "许", "虢",
   "虞", "邾", "莒", "郯", "薛", "滕", "邢", "滑", "息", "赖", "邓", "随", "唐", "贾", "芮", "梁",
@@ -366,6 +367,7 @@ for (const [style, config] of Object.entries(CULTURE_STYLE_CONFIG)) {
 export function createChineseNameGenerator(seed = "map", context = {}) {
   const used = new Map();
   reserveGeneratedNames(used, "province", context?.provinceNames);
+  for (const root of context?.stateNames || []) claimStateRoot(used, root, {allowFamilyVariant: true});
   const namebaseSources = resolveNamebaseSources(context?.namebases || context);
 
   return {
@@ -423,7 +425,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
       const cultureRoot = cleanStateRootCandidate(options.cultureRoot);
       const allowCapitalName = Boolean(options.allowCapitalName);
       const generate = () => boundStateRootSource.records.length
-        ? makeBoundStateRootCandidateAvoiding(rng, boundStateRootSource, allowCapitalName ? "" : capitalRoot)
+        ? makeBoundStateRootCandidateAvoiding(rng, boundStateRootSource, options, allowCapitalName ? "" : capitalRoot)
         : makeStateRootCandidateAvoiding(rng, options, allowCapitalName ? "" : capitalRoot);
       if (!boundStateRootSource.records.length && cultureRoot && rng.next() < 0.24 && claimStateRoot(used, cultureRoot)) return cultureRoot;
       const initialName = allowCapitalName && capitalRoot && rng.next() < 0.28 ? capitalRoot : generate();
@@ -853,12 +855,12 @@ function makeHydroName(prefix, rng, suffixes) {
   return `${normalized}${pick(rng, suffixes)}`;
 }
 
-function makeBoundStateRootCandidateAvoiding(rng, source, avoidedRoot = "") {
+function makeBoundStateRootCandidateAvoiding(rng, source, options, avoidedRoot = "") {
   for (let attempt = 0; attempt < 24; attempt++) {
     const candidate = cleanStateRootCandidate(generateNamebaseCandidate(rng, source, {maxLength: 4}));
     if (candidate && !hasSameNameRoot(candidate, avoidedRoot)) return candidate;
   }
-  return makeStateRootCandidateAvoiding(rng, {}, avoidedRoot);
+  return makeStateRootCandidateAvoiding(rng, options, avoidedRoot);
 }
 
 function namebaseSourceValues(source) {
@@ -934,9 +936,8 @@ function makeStateRootCandidate(rng, options = {}) {
   const roll = rng.next();
   if (roll < 0.74) return pick(rng, ANCIENT_STATE_ROOTS);
   if (roll < 0.88) return pick(rng, ANCIENT_STATE_COMPOUND_ROOTS);
-  if (roll < 0.95) return makeChineseTwoCharName(rng);
   if (roll < 0.985) return pick(rng, PLACE_STEMS);
-  if (roll < 0.997) return `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pick(rng, CHINESE_SECOND_CHARS)}`;
+  if (roll < 0.997) return pick(rng, ORIENTAL_STATE_ROOTS);
   return pick(rng, HIGH_FANTASY_STEMS);
 }
 
@@ -946,7 +947,8 @@ function makeStateRootCandidateAvoiding(rng, options = {}, avoidedRoot = "") {
     if (candidate && !hasSameNameRoot(candidate, avoidedRoot)) return candidate;
   }
 
-  return makeChineseTwoCharName(rng);
+  const roots = getTransliterationStyle(options)?.place || PLACE_STEMS;
+  return pick(rng, roots.filter(root => !hasSameNameRoot(root, avoidedRoot)));
 }
 
 function getSettlementScale(options = {}) {
@@ -1108,9 +1110,18 @@ function trimStateForm(name) {
   return trimGeographicSuffix(trimPoliticalForm(name));
 }
 
+// 场所词在长名称中仍有明显歧义；动作和身体部位只按完整词根匹配，以保留“江阴道”等地名。
+const UNSUITABLE_STATE_VENUE = /青[楼樓]|妓院|妓[馆館]|[窑窯]子|[赌賭][场場坊]|[厕廁]所|茅[厕廁]|[粪糞]坑/u;
+const NON_PLACE_STATE_ROOT = /^(?:[东東西南北前后後新古])?(?:[会會][阴陰]|[阴陰](?:道|[茎莖]|蒂|囊|唇)|肛[门門]|[开開](?:[门門]|庭|春|[会會])|[关關][门門]|[上下](?:[楼樓]|班|床)|上[门門])(?:城|[镇鎮]|州|郡|[县縣])?$/u;
+
+export function isUnsuitableGeneratedStateName(name) {
+  const root = trimPoliticalForm(String(name || "").replace(/\s+/gu, "").replace(/國/gu, "国"));
+  return UNSUITABLE_STATE_VENUE.test(root) || NON_PLACE_STATE_ROOT.test(root) || NON_PLACE_STATE_ROOT.test(trimGeographicSuffix(root));
+}
+
 function cleanStateRootCandidate(name) {
+  if (isUnsuitableGeneratedStateName(name)) return "";
   const rawRoot = trimPoliticalForm(name).replace(/\s+/g, "");
-  if (/青[楼樓]/u.test(rawRoot)) return "";
   const trimmedRoot = trimStateForm(name).replace(/\s+/g, "");
   if (Array.from(trimmedRoot).length >= 2) return trimmedRoot;
   if (isAncientStateRoot(trimmedRoot)) return trimmedRoot;

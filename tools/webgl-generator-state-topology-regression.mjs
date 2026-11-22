@@ -224,6 +224,15 @@ function testEmptySurvivorMerge() {
 async function testSplitTransaction() {
   const map = generatePlaceholderMap(baseOptions);
   const splitInput = findSplitInspection(map, {preferCapitalProvince: true});
+  const capital = map.settlements.cities.find(city => city.id === splitInput.newCapitalCityId);
+  const originalName = capital.name;
+  capital.name = "开庭城";
+  const autoName = inspectStateSplit(map, splitInput).newStateName;
+  assert.ok(autoName && !autoName.includes("开庭"), "未指定拆国国名时应检查首都候选");
+  assert.ok(map.politics.states.every(state => state?.name !== autoName), "重抽的拆国国名应避开已有国家");
+  assert.equal(inspectStateSplit(map, {...splitInput, name: "开庭"}).newStateName, "开庭", "玩家明确指定的国名应保留");
+  assert.equal(capital.name, "开庭城");
+  capital.name = originalName;
   const beforeInspect = topologyDigest(map);
   const inspected = inspectStateSplit(map, splitInput);
   assert.equal(inspected.valid, true);

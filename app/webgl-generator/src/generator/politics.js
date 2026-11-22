@@ -1,6 +1,6 @@
 import {MinPriorityQueue} from "./priority-queue.js";
 import {chooseStateGovernment, applyStateGovernment, summarizeStateGovernments} from "./governments.js";
-import {createChineseNameGenerator, getStateFullName, isAncientStateNameRoot} from "./names.js";
+import {createChineseNameGenerator, getStateFullName, isAncientStateNameRoot, isUnsuitableGeneratedStateName} from "./names.js";
 import {legacyProvinceForm, provinceFormForState} from "./province-naming.js";
 import {createStageProfile} from "./profile.js";
 import {createRandom} from "./random.js";
@@ -573,7 +573,8 @@ function buildStates(grid, landCells, society, random) {
 
   return centers.map((center, id) => {
     const culture = society.cultures[grid.cells.culture[center.cell]];
-    const root = culture?.name?.replace("文化", "") || STATE_ROOTS[id % STATE_ROOTS.length];
+    const cultureName = culture?.name?.replace("文化", "");
+    const root = cultureName && !isUnsuitableGeneratedStateName(cultureName) ? cultureName : STATE_ROOTS[id % STATE_ROOTS.length];
     const formName = id % 5 === 0 ? "王国" : "国";
     return {
       id,
@@ -730,7 +731,7 @@ function buildPackStates(pack, society, random, nameGenerator, locked = null) {
       capitalName: burg.name,
       allowCapitalName: false,
       type: culture?.type || "Generic"
-    }) || culture?.name?.replace("文化", "") || STATE_ROOTS[burg.i % STATE_ROOTS.length];
+    });
     const id = allocateStateId(burg.i);
     states[id] = {
       id,
@@ -938,7 +939,8 @@ function parseDirectionalStateName(name) {
 function neutralStateDirectionalName(base, state, states) {
   const usedNames = new Set(states.filter(item => item !== state).map(item => item.name).filter(Boolean));
   const candidates = [base, ...STATE_NEUTRAL_VARIANT_PREFIXES.map(prefix => `${prefix}${base}`)];
-  return candidates.find(candidate => candidate && !usedNames.has(candidate)) || `${base}${state.i}`;
+  return candidates.find(candidate => candidate && !usedNames.has(candidate) && !isUnsuitableGeneratedStateName(candidate))
+    || (isUnsuitableGeneratedStateName(base) ? state.name : `${base}${state.i}`);
 }
 
 function stateNamePoint(pack, state) {
