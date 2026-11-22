@@ -669,7 +669,7 @@ function buildShoreSurfaceModel(path, map) {
   if (path?.closed && sourcePoints.length >= 4 && renderPoints.length >= 4) {
     try {
       const landInside = resolveShoreLandInside(path, sourcePoints);
-      const difference = polygonClipping.xor([sourcePoints], [renderPoints]);
+      const difference = shoreRingDifference(sourcePoints, renderPoints);
       const triangles = triangulateShoreDifference(difference, sourcePoints, renderPoints, path, landInside);
       if (!validateShoreDifferenceArea(difference, triangles)) throw new Error("shore-difference-area-mismatch");
       model = {renderPoints, triangles, landInside, fallbackReason: null, fallbackDetail: null};
@@ -684,6 +684,17 @@ function buildShoreSurfaceModel(path, map) {
   }
   shoreSurfaceCorrectionCache.set(path, {map, model});
   return model;
+}
+
+function shoreRingDifference(source, render) {
+  try {
+    return polygonClipping.xor([source], [render]);
+  } catch {
+    // 共边的浮点尾差可能让裁切器无法闭环。仅在失败时对齐到小于 1e-6 的网格，再按原岸线校验面积。
+    const scale = 2 ** 20;
+    const snap = ring => ring.map(([x, y]) => [Math.round(x * scale) / scale, Math.round(y * scale) / scale]);
+    return polygonClipping.xor([snap(source)], [snap(render)]);
+  }
 }
 
 function shoreSurfaceFallbackLocation(path, model) {
@@ -1596,7 +1607,7 @@ export function buildShoreVisualPaths(map, algorithmOptions = {}) {
   };
   shoreProtectedObjectsCache.set(map, options.protectedObjects);
   const coastline = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.coastline), map, options);
-  const lakeShore = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.lakeShore), map, options);
+  const lakeShore = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.lakeShore), map, lakeShoreBuildOptions(map, options));
   return Object.freeze({
     coastline: coastline.paths,
     lakeShore: lakeShore.paths,
@@ -1620,13 +1631,17 @@ export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGrid
   const safetyBounds = buildIncrementalShoreSafetyBounds(map, affected);
   const options = {
     ...createShoreVisualBuildOptions(map, algorithmOptions),
-    protectedObjects: filterIncrementalProtectedObjects(protectedObjects, safetyBounds),
-    isSideSampleSafe: (point, side) => pointOutsideBounds(point, safetyBounds) || incrementalSideSampleSafe(map, point, side),
+    protectedObjects,
     measureChanges: false
   };
+  const coastOptions = {
+    ...options,
+    protectedObjects: filterIncrementalProtectedObjects(protectedObjects, safetyBounds),
+    isSideSampleSafe: (point, side) => pointOutsideBounds(point, safetyBounds) || incrementalSideSampleSafe(map, point, side)
+  };
   const edges = collectShoreVisualEdges(map);
-  const coastline = rebuildIncrementalShoreType(map, previousPaths.coastline, options, edges.coastline);
-  const lakeShore = rebuildIncrementalShoreType(map, previousPaths.lakeShore, options, edges.lakeShore);
+  const coastline = rebuildIncrementalShoreType(map, previousPaths.coastline, coastOptions, edges.coastline);
+  const lakeShore = rebuildIncrementalShoreType(map, previousPaths.lakeShore, lakeShoreBuildOptions(map, options), edges.lakeShore);
   if (!coastline || !lakeShore) return null;
   const topology = {
     ...(previousPaths.topology || {}),
@@ -1641,6 +1656,15 @@ export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGrid
     lakeShore: Object.freeze([...lakeShore.paths]),
     topology: Object.freeze(topology)
   });
+}
+
+function lakeShoreBuildOptions(map, options) {
+  if (options.threshold !== undefined || !map?.grid) return options;
+  const {grid, metadata} = map;
+  const spacing = grid.metadata?.spacing || Math.sqrt(metadata?.graphWidth * metadata?.graphHeight / grid.points?.length);
+  if (!(spacing > 0 && Number.isFinite(spacing))) return options;
+  // 湖岸若一次跨越多个小格，平滑曲线容易切过窄水道，触发整段退回格边。
+  return {...options, threshold: Math.min(SHORE_TOPOLOGY_ALGORITHM.threshold, spacing / 3)};
 }
 
 function createShoreVisualBuildOptions(map, algorithmOptions = {}) {
@@ -2066,7 +2090,8 @@ function mergeShoreTopologyStats(coastline, lakeShore) {
     surfaceAndStrokeShared: true,
     surfaceCorrection: "raw-snapshot-xor-triangulation",
     hardEdgeFallback: "shared-voronoi-edge",
-    threshold: SHORE_TOPOLOGY_ALGORITHM.threshold,
+    threshold: first.threshold ?? SHORE_TOPOLOGY_ALGORITHM.threshold,
+    lakeThreshold: second.threshold ?? SHORE_TOPOLOGY_ALGORITHM.threshold,
     smoothness: SHORE_TOPOLOGY_ALGORITHM.smoothness,
     iterations: SHORE_TOPOLOGY_ALGORITHM.iterations,
     maxDisplacement: SHORE_TOPOLOGY_ALGORITHM.maxDisplacement,

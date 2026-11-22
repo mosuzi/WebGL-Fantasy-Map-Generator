@@ -966,6 +966,8 @@ function runFormalMapRegression() {
     const startedAt = performance.now();
     const paths = buildShoreVisualPaths(map);
     const elapsedMs = performance.now() - startedAt;
+    assert.equal(paths.topology.lakeThreshold, Math.min(SHORE_TOPOLOGY_ALGORITHM.threshold, map.grid.metadata.spacing / 3), "湖岸简化距离必须随地块间距缩小");
+    assert.equal(paths.topology.threshold, SHORE_TOPOLOGY_ALGORITHM.threshold, "海岸保留自身的简化距离");
     assert.ok(paths.topology.buildMs < buildLimitMs, `shore-review / continents / ${cellsTarget} shore buildMs ${paths.topology.buildMs}ms，超过 ${buildLimitMs}ms`);
     formalMapPerformance.push({
       seed,
@@ -1089,6 +1091,10 @@ function runFormalMapRegression() {
     if (cellsTarget === 10000) {
       const cellVisualMap = generatePlaceholderMap({seed: "stage-2-1", cellsTarget, heightmapTemplate: "continents"});
       const collapsedVertexIds = [5331, 5519];
+      // 旧版地图把所有共享顶点向下取整；按当时的编码还原坍缩边和旧扇形夹具。
+      const vertices = cellVisualMap.grid.vertices;
+      const storedPoints = vertices.p.map(point => point.map(Math.floor));
+      cellVisualMap.grid = {...cellVisualMap.grid, vertices: {...vertices, p: storedPoints}};
       const storedCollapsedEdge = collapsedVertexIds.map(vertex => cellVisualMap.grid.vertices.p[vertex]);
       const resolvedCollapsedEdge = collapsedVertexIds.map(vertex => resolvedGridVertexPoints(cellVisualMap.grid)[vertex]);
       const storedCollapsedLength = Math.hypot(
