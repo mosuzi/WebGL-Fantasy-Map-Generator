@@ -171,6 +171,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
 
   return {
     open(map, history) {
+      if (panelState.active) panelCallbacks.onActiveChange(false);
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
       if (!stateExists(map, panelState.targetStateId)) panelState.targetStateId = firstStateId(map);

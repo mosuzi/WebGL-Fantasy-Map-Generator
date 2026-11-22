@@ -293,7 +293,7 @@ const topologyPreviewRows = computed(() => topologyInspection.value?.preview?.ro
 const stateActions = computed(() => [
   {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图位置作为首都", icon: Plus, panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
   {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: Delete, panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
-  {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: EditPen, panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
+  {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "停止涂抹国土" : "涂抹国土", icon: EditPen, panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
   {key: "province-suffix", resultClass: "open-secondary", label: "调整辖下省份后缀", icon: Notebook, panelWidth: 520, disabled: modalActionActive.value || !canDeleteSelected.value || !provinceSuffixOptions.value.length},
   {key: "merge", resultClass: "open-secondary", label: "合并相邻国家", icon: Connection, panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
   {key: "split", resultClass: "open-secondary", label: "按完整省份拆分国家", icon: Scissor, panelWidth: 420, panelHeight: 560, disabled: modalActionActive.value || !canDeleteSelected.value || stateProvinces(props.state.map, selected.value?.id).length < 2}

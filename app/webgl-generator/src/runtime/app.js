@@ -855,13 +855,6 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     if (sameObject) return stopObjectEditing({afterStop: options.afterStop});
     return startObjectEditing(object, options);
   };
-  const enterStateEditor = object => {
-    if (object?.kind !== OBJECT_KIND.STATE || !state.panels.state) return false;
-    state.panels.state.setTargetStateId(object.id);
-    state.panels.state.open(state.map, state.editHistory.getStats());
-    enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_BRUSH);
-    return startObjectEditing(object, {select: false});
-  };
   state.startObjectEditing = startObjectEditing;
   state.stopObjectEditing = stopObjectEditing;
   state.toggleObjectEditing = toggleObjectEditing;
@@ -879,7 +872,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onEdit: object => {
       const action = describeObjectDetailsActions(object).edit;
       if (action?.mode === OBJECT_DETAILS_EDIT_MODE.INLINE_NAME) startObjectEditing(object, {select: false});
-      else if (action?.mode === OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL) openObjectEditorFromDetails(state, documentRef, object, {enterStateEditor});
+      else if (action?.mode === OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL) openObjectEditorFromDetails(state, documentRef, object);
     },
     onCancelEdit: () => {
       stopObjectEditing();
@@ -8995,12 +8988,11 @@ function openSelectionAwarePanelForState(state, {kind = null, beforeOpen = null,
   return object;
 }
 
-function openObjectEditorFromDetails(state, documentRef, object, {enterStateEditor} = {}) {
+function openObjectEditorFromDetails(state, documentRef, object) {
   const resolved = resolveObject(state.map, object) || object;
   const history = state.editHistory.getStats();
   state.panels.objectDetails?.clear();
 
-  if (resolved.kind === OBJECT_KIND.STATE) return enterStateEditor?.(resolved) || false;
   if (resolved.kind === OBJECT_KIND.ROUTE) {
     state.panels.route?.setSelectedRouteId(resolved.id);
     state.panels.route?.open(state.map, state.selection, history);
@@ -9014,6 +9006,11 @@ function openObjectEditorFromDetails(state, documentRef, object, {enterStateEdit
   }
 
   const openers = {
+    [OBJECT_KIND.STATE]: () => {
+      state.panels.state.setTargetStateId(resolved.id);
+      state.panels.state.open(state.map, history);
+      activateCanvasToolTheme(state, documentRef, "states");
+    },
     [OBJECT_KIND.PROVINCE]: () => {
       state.panels.province?.setSelectedProvinceId(resolved.id);
       state.panels.province?.open(state.map, state.selection, history);

@@ -48,10 +48,10 @@ assert.equal(events.at(-1).snapshot.editingObject, null, "进入不存在对象�
 const appSource = await readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 const statePanelSource = await readFile(new URL("../app/webgl-generator/src/ui/panels/state-panel.js", import.meta.url), "utf8");
 assert.match(appSource, /selectionStore\.startEditing\(object, \{select\}\)/, "进入编辑应原子设置选择与编辑态");
-assert.match(appSource, /selectionStore\.setSelection\(\{object\}, \{sourcePanelId: panelId\}\)/, "批次选择应把来源面板作为通知元数据保存");
+assert.match(sourceBetween("const selectFromPanel", "const locateAndSelectObject"), /selectionStore\.setSelection\(\{object: nextObject\}, \{sourcePanelId: panelId\}\)/, "批次选择应把来源面板作为通知元数据保存");
 assert.match(
-  appSource,
-  /state\.selectionStore\.batch\(\(\) => \{[\s\S]*?preparePanelRefresh[\s\S]*?reconcilePersistentObjectHighlights[\s\S]*?refresh\(state, executedCommand\);[\s\S]*?\}\);/,
+  sourceBetween('performanceTrace, "selectionBatch"', "} else {"),
+  /state\.selectionStore\.batch\(\(\) => \{[\s\S]*?preparePanelRefresh[\s\S]*?reconcilePersistentObjectHighlights[\s\S]*?refresh\(state, executedCommand\)/,
   "编辑执行应把状态准备、高亮校正和刷新合并为一个选择通知批次"
 );
 
@@ -65,11 +65,11 @@ assert.match(markerStart, /CANVAS_TOOL_MODE\.MARKER_MOVE[\s\S]*?CANVAS_TOOL_MODE
 assert.match(markerStart, /enterCanvasToolMode\(state, documentRef, modeId, \{type, markerId\}\)/, "标记应进入统一画布模式管理器");
 assert.match(appSource, /register\(CANVAS_TOOL_MODE\.MEASUREMENT_DRAW[\s\S]*?register\(CANVAS_TOOL_MODE\.MARKER_ADD[\s\S]*?register\(CANVAS_TOOL_MODE\.MARKER_MOVE/, "测量与标记必须注册到同一模式管理器");
 
-const stateEditorEntry = sourceBetween("const enterStateEditor", "state.startObjectEditing");
-assert.match(stateEditorEntry, /state\.panels\.state\.setTargetStateId\(object\.id\)/, "国家编辑入口必须锁定当前国家");
-assert.match(stateEditorEntry, /state\.panels\.state\.open\(state\.map, state\.editHistory\.getStats\(\)\)/, "国家编辑入口必须打开国家面板");
-assert.match(stateEditorEntry, /enterCanvasToolMode\(state, documentRef, CANVAS_TOOL_MODE\.STATE_BRUSH\)/, "国家编辑入口必须启用国家归属画笔");
-assert.match(stateEditorEntry, /startObjectEditing\(object, \{select: false\}\)/, "国家编辑入口必须同步当前编辑对象且不得重复选择");
+const detailsEditor = sourceBetween("function openObjectEditorFromDetails", "function locateObjectFromDetails");
+const stateEditorEntry = detailsEditor.split("[OBJECT_KIND.STATE]:")[1].split("[OBJECT_KIND.PROVINCE]:")[0];
+assert.match(stateEditorEntry, /setTargetStateId\(resolved\.id\)[\s\S]*?state\.panels\.state\.open\(state\.map, history\)/, "国家详情必须以当前国家打开编辑面板");
+assert.doesNotMatch(stateEditorEntry, /enterCanvasToolMode|startObjectEditing|setActive\(true\)/, "浏览国家资料时不得开启画笔或锁定交互");
+assert.match(statePanelSource, /open\(map, history\) \{\s*if \(panelState\.active\) panelCallbacks\.onActiveChange\(false\)/, "再次打开国家面板应先退出已开启的画笔");
 assert.match(appSource, /onEdit: object => \{\s*const action = describeObjectDetailsActions\(object\)\.edit;[\s\S]*?OBJECT_DETAILS_EDIT_MODE\.INLINE_NAME[\s\S]*?startObjectEditing\(object, \{select: false\}\);[\s\S]*?OBJECT_DETAILS_EDIT_MODE\.DOMAIN_PANEL[\s\S]*?openObjectEditorFromDetails/, "对象详情编辑必须按显式能力路由到行内名称或真实领域面板");
 assert.equal(describeObjectDetailsActions({kind: OBJECT_KIND.ROUTE}).edit?.mode, OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL, "道路详情必须进入真实路线面板");
 assert.equal(describeObjectDetailsActions({kind: OBJECT_KIND.RIVER}).edit?.mode, OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL, "河流详情必须进入真实河流面板");
@@ -86,7 +86,7 @@ console.log(JSON.stringify({
   deletedObjectSelection: events.at(-3).snapshot.selection,
   preservedSourcePanelId: events.at(3).metadata.sourcePanelId,
   unifiedCanvasModeEntry: true,
-  stateEditorEntry: "state-panel + state:brush + editingObject",
+  stateEditorEntry: "state-panel",
   objectDetailsPolicy: "inline-name | domain-panel | hidden"
 }, null, 2));
 
