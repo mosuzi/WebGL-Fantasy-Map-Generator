@@ -46,13 +46,7 @@ export function riverPoliticalTransition(context, from, to, {level = "province"}
   const toRiver = context.strengthById.has(toCandidate) ? toCandidate : 0;
   if (!fromRiver && !toRiver) return emptyTransition();
 
-  const fromStrength = context.strengthById.get(fromRiver) || 0;
-  const toStrength = context.strengthById.get(toRiver) || 0;
-  const sameRiver = Boolean(fromRiver && fromRiver === toRiver);
-  const lower = Math.min(fromStrength, toStrength);
-  const strength = sameRiver
-    ? Math.max(fromStrength, toStrength) * 0.15
-    : Math.min(1, Math.max(fromStrength, toStrength) + lower * 0.15);
+  const strength = crossingStrength(context, fromRiver, toRiver);
   const corridor = politicalCorridor(context, from, to);
   const multiplier = Math.max(0.25, corridor.multiplier);
   const effectiveStrength = strength * multiplier;
@@ -67,6 +61,25 @@ export function riverPoliticalTransition(context, from, to, {level = "province"}
     corridor: corridor.reason,
     corridorMultiplier: round(multiplier)
   };
+}
+
+function crossingStrength(context, fromRiver, toRiver) {
+  const a = context.strengthById.get(fromRiver) || 0, b = context.strengthById.get(toRiver) || 0;
+  return fromRiver && fromRiver === toRiver ? a * 0.15 : Math.min(1, Math.max(a, b) + Math.min(a, b) * 0.15);
+}
+
+export function riverPoliticalStrength(context, from, to) {
+  if (!context || from === to) return 0;
+  const a = context.riverAtCell[from] || Number(context.cells.r?.[from]) || 0;
+  const b = context.riverAtCell[to] || Number(context.cells.r?.[to]) || 0;
+  return a || b ? crossingStrength(context, a, b) : 0;
+}
+
+export function riverPoliticalCost(context, from, to, level) {
+  const strength = riverPoliticalStrength(context, from, to);
+  if (!strength) return 0;
+  const effective = strength * Math.max(0.25, politicalCorridor(context, from, to).multiplier);
+  return round((level === "state" ? 60 : 45) * effective ** 2);
 }
 
 export function summarizeRiverPoliticalBarrier(context) {
@@ -228,10 +241,11 @@ function politicalCorridor(context, from, to) {
   const group = String(route?.group || route?.type || "").toLowerCase();
   if (group === "roads" || group === "road") return {multiplier: 0.35, reason: "road"};
   if (group === "trails" || group === "trail") return {multiplier: 0.55, reason: "trail"};
-  const burgIds = [context.cells.burg?.[from], context.cells.burg?.[to]].map(Number).filter(Boolean);
-  if (burgIds.some(id => context.burgs?.[id]?.port)) return {multiplier: 0.45, reason: "port"};
-  if (burgIds.some(id => context.burgs?.[id]?.capital || context.burgs?.[id]?.provincial)) return {multiplier: 0.55, reason: "administrative-center"};
-  if (burgIds.length) return {multiplier: 0.7, reason: "settlement"};
+  const first = Number(context.cells.burg?.[from]), second = Number(context.cells.burg?.[to]);
+  const a = first && context.burgs?.[first], b = second && context.burgs?.[second];
+  if (a?.port || b?.port) return {multiplier: 0.45, reason: "port"};
+  if (a?.capital || a?.provincial || b?.capital || b?.provincial) return {multiplier: 0.55, reason: "administrative-center"};
+  if (first || second) return {multiplier: 0.7, reason: "settlement"};
   return {multiplier: 1, reason: "none"};
 }
 

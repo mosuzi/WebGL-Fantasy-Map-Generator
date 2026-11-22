@@ -76,7 +76,7 @@ function floodGridFeatures({grid, distanceField, featureIds, features}) {
 
     const type = land ? "island" : border ? "ocean" : "lake";
     features.push({id: featureId, i: featureId, land, border, type, cells: []});
-    queue[0] = featureIds.indexOf(UNMARKED);
+    queue[0] = featureIds.indexOf(UNMARKED, firstCell + 1);
   }
 }
 

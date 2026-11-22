@@ -87,7 +87,9 @@ try {
       }
     };
     const mutations = new MutationObserver(sampleFeedback);
-    mutations.observe(document.body, {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["hidden", "class", "aria-hidden"]});
+    for (const node of feedbackNodes) {
+      mutations.observe(node, {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["hidden", "class", "aria-hidden"]});
+    }
     try {
       trace.apiStartedAt = performance.now();
       const response = await api.generate.newMap({confirm: true, seed, cellsTarget, heightmapTemplate: "continents"});
@@ -130,8 +132,8 @@ try {
   assert.equal(run.task, "generation.compute");
   assert.equal(run.mode, "worker");
   assert.equal(run.payloadOwnMap, false, "整图生成错误重传了旧正式地图");
-  assert.deepEqual(run.requestLayers, ["cell-visual", "shore", "state-paths", "province-paths", "political", "surface", "line", "picking", "labels", "route", "river", "point"]);
-  assert.deepEqual(run.preparedKeys, ["cellVisual", "shore", "statePaths", "provincePaths", "political", "politicalDebug", "surface", "line", "picking", "labels", "route", "river", "point"]);
+  assert.deepEqual(run.requestLayers, ["shore", "shore-surface", "state-paths", "province-paths", "surface", "line", "picking", "labels", "route", "river", "point"]);
+  assert.deepEqual(run.preparedKeys.slice().sort(), ["shore", "statePaths", "provincePaths", "surface", "cellAttributes", "line", "picking", "labels", "route", "river", "point"].sort());
   assert.deepEqual(run.preparedBinding, run.requestBinding);
   assert.ok(run.telemetry?.inputPackets > 0 && run.telemetry?.outputPackets > 1, "整图生成没有流式输入输出证据");
   assert.equal(report.trace.preparedLoads, 1);

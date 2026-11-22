@@ -111,7 +111,7 @@ export function buildShoreTopologySnapshot(paths, map, options = {}) {
   stats.eligibleSourceLengthWorld = roundMs(stats.eligibleSourceLengthWorld);
   stats.smoothedSourceLengthWorld = roundMs(stats.smoothedSourceLengthWorld);
   stats.maxVisibleDisplacementWorld = roundMs(stats.maxVisibleDisplacementWorld);
-  stats.buildMs = roundMs(nowMs() - startedAt);
+  stats.buildMs = roundMs(nowMs() - startedAt + (options.preparedArcMs || 0));
 
   return Object.freeze({
     paths: Object.freeze(snapshotPaths),
@@ -119,7 +119,7 @@ export function buildShoreTopologySnapshot(paths, map, options = {}) {
   });
 }
 
-export function buildShoreArcSnapshot(path, protectedObjects = {towns: [], roads: [], rivers: []}, options = {}) {
+export function prepareShoreArc(path, options = {}) {
   const settings = {...SHORE_TOPOLOGY_ALGORITHM, ...options};
   const gates = {...SHORE_TOPOLOGY_GATES, maxDisplacement: settings.maxDisplacement, ...options.gates};
   const sourceDefinitionValid = Array.isArray(path?.points) && path.points.every(isWorldPoint);
@@ -127,76 +127,92 @@ export function buildShoreArcSnapshot(path, protectedObjects = {towns: [], roads
   const closed = isClosed(sourcePoints);
   let renderPoints = sourcePoints;
   let fallbackReason = sourceDefinitionValid ? validateSource(sourcePoints, closed) : "invalid-source";
+  let sideSafety;
+  if (!fallbackReason) {
+    try {
+      renderPoints = transformRecommendedShoreArc(sourcePoints, settings);
+      fallbackReason = validateTransformedArc(sourcePoints, renderPoints, closed, gates);
+      if (!fallbackReason && options.isSideSampleSafe) sideSafety = collectUnsafeSideSegments(path, renderPoints, options.isSideSampleSafe);
+    } catch {
+      fallbackReason = "invalid-transform";
+    }
+  }
+  return {sourcePoints, closed, renderPoints, fallbackReason, sideSafety};
+}
+
+export function buildShoreArcSnapshot(path, protectedObjects = {towns: [], roads: [], rivers: []}, options = {}) {
+  const settings = {...SHORE_TOPOLOGY_ALGORITHM, ...options};
+  const gates = {...SHORE_TOPOLOGY_GATES, maxDisplacement: settings.maxDisplacement, ...options.gates};
+  const candidate = options.preparedArcs?.get(path) || prepareShoreArc(path, options);
+  const {sourcePoints, closed} = candidate;
+  let {renderPoints, fallbackReason} = candidate;
   let localFallbackSegments = new Set();
   let localFallbackReasons = {};
 
   if (!fallbackReason) {
     try {
-      renderPoints = transformRecommendedShoreArc(sourcePoints, settings);
-      fallbackReason = validateTransformedArc(sourcePoints, renderPoints, closed, gates);
-      if (!fallbackReason) {
-        const localResult = applyLocalSafetyFallback(
-          path,
-          sourcePoints,
-          renderPoints,
-          protectedObjects,
-          settings,
-          gates,
-          options.isSideSampleSafe
-        );
-        renderPoints = localResult.renderPoints;
-        localFallbackSegments = localResult.segments;
-        localFallbackReasons = localResult.reasons;
-        fallbackReason = localResult.fallbackReason;
-        if ((fallbackReason || localFallbackSegments.size > 0) && isClosedTriangle(sourcePoints)) {
-          const protectedAnchor = findProtectedTriangleAnchor(sourcePoints, protectedObjects, localFallbackReasons);
-          if (protectedAnchor) {
-            const anchoredRenderPoints = transformAnchoredTriangleShoreArc(sourcePoints, protectedAnchor, settings);
-            const anchoredFailure = validateTransformedArc(sourcePoints, anchoredRenderPoints, closed, gates);
-            if (!anchoredFailure) {
-              const anchoredResult = applyLocalSafetyFallback(
-                path,
-                sourcePoints,
-                anchoredRenderPoints,
-                protectedObjects,
-                settings,
-                gates,
-                options.isSideSampleSafe
-              );
-              if (!anchoredResult.fallbackReason && anchoredResult.segments.size === 0) {
-                renderPoints = anchoredResult.renderPoints;
-                localFallbackSegments = anchoredResult.segments;
-                localFallbackReasons = anchoredResult.reasons;
-                fallbackReason = null;
-              }
-            }
-          }
-        }
-        if ((fallbackReason || localFallbackSegments.size > 0) && isClosedTriangle(sourcePoints)) {
-          for (let attempt = 1; attempt <= 6; attempt++) {
-            const retrySettings = {
-              ...settings,
-              smoothness: settings.smoothness * 0.8 ** attempt
-            };
-            const retryRenderPoints = transformRecommendedShoreArc(sourcePoints, retrySettings);
-            const retryFailure = validateTransformedArc(sourcePoints, retryRenderPoints, closed, gates);
-            if (retryFailure) continue;
-            const retryResult = applyLocalSafetyFallback(
+      const localResult = applyLocalSafetyFallback(
+        path,
+        sourcePoints,
+        renderPoints,
+        protectedObjects,
+        settings,
+        gates,
+        options.isSideSampleSafe,
+        candidate.sideSafety
+      );
+      renderPoints = localResult.renderPoints;
+      localFallbackSegments = localResult.segments;
+      localFallbackReasons = localResult.reasons;
+      fallbackReason = localResult.fallbackReason;
+      if ((fallbackReason || localFallbackSegments.size > 0) && isClosedTriangle(sourcePoints)) {
+        const protectedAnchor = findProtectedTriangleAnchor(sourcePoints, protectedObjects, localFallbackReasons);
+        if (protectedAnchor) {
+          const anchoredRenderPoints = transformAnchoredTriangleShoreArc(sourcePoints, protectedAnchor, settings);
+          const anchoredFailure = validateTransformedArc(sourcePoints, anchoredRenderPoints, closed, gates);
+          if (!anchoredFailure) {
+            const anchoredResult = applyLocalSafetyFallback(
               path,
               sourcePoints,
-              retryRenderPoints,
+              anchoredRenderPoints,
               protectedObjects,
-              retrySettings,
+              settings,
               gates,
               options.isSideSampleSafe
             );
-            if (retryResult.fallbackReason || retryResult.segments.size > 0) continue;
-            renderPoints = retryResult.renderPoints;
-            localFallbackSegments = retryResult.segments;
-            localFallbackReasons = retryResult.reasons;
-            fallbackReason = null;
-            break;
+            if (!anchoredResult.fallbackReason && anchoredResult.segments.size === 0) {
+              renderPoints = anchoredResult.renderPoints;
+              localFallbackSegments = anchoredResult.segments;
+              localFallbackReasons = anchoredResult.reasons;
+              fallbackReason = null;
+            }
           }
+        }
+      }
+      if ((fallbackReason || localFallbackSegments.size > 0) && isClosedTriangle(sourcePoints)) {
+        for (let attempt = 1; attempt <= 6; attempt++) {
+          const retrySettings = {
+            ...settings,
+            smoothness: settings.smoothness * 0.8 ** attempt
+          };
+          const retryRenderPoints = transformRecommendedShoreArc(sourcePoints, retrySettings);
+          const retryFailure = validateTransformedArc(sourcePoints, retryRenderPoints, closed, gates);
+          if (retryFailure) continue;
+          const retryResult = applyLocalSafetyFallback(
+            path,
+            sourcePoints,
+            retryRenderPoints,
+            protectedObjects,
+            retrySettings,
+            gates,
+            options.isSideSampleSafe
+          );
+          if (retryResult.fallbackReason || retryResult.segments.size > 0) continue;
+          renderPoints = retryResult.renderPoints;
+          localFallbackSegments = retryResult.segments;
+          localFallbackReasons = retryResult.reasons;
+          fallbackReason = null;
+          break;
         }
       }
     } catch {
@@ -399,7 +415,7 @@ function validateTransformedArc(source, render, closed, gates) {
   return null;
 }
 
-function applyLocalSafetyFallback(path, source, candidate, protectedObjects, settings, gates, isSideSampleSafe) {
+function applyLocalSafetyFallback(path, source, candidate, protectedObjects, settings, gates, isSideSampleSafe, initialSideSafety) {
   const segmentCount = Math.max(0, source.length - 1);
   const closed = isClosed(source);
   const segments = new Set();
@@ -407,9 +423,9 @@ function applyLocalSafetyFallback(path, source, candidate, protectedObjects, set
   let renderPoints = candidate;
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const side = typeof isSideSampleSafe === "function"
+    const side = (attempt === 0 && initialSideSafety) || (typeof isSideSampleSafe === "function"
       ? collectUnsafeSideSegments(path, renderPoints, isSideSampleSafe)
-      : {segments: new Set(), reasons: {}};
+      : {segments: new Set(), reasons: {}});
     const protectedResult = collectUnsafeProtectedSegments(source, renderPoints, protectedObjects, gates);
     const previousSize = segments.size;
     mergeSegmentSets(segments, side.segments);
@@ -615,7 +631,7 @@ function collectUnsafeProtectedSegments(source, render, protectedObjects, gates)
   const nearbyObjects = queryProtectedObjects(safeObjects, sourceBounds);
   for (const town of nearbyObjects.towns) {
     if (!pointInBounds(town, sourceBounds)) continue;
-    const sourceProjection = nearestPathProjection(town, source, sourceIndex);
+    const sourceProjection = nearestPathProjection(town, source, sourceIndex, gates.protectedDistanceWorld);
     if (sourceProjection.distance > gates.protectedDistanceWorld) continue;
     const renderProjection = nearestPathProjection(town, render, renderIndex);
     const clearance = Math.min(gates.protectedClearanceWorld, sourceProjection.distance * 0.5);
@@ -649,7 +665,7 @@ function collectUnsafeProtectedSegments(source, render, protectedObjects, gates)
       reasons["protected-river"] = (reasons["protected-river"] || 0) + 1;
     }
     const mouth = river.at(-1);
-    const sourceMouthDistance = nearestPathProjection(mouth, source, sourceIndex).distance;
+    const sourceMouthDistance = nearestPathProjection(mouth, source, sourceIndex, gates.protectedDistanceWorld).distance;
     if (sourceMouthDistance <= gates.protectedDistanceWorld) {
       const renderMouthDistance = nearestPathProjection(mouth, render, renderIndex).distance;
       if (renderMouthDistance > Math.max(gates.mouthDistanceWorld, sourceMouthDistance + 3) ||
@@ -918,10 +934,10 @@ function hasCrossingProjectionQuad(points, source) {
   return false;
 }
 
-function nearestPathProjection(point, source, spatialIndex = null) {
+function nearestPathProjection(point, source, spatialIndex = null, maxDistance = Infinity) {
   if (!isWorldPoint(point) || !source?.length) return {point, sourceIndex: 0, t: 0, distance: Infinity};
   if (source.length === 1) return {point: source[0], sourceIndex: 0, t: 0, distance: worldDistance(point, source[0])};
-  if (spatialIndex?.buckets?.size) return nearestIndexedPathProjection(point, source, spatialIndex);
+  if (spatialIndex?.buckets?.size) return nearestIndexedPathProjection(point, source, spatialIndex, maxDistance);
   return nearestPathProjectionFromSegments(point, source, null);
 }
 
@@ -1009,7 +1025,7 @@ function createSegmentSpatialIndex(line, cellSize = 7) {
   };
 }
 
-function nearestIndexedPathProjection(point, source, index) {
+function nearestIndexedPathProjection(point, source, index, maxDistance) {
   const column = Math.floor(point[0] / index.cellSize);
   const row = Math.floor(point[1] / index.cellSize);
   const maxRing = Math.max(
@@ -1060,8 +1076,11 @@ function nearestIndexedPathProjection(point, source, index) {
   };
   for (let ring = 0; ring <= maxRing; ring++) {
     forEachRingCell(column, row, ring, visitCell);
-    const searchedDistance = Math.max(0, ring - 1) * index.cellSize;
-    if (bestDistanceSquared < Infinity && searchedDistance * searchedDistance > bestDistanceSquared) break;
+    const searchedDistance = Math.min(point[0] - (column - ring) * index.cellSize,
+      (column + ring + 1) * index.cellSize - point[0], point[1] - (row - ring) * index.cellSize,
+      (row + ring + 1) * index.cellSize - point[1]);
+    if (searchedDistance > 0 && searchedDistance * searchedDistance > bestDistanceSquared) break;
+    if (searchedDistance > maxDistance) break;
   }
   return bestDistanceSquared < Infinity
     ? {
@@ -1071,7 +1090,7 @@ function nearestIndexedPathProjection(point, source, index) {
         distance: Math.sqrt(bestDistanceSquared),
         tangent: [bestTangentX, bestTangentY]
       }
-    : nearestPathProjectionFromSegments(point, source, null);
+    : {point, sourceIndex: 0, t: 0, distance: Infinity, tangent: [0, 0]};
 }
 
 function querySegmentIndexesByBounds(index, bounds) {

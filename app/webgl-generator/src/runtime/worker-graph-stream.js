@@ -643,7 +643,13 @@ function updateStreamChecksumText(state, value) {
 }
 
 function updateStreamChecksumBytes(state, bytes) {
-  for (let index = 0; index < bytes.length; index += 1) updateStreamChecksumByte(state, bytes[index]);
+  let {hash, mix} = state;
+  for (let index = 0; index < bytes.length; index += 1) {
+    hash = Math.imul(hash ^ bytes[index], STREAM_CHECKSUM_PRIME);
+    mix = Math.imul(mix ^ bytes[index], STREAM_CHECKSUM_MIX_PRIME);
+  }
+  state.hash = hash >>> 0;
+  state.mix = mix >>> 0;
 }
 
 function updateStreamChecksumByte(state, value) {

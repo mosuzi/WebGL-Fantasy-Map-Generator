@@ -1353,6 +1353,7 @@ function initializeTaxRates(states, random, protectedStateIds = new Set()) {
 }
 
 function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options = {}) {
+  const supplyRankings = new Map();
   const locks = options.economyLocks || prepareEconomyRegenerationLocks(pack, options);
   const protectedStateIds = options.protectedStateIds || regenerationSnapshotIds(options.lockedStates);
   const protectedBurgIds = options.protectedBurgIds || collectProtectedEconomyBurgIds(pack, locks, options);
@@ -1385,7 +1386,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
     burg.production = [];
     const development = cityDevelopmentEffects(burg).economy;
     const localMarket = pack.markets?.[burg.market];
-    const localGood = selectMarketDealGood(localMarket, rawGoods, burg.i, 0, rawGoods[(burg.i * 7) % rawGoods.length]);
+    const localGood = selectMarketDealGood(localMarket, rawGoods, burg.i, 0, rawGoods[(burg.i * 7) % rawGoods.length], supplyRankings);
     const localGoodId = pack.cells.good?.[burg.cell] || localGood.good.i;
     if (shouldCreateLocalProduction(burg.i, localProductionRate)) {
       burg.production.push({goodId: localGoodId, units: productionUnits(burg, development)});
@@ -1401,7 +1402,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
     }
 
     for (let index = 0; index < marketToBurgDeals; index++) {
-      const selectedGood = selectMarketDealGood(localMarket, dealGoods, burg.i, index, dealGoods[(burg.i * 13 + index * 7) % dealGoods.length]);
+      const selectedGood = selectMarketDealGood(localMarket, dealGoods, burg.i, index, dealGoods[(burg.i * 13 + index * 7) % dealGoods.length], supplyRankings);
       const deal = addDeal({
         pack,
         deals,
@@ -1424,7 +1425,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
 
     for (let index = 0; index < 3; index++) {
       const fallbackGoodId = rawDealGoods[(burg.i * 3 + index * 5) % rawDealGoods.length]?.i ?? dealGoods[(burg.i + index) % dealGoods.length].i;
-      const selectedGood = selectMarketDealGood(localMarket, rawDealGoods.length ? rawDealGoods : dealGoods, burg.i, index + 17, {i: fallbackGoodId});
+      const selectedGood = selectMarketDealGood(localMarket, rawDealGoods.length ? rawDealGoods : dealGoods, burg.i, index + 17, {i: fallbackGoodId}, supplyRankings);
       const goodId = index === 0 && dealGoodIds.has(localGoodId) ? localGoodId : selectedGood.good.i;
       const deal = addDeal({
         pack,
@@ -1454,7 +1455,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
     for (let index = 0; index < marketTradeLinks; index++) {
       const buyer = markets[(marketIndex + index + 1) % markets.length];
       if (!buyer || buyer.i === market.i) continue;
-      const selectedGood = selectMarketDealGood(market, dealGoods, market.i, index, dealGoods[(market.i * 17 + index * 9) % dealGoods.length]);
+      const selectedGood = selectMarketDealGood(market, dealGoods, market.i, index, dealGoods[(market.i * 17 + index * 9) % dealGoods.length], supplyRankings);
       addDeal({
         pack,
         deals,
@@ -1502,26 +1503,32 @@ function getDealGoods(goods, options) {
   return goods.slice(0, Math.min(goods.length, 64));
 }
 
-function selectMarketDealGood(market, goods, saltA, saltB, fallback) {
+function selectMarketDealGood(market, goods, saltA, saltB, fallback, supplyRankings) {
   const fallbackGood = fallback || goods[Math.abs((saltA + saltB) % goods.length)];
+  if (((saltA * 31 + saltB * 17) % 100) >= 58) return {good: fallbackGood, source: "scheduled"};
+  let marketRankings = supplyRankings.get(market);
+  if (!marketRankings) supplyRankings.set(market, marketRankings = new Map());
+  let supplied = marketRankings.get(goods);
+  if (!supplied) {
+    supplied = marketSupplyRanking(market, goods);
+    marketRankings.set(goods, supplied);
+  }
+  if (!supplied.length) return {good: fallbackGood, source: "scheduled"};
+  const selected = supplied[Math.abs((saltA * 13 + saltB * 7) % supplied.length)];
+  return {good: selected.good, source: selected.source};
+}
+
+function marketSupplyRanking(market, goods) {
   const allowed = new Set(goods.map(good => good.i));
-  const supplied = Object.entries(market?.resourceSupply || {})
+  return Object.entries(market?.resourceSupply || {})
     .map(([goodId, supply]) => ({
       goodId: Number(goodId),
       supply: Number(supply || 0),
       source: market.resourceSupplySources?.[goodId] >= GOOD_SOURCE_MARKER ? "marker-resource" : "market-resource"
     }))
     .filter(item => allowed.has(item.goodId) && item.supply > 0)
-    .sort((a, b) => b.supply - a.supply || a.goodId - b.goodId);
-
-  if (!supplied.length) return {good: fallbackGood, source: "scheduled"};
-  const supplyPreference = ((saltA * 31 + saltB * 17) % 100) < 58;
-  if (!supplyPreference) return {good: fallbackGood, source: "scheduled"};
-  const selected = supplied[Math.abs((saltA * 13 + saltB * 7) % supplied.length)];
-  return {
-    good: goods.find(good => good.i === selected.goodId) || fallbackGood,
-    source: selected.source
-  };
+    .sort((a, b) => b.supply - a.supply || a.goodId - b.goodId)
+    .map(item => ({good: goods.find(good => good.i === item.goodId), source: item.source}));
 }
 
 function productionRecipe(good) {

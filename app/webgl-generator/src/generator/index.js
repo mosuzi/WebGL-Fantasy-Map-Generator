@@ -20,6 +20,13 @@ import {buildSociety, finalizeSocietyReligions} from "./society.js";
 import {buildZones} from "./zones.js";
 
 export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
+  const stages = generateMapStages(inputOptions, overrides);
+  let step = stages.next();
+  while (!step.done) step = stages.next();
+  return step.value;
+}
+
+export function* generateMapStages(inputOptions = {}, overrides = {}) {
   const profile = createStageProfile({
     onStageStart: overrides.onStageStart,
     onStageEnd: overrides.onStageEnd
@@ -46,6 +53,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   const grid = profile.stage("grid", "构建 grid / Voronoi / 高度", () => buildGrid(generationOptions, gridRandom, heightmap, random));
   const mapTemplate = profile.stage("map-template", "映射地图模板证据", () => applyMapTemplateGridEvidence(grid, heightmap));
   const features = profile.stage("features", "提取水陆 feature", () => extractFeatures(grid));
+  yield {grid, features, options: generationOptions};
   const climateRandom = profile.stage("random-climate", "初始化气候随机源", () => createRandom(generationOptions.seed));
   const climate = profile.stage("climate", "生成气候", () => buildClimate(grid, features, generationOptions, climateRandom));
   const oceanCurrents = profile.stage("ocean-currents", "生成主要表层洋流", () => buildOceanCurrents({
@@ -71,6 +79,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
     pruneNeutralSettlements: true,
     reassessProvincialCapitals: true
   }));
+  yield {settlements, rivers};
   const markers = profile.stage("markers", "生成标记 / 资源点", () => buildMarkers(grid, features, politics, rivers, pack, generationOptions));
   pack.markers = markers.markers;
   const economy = profile.stage("economy", "生成商品 / 市场 / 交易 / 税收", () => buildEconomy(pack, generationOptions));

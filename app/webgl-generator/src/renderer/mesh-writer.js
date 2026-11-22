@@ -107,15 +107,29 @@ function pushWorldLineQuad(vertices, context, start, end, color, halfWidth) {
   pushWorldVertex(vertices, context, d, color);
 }
 
+const unitCircles = new Map();
+
 function pushWorldCircle(vertices, context, center, radius, color, segments = 10) {
   if (!isWorldPoint(center)) return;
   const count = Math.max(6, Math.round(segments));
-  for (let index = 0; index < count; index++) {
-    const a = (index / count) * Math.PI * 2;
-    const b = ((index + 1) / count) * Math.PI * 2;
-    pushWorldVertex(vertices, context, center, color);
-    pushWorldVertex(vertices, context, [center[0] + Math.cos(a) * radius, center[1] + Math.sin(a) * radius], color);
-    pushWorldVertex(vertices, context, [center[0] + Math.cos(b) * radius, center[1] + Math.sin(b) * radius], color);
+  let offsets = unitCircles.get(count);
+  if (!offsets) {
+    offsets = Array.from({length: count + 1}, (_, i) => {
+      const angle = (i / count) * Math.PI * 2;
+      return [Math.cos(angle), Math.sin(angle)];
+    });
+    if (count <= 64) unitCircles.set(count, offsets);
+  }
+  const [cx, cy] = worldToNdcPoint(context, center);
+  const {graphWidth, graphHeight} = context.map.metadata;
+  let x = ((center[0] + radius) / graphWidth) * 2 - 1;
+  let y = 1 - (center[1] / graphHeight) * 2;
+  for (let i = 1; i <= count; i++) {
+    pushVertex(vertices, cx, cy, color);
+    pushVertex(vertices, x, y, color);
+    x = ((center[0] + offsets[i][0] * radius) / graphWidth) * 2 - 1;
+    y = 1 - ((center[1] + offsets[i][1] * radius) / graphHeight) * 2;
+    pushVertex(vertices, x, y, color);
   }
 }
 

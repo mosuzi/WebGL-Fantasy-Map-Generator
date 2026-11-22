@@ -11,9 +11,9 @@ import {
   worldDistance
 } from "./geometry.js";
 import {pushWorldLine, pushWorldPolylineMesh, pushWorldVertex} from "./mesh-writer.js";
-import {pickGridCell} from "./picking.js";
+import {locateGridPoint} from "../geometry/grid-point.js";
 import {createRandom} from "../generator/random.js";
-import {SHORE_TOPOLOGY_ALGORITHM, buildShoreTopologySnapshot, collectProtectedShoreObjects} from "./coastline-topology.js";
+import {SHORE_TOPOLOGY_ALGORITHM, buildShoreTopologySnapshot, collectProtectedShoreObjects, prepareShoreArc} from "./coastline-topology.js";
 import polygonClipping from "polygon-clipping";
 import earcut from "earcut";
 import {resolvedGridVertexPoint} from "./grid-vertex-geometry.js";
@@ -22,7 +22,9 @@ import {withSurfaceSideAlpha} from "./surface-side-depth.js";
 import {filterShoreRenderSpikes as filterLabShoreRenderSpikes} from "../../../../prototype/boundary-topology-lab/src/shore-render-spike-filter.js";
 
 const shoreSourceIndexCache = new WeakMap();
+const clampedShorePointCache = new WeakMap();
 const shoreRingIndexCache = new WeakMap();
+const shoreRingCrossings = new WeakMap();
 const shoreBandGeometryCache = new WeakMap();
 const shoreSurfaceCorrectionCache = new WeakMap();
 const shoreSurfaceDrawPacketCache = new WeakMap();
@@ -849,8 +851,33 @@ function triangleCentroid(points) {
 }
 
 function pointInShoreRing(point, ring) {
+  let edges;
+  if (ring.length >= 32) {
+    let scan = shoreRingCrossings.get(ring);
+    if (!scan) {
+      let minY = Infinity, maxY = -Infinity;
+      for (const p of ring) {
+        minY = Math.min(minY, p[1]);
+        maxY = Math.max(maxY, p[1]);
+      }
+      const bins = Array.from({length: Math.min(256, Math.ceil(ring.length / 4))}, () => []);
+      const step = (maxY - minY) / bins.length || 1;
+      const bin = y => Math.min(bins.length - 1, Math.floor((y - minY) / step));
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const lo = Math.min(ring[i][1], ring[j][1]), hi = Math.max(ring[i][1], ring[j][1]);
+        if (lo === hi) continue;
+        for (let b = bin(lo); b <= bin(hi); b++) bins[b].push(i);
+      }
+      scan = {minY, maxY, bins, bin};
+      shoreRingCrossings.set(ring, scan);
+    }
+    if (point[1] < scan.minY || point[1] >= scan.maxY) return false;
+    edges = scan.bins[scan.bin(point[1])];
+  }
   let inside = false;
-  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+  for (let i = 0, length = edges ? edges.length : ring.length; i < length; i++) {
+    const index = edges ? edges[i] : i;
+    const previous = index ? index - 1 : ring.length - 1;
     const a = ring[index];
     const b = ring[previous];
     const crosses = (a[1] > point[1]) !== (b[1] > point[1])
@@ -862,7 +889,8 @@ function pointInShoreRing(point, ring) {
 
 function pointInShoreRegion(point, rings) {
   if (!rings?.length || !pointInShoreRing(point, rings[0])) return false;
-  return !rings.slice(1).some(ring => pointInShoreRing(point, ring));
+  for (let i = 1; i < rings.length; i++) if (pointInShoreRing(point, rings[i])) return false;
+  return true;
 }
 
 function validateShoreDifferenceArea(difference, triangles) {
@@ -1010,18 +1038,18 @@ function splitShoreBandAtColorTransitions(segment, map, colorMode, viewOptions, 
     const pointAt = t => interpolateWorldPoint(segment[`${side}A`], segment[`${side}B`], t);
     let previousT = 0;
     let previousPoint = pointAt(previousT);
-    let previousCell = pickGridCell(map, previousPoint[0], previousPoint[1])?.gridCell;
+    let previousCell = shoreGridCell(map, previousPoint[0], previousPoint[1]);
     for (let index = 1; index <= 64; index++) {
       const t = index / 64;
       const point = pointAt(t);
-      const cell = pickGridCell(map, point[0], point[1])?.gridCell;
+      const cell = shoreGridCell(map, point[0], point[1]);
       if (cell !== previousCell) {
         let low = previousT;
         let high = t;
         for (let pass = 0; pass < 14; pass++) {
           const middle = (low + high) / 2;
           const middlePoint = pointAt(middle);
-          const middleCell = pickGridCell(map, middlePoint[0], middlePoint[1])?.gridCell;
+          const middleCell = shoreGridCell(map, middlePoint[0], middlePoint[1]);
           if (middleCell === previousCell) low = middle;
           else high = middle;
         }
@@ -1058,10 +1086,10 @@ function inspectShoreColorSubdivision(segment, map) {
     }
   }
   for (const side of ["land", "water"]) {
-    const reference = pickGridCell(map, segment[`${side}A`][0], segment[`${side}A`][1])?.gridCell;
+    const reference = shoreGridCell(map, segment[`${side}A`][0], segment[`${side}A`][1]);
     for (const t of [0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
       const point = interpolateWorldPoint(segment[`${side}A`], segment[`${side}B`], t);
-      if (pickGridCell(map, point[0], point[1])?.gridCell === reference) continue;
+      if (shoreGridCell(map, point[0], point[1]) === reference) continue;
       result[side] = true;
       break;
     }
@@ -1087,8 +1115,8 @@ function flattenShoreBandColors(segment, map, colorMode, viewOptions) {
   const midpointLand = interpolateWorldPoint(segment.landA, segment.landB, 0.5);
   const midpointWater = interpolateWorldPoint(segment.waterA, segment.waterB, 0.5);
   const {landCell, waterCell} = canonicalShoreCellsAtPoint(segment, center);
-  const landOuterCell = pickGridCell(map, midpointLand[0], midpointLand[1])?.gridCell ?? landCell;
-  const waterOuterCell = pickGridCell(map, midpointWater[0], midpointWater[1])?.gridCell ?? waterCell;
+  const landOuterCell = shoreGridCell(map, midpointLand[0], midpointLand[1]) ?? landCell;
+  const waterOuterCell = shoreGridCell(map, midpointWater[0], midpointWater[1]) ?? waterCell;
   const landColor = colorForCell(landCell, map, colorMode, viewOptions);
   const waterColor = colorForCell(waterCell, map, colorMode, viewOptions);
   const landOuterColor = colorForCell(landOuterCell, map, colorMode, viewOptions);
@@ -1133,8 +1161,8 @@ function sliceShoreBandSegment(segment, t0, t1, scale0, scale1, map, colorMode, 
     const sourceIndex = t < 0.5 ? segment.sourceIndexA : segment.sourceIndexB;
     const landColor = interpolateColor(segment.landColorA, segment.landColorB, t);
     const waterColor = interpolateColor(segment.waterColorA, segment.waterColorB, t);
-    const landOuterCell = scale <= 0 ? landCell : pickGridCell(map, land[0], land[1])?.gridCell;
-    const waterOuterCell = scale <= 0 ? waterCell : pickGridCell(map, water[0], water[1])?.gridCell;
+    const landOuterCell = scale <= 0 ? landCell : shoreGridCell(map, land[0], land[1]);
+    const waterOuterCell = scale <= 0 ? waterCell : shoreGridCell(map, water[0], water[1]);
     return {
       center,
       land,
@@ -1201,8 +1229,8 @@ function createShoreVisualSegment(visual, index, widthScales, map) {
     const halfWidth = fitShoreHalfWidth(map, center, side, preferred);
     const land = [center[0] + side.x * halfWidth, center[1] + side.y * halfWidth];
     const water = [center[0] - side.x * halfWidth, center[1] - side.y * halfWidth];
-    const landOuterCell = pickGridCell(map, land[0], land[1])?.gridCell;
-    const waterOuterCell = pickGridCell(map, water[0], water[1])?.gridCell;
+    const landOuterCell = shoreGridCell(map, land[0], land[1]);
+    const waterOuterCell = shoreGridCell(map, water[0], water[1]);
     return {
       center,
       land,
@@ -1320,13 +1348,18 @@ function signedTriangleDoubleArea(a, b, c) {
   return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }
 
+function shoreGridCell(map, x, y) {
+  if (x < 0 || y < 0 || x > map.metadata.graphWidth || y > map.metadata.graphHeight) return undefined;
+  return locateGridPoint(map.grid, x, y, map.metadata).cell;
+}
+
 function isLandSample(map, point) {
-  const cell = pickGridCell(map, point[0], point[1])?.gridCell;
+  const cell = shoreGridCell(map, point[0], point[1]);
   return cell !== null && cell !== undefined && isLandCell(cell, map);
 }
 
 function isWaterSample(map, point) {
-  const cell = pickGridCell(map, point[0], point[1])?.gridCell;
+  const cell = shoreGridCell(map, point[0], point[1]);
   return cell !== null && cell !== undefined && !isLandCell(cell, map);
 }
 
@@ -1431,6 +1464,8 @@ function isShoreOffsetSafe(map, point, side, halfWidth) {
 }
 
 function clampedShoreRenderPoints(path) {
+  const cached = clampedShorePointCache.get(path);
+  if (cached) return cached;
   const sourcePoints = path?.points || [];
   const renderPoints = path?.renderPoints?.length ? path.renderPoints : sourcePoints;
   const result = [];
@@ -1449,7 +1484,9 @@ function clampedShoreRenderPoints(path) {
       });
     }
   }
-  return filterShoreRenderSpikes(result);
+  const filtered = filterShoreRenderSpikes(result);
+  if (Object.isFrozen(path)) clampedShorePointCache.set(path, filtered);
+  return filtered;
 }
 
 function clampShoreRenderPoint(point, sourcePoint) {
@@ -1505,19 +1542,30 @@ function nearestIndexedPathProjection(point, index) {
   const sourcePoints = index.sourcePoints;
   const bucketX = Math.floor(point[0] / index.bucketSize);
   const bucketY = Math.floor(point[1] / index.bucketSize);
-  const visited = new Set();
+  if (++index.generation === 0xffffffff) {
+    index.visited.fill(0);
+    index.generation = 1;
+  }
   let best = {point: sourcePoints[0], sourceIndex: 0, t: 0, distance: Infinity};
   for (let radius = 0; radius <= index.maxRadius; radius++) {
     for (let y = bucketY - radius; y <= bucketY + radius; y++) {
       for (let x = bucketX - radius; x <= bucketX + radius; x++) {
         if (radius && x > bucketX - radius && x < bucketX + radius && y > bucketY - radius && y < bucketY + radius) continue;
-        for (const sourceIndex of index.buckets.get(`${x}:${y}`) || []) {
-          if (visited.has(sourceIndex)) continue;
-          visited.add(sourceIndex);
-          const projected = projectPointToSegment(point, sourcePoints[sourceIndex], sourcePoints[sourceIndex + 1]);
-          const distanceDelta = projected.distance - best.distance;
+        const candidates = index.buckets.get(y)?.get(x);
+        if (!candidates) continue;
+        for (const sourceIndex of candidates) {
+          if (index.visited[sourceIndex] === index.generation) continue;
+          index.visited[sourceIndex] = index.generation;
+          const a = sourcePoints[sourceIndex], b = sourcePoints[sourceIndex + 1];
+          const dx = b[0] - a[0], dy = b[1] - a[1];
+          const length = dx * dx + dy * dy;
+          const t = length ? Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / length)) : 0;
+          const px = a[0] + dx * t, py = a[1] + dy * t;
+          const ex = point[0] - px, ey = point[1] - py;
+          const distance = Math.sqrt(ex * ex + ey * ey);
+          const distanceDelta = distance - best.distance;
           if (distanceDelta > 0.000000001 || (Math.abs(distanceDelta) <= 0.000000001 && sourceIndex >= best.sourceIndex)) continue;
-          best = {point: projected.point, sourceIndex, t: projected.t, distance: projected.distance};
+          best = {point: [px, py], sourceIndex, t, distance};
         }
       }
     }
@@ -1533,7 +1581,7 @@ function nearestIndexedPathProjection(point, index) {
 }
 
 function createShoreSourceIndex(sourcePoints) {
-  const bucketSize = Math.max(16, SHORE_VISUAL_STYLE.maxRenderSegmentWorld * 2);
+  const bucketSize = Math.max(4, SHORE_VISUAL_STYLE.maxRenderSegmentWorld / 2);
   const buckets = new Map();
   let minBucketX = Infinity;
   let maxBucketX = -Infinity;
@@ -1552,18 +1600,19 @@ function createShoreSourceIndex(sourcePoints) {
     minBucketY = Math.min(minBucketY, y0);
     maxBucketY = Math.max(maxBucketY, y1);
     for (let y = y0; y <= y1; y++) {
+      let row = buckets.get(y);
+      if (!row) buckets.set(y, row = new Map());
       for (let x = x0; x <= x1; x++) {
-        const key = `${x}:${y}`;
-        const entries = buckets.get(key) || [];
+        let entries = row.get(x);
+        if (!entries) row.set(x, entries = []);
         entries.push(index);
-        buckets.set(key, entries);
       }
     }
   }
   const maxRadius = Number.isFinite(minBucketX)
     ? Math.max(maxBucketX - minBucketX, maxBucketY - minBucketY) + 1
     : 0;
-  return {sourcePoints, bucketSize, buckets, maxRadius};
+  return {sourcePoints, bucketSize, buckets, maxRadius, visited: new Uint32Array(sourcePoints.length), generation: 0};
 }
 
 function projectPointToSegment(point, a, b) {
@@ -1599,20 +1648,30 @@ export function filterShoreRenderSpikes(entries) {
   });
 }
 
-export function buildShoreVisualPaths(map, algorithmOptions = {}) {
+export function prepareShoreVisualPaths(map, algorithmOptions = {}) {
   const edges = collectShoreVisualEdges(map);
-  const options = {
-    ...createShoreVisualBuildOptions(map, algorithmOptions),
-    protectedObjects: collectProtectedShoreObjects(map)
+  const options = createShoreVisualBuildOptions(map, algorithmOptions);
+  const prepare = (edges, settings) => {
+    const paths = buildShorePathsFromEdges(edges);
+    const started = performance.now();
+    const preparedArcs = new Map(paths.map(path => [path, prepareShoreArc(path, settings)]));
+    const preparedArcMs = performance.now() - started;
+    return protectedObjects => buildShoreTopologySnapshot(paths, map, {...settings, preparedArcs, preparedArcMs, protectedObjects});
   };
-  shoreProtectedObjectsCache.set(map, options.protectedObjects);
-  const coastline = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.coastline), map, options);
-  const lakeShore = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.lakeShore), map, lakeShoreBuildOptions(map, options));
-  return Object.freeze({
-    coastline: coastline.paths,
-    lakeShore: lakeShore.paths,
-    topology: mergeShoreTopologyStats(coastline.stats, lakeShore.stats)
-  });
+  const coast = prepare(edges.coastline, options);
+  const lakes = prepare(edges.lakeShore, lakeShoreBuildOptions(map, options));
+  return () => {
+    const protectedObjects = collectProtectedShoreObjects(map);
+    shoreProtectedObjectsCache.set(map, protectedObjects);
+    const coastline = coast(protectedObjects);
+    const lakeShore = lakes(protectedObjects);
+    return Object.freeze({coastline: coastline.paths, lakeShore: lakeShore.paths,
+      topology: mergeShoreTopologyStats(coastline.stats, lakeShore.stats)});
+  };
+}
+
+export function buildShoreVisualPaths(map, algorithmOptions = {}) {
+  return prepareShoreVisualPaths(map, algorithmOptions)();
 }
 
 export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGridCells, algorithmOptions = {}) {
@@ -1706,8 +1765,8 @@ function pointOutsideBounds(point, bounds) {
 function incrementalSideSampleSafe(map, point, side) {
   if (!isWorldPoint(point) || !side) return false;
   const halfWidth = SHORE_VISUAL_STYLE.sidePreflightHalfWidthWorld;
-  const landCell = pickGridCell(map, point[0] + side.x * halfWidth, point[1] + side.y * halfWidth)?.gridCell;
-  const waterCell = pickGridCell(map, point[0] - side.x * halfWidth, point[1] - side.y * halfWidth)?.gridCell;
+  const landCell = shoreGridCell(map, point[0] + side.x * halfWidth, point[1] + side.y * halfWidth);
+  const waterCell = shoreGridCell(map, point[0] - side.x * halfWidth, point[1] - side.y * halfWidth);
   return landCell !== null && landCell !== undefined && waterCell !== null && waterCell !== undefined && isLandCell(landCell, map) && !isLandCell(waterCell, map);
 }
 

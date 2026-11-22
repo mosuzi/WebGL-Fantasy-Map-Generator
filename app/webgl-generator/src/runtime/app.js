@@ -104,12 +104,13 @@ import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, norm
 import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange, parseGeoJsonMeasurements, parseMapDocumentPayloadAsync} from "./map-file-io.js";
 import {prepareMapFileIoWorkerPayload} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
-import {materializeMapAdoptionHandoff} from "./map-adoption-handoff.js";
+import {generatedHandoffDigest, materializeMapAdoptionHandoff} from "./map-adoption-handoff.js";
 import {isWebfmgV3Bytes} from "./webfmg-v3-container.js";
 import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
 import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {
   validateWholeMapAdoptionDocument,
+  validateGeneratedHandoff,
   validateWholeMapAdoptionEnvelope,
   validateWholeMapExportResult
 } from "./whole-map-profile-protocol.js";
@@ -5868,14 +5869,28 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
   const renderBinding = {mapIdentity: `generated:${generateId}`, mapRevision: 0, topologyRevision: 0};
   const requestBinding = beginPendingMapAdoptionBindingOwner(state, {kind: "generation", targetMapIdentity: renderBinding.mapIdentity, operation});
   let output = null;
+  let earlyDocument = null;
+  let handoffDecodeMs = 0;
+  const decodeHandoff = async handoff => {
+    const started = performance.now();
+    const document = await materializeMapAdoptionHandoff(handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
+    handoffDecodeMs = performance.now() - started;
+    return document;
+  };
   try {
-    const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...RENDER_PREPARATION_LAYERS]);
+    const layers = INITIAL_MAP_IMPORT_RENDER_LAYERS.filter(layer => layer !== "political" || state.renderer?.politicalMeshDebugMode !== "none");
+    const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, layers);
+    render.surfaceComposition = "core";
+    render.surfaceTransferMode = "gpu-resident-compact";
+    render.cellVisualGeometryMode = "boundary-only";
+    render.linePathTransferMode = "reuse-shore-vertices";
     render.camera = {scale: 1, offsetX: 0, offsetY: 0};
     render.selection = null;
     render.objectHighlights = [];
     render.oceanCurrentHighlightIds = [];
     output = await state.workerTaskCoordinator.run(GENERATION_WORKER_TASK, {
       options,
+      parallelHandoff: Boolean(globalThis.crypto?.subtle),
       heightmapPayload: overrides.heightmapPayload || null,
       mapTemplate: overrides.mapTemplate || null,
       render
@@ -5884,6 +5899,12 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
       signal: operation?.signal || null,
       sessionMode: "adopt-result-map",
       allowFallback: false,
+      onGeneratedHandoff: handoff => {
+        if (earlyDocument) throw new Error("新地图资料重复返回");
+        validateGeneratedHandoff(handoff);
+        earlyDocument = Promise.all([generatedHandoffDigest(handoff), decodeHandoff(handoff)]);
+        earlyDocument.catch(() => {});
+      },
       onProgress: (stage, detail = {}) => {
         if (stage === "generation-stage" && detail.stage) {
           const generationStage = detail.stage;
@@ -5907,11 +5928,12 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
       profile: "generation-adoption",
       binding: requestBinding,
       output,
+      externalCanonical: Boolean(earlyDocument),
       renderBinding
     });
     acceptPendingMapAdoptionWorkerResult(state, output, renderBinding);
-    const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
-    const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
+    const [digest, document] = earlyDocument ? await earlyDocument : [null, await decodeHandoff(output.handoff)];
+    if (earlyDocument && digest !== output.handoffDigest) throw new Error("新地图资料校验不一致");
     validateWholeMapAdoptionDocument({profile: "generation-adoption", metadata: output.metadata, document});
     return {
       ...output,
@@ -5919,7 +5941,7 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
       map: document.map,
       timings: {
         ...(output.timings || {}),
-        handoffDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - handoffDecodeStartedAt)
+        handoffDecodeMs: roundLoadTraceMs(handoffDecodeMs)
       }
     };
   } catch (error) {

@@ -7,14 +7,21 @@ export function resolvedGridVertexPoints(grid) {
   if (cached) return cached;
 
   const storedPoints = grid?.vertices?.p || [];
+  const firstByX = new Map();
   const groups = new Map();
   for (let vertex = 0; vertex < storedPoints.length; vertex++) {
     const point = storedPoints[vertex];
     if (!isWorldPoint(point)) continue;
+    // 大多数顶点的横坐标已经唯一，只在横坐标重复时比较完整坐标。
+    const first = firstByX.get(point[0]);
+    if (first === undefined) {
+      firstByX.set(point[0], vertex);
+      continue;
+    }
     const key = `${point[0]}:${point[1]}`;
     const group = groups.get(key);
     if (group) group.push(vertex);
-    else groups.set(key, [vertex]);
+    else groups.set(key, storedPoints[first][1] === point[1] ? [first, vertex] : [vertex]);
   }
 
   const resolved = storedPoints.slice();
@@ -37,10 +44,11 @@ export function resolvedGridVertexPoints(grid) {
 }
 
 export function stabilizeResolvedGridVertexPoints(storedPoints, resolvedPoints, cellVertices, refinedGroupsByVertex) {
+  if (!refinedGroupsByVertex?.size) return resolvedPoints;
   if (!Array.isArray(storedPoints) || !Array.isArray(resolvedPoints) || !Array.isArray(cellVertices)) return resolvedPoints;
   const unsafeGroups = new Set();
   for (const vertices of cellVertices) {
-    if (!Array.isArray(vertices) || vertices.length < 4) continue;
+    if (!Array.isArray(vertices) || vertices.length < 4 || !vertices.some(vertex => refinedGroupsByVertex.has(vertex))) continue;
     const points = vertices.map(vertex => resolvedPoints[vertex]);
     if (!cellBoundarySelfIntersects(points)) continue;
     for (const vertex of vertices) {

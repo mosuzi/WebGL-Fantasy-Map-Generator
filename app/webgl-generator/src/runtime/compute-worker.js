@@ -1,4 +1,5 @@
 import {createWorkerGraphDecoder, encodeWorkerGraph} from "./worker-graph-stream.js";
+import {collectWorkerTransferables} from "./worker-snapshot.js";
 import {
   assertWorkerTaskExecution,
   assertWorkerTaskRequest,
@@ -237,7 +238,7 @@ async function sendResultStream(state, result, context, {checksum = false} = {})
     numericBatchValues: 32 * 1024,
     sliceBytes: 128 * 1024,
     bufferPacketBytes: checksum ? 256 * 1024 : 1024 * 1024,
-    bufferChunkBytes: checksum ? 256 * 1024 : 0,
+    bufferChunkBytes: checksum ? (state.request.task === "generation.compute" ? 1024 : 256) * 1024 : 0,
     budgetMs: 4,
     checksum,
     onProgress(stage, detail) {
@@ -362,6 +363,9 @@ function createWorkerContext(request, renderCache = Object.create(null), adoptMa
       return true;
     },
     ...(request.adoptResultMap && typeof adoptMap === "function" ? {
+      sendGeneratedHandoff(handoff) {
+        self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.GENERATED_HANDOFF, request, {handoff}), collectWorkerTransferables(handoff));
+      },
       adoptMap(map) {
         if (!map || typeof map !== "object") {
           throw workerStateError("worker_protocol_adoption_invalid", "Worker adoption 地图无效");

@@ -2369,6 +2369,7 @@ function tracePackPath(pack, start, end, water, connections, variation = null, s
     if (search.closed[current] === runId) continue;
     search.closed[current] = runId;
     visited++;
+    const currentCost = getRouteBest(search, runId, current);
 
     for (const neighbor of pack.cells.c[current] || []) {
       if (search.closed[neighbor] === runId) continue;
@@ -2382,13 +2383,13 @@ function tracePackPath(pack, start, end, water, connections, variation = null, s
         return reconstructPath(search.cameFrom, neighbor);
       }
 
-      const step = packRouteStepCost(pack, current, neighbor, water, connections, variation, edgeKeyMultiplier, riverEdges);
+      const step = packRouteStepCost(pack, current, neighbor, water, connections, variation, edgeKeyMultiplier, riverEdges, search);
       if (!Number.isFinite(step)) continue;
       if (neighbor === end) {
         search.cameFrom[neighbor] = current;
         return reconstructPath(search.cameFrom, neighbor);
       }
-      const tentative = getRouteBest(search, runId, current) + step;
+      const tentative = currentCost + step;
       if (tentative >= getRouteBest(search, runId, neighbor)) continue;
       setRouteBest(search, runId, neighbor, tentative, current);
       open.push(neighbor, tentative);
@@ -2405,7 +2406,7 @@ function canReachWaterRouteExit(pack, current, exit, riverEdges) {
   return Boolean(haven) && current === haven;
 }
 
-function packRouteStepCost(pack, current, next, water, connections, variation = null, edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null) {
+function packRouteStepCost(pack, current, next, water, connections, variation, edgeKeyMultiplier, riverEdges, search) {
   const height = pack.cells.h[next];
   const distanceCost = distanceSquared(pack.cells.p[current], pack.cells.p[next]);
   const connected = connections.has(routeEdgeKey(current, next, edgeKeyMultiplier)) ? 0.5 : 1;
@@ -2435,7 +2436,7 @@ function packRouteStepCost(pack, current, next, water, connections, variation = 
   const habitabilityModifier = 1 + Math.max(100 - habitability, 0) / 1000;
   const heightModifier = 1 + Math.max(height - 25, 25) / 25;
   const burgModifier = pack.cells.burg?.[next] ? 1 : 3;
-  const resourceModifier = landRouteResourceModifier(pack, next);
+  const resourceModifier = search.resourceModifier[next] || (search.resourceModifier[next] = landRouteResourceModifier(pack, next));
   return distanceCost * habitabilityModifier * heightModifier * connected * burgModifier * resourceModifier * variationFactor;
 }
 
@@ -2545,6 +2546,7 @@ function routeEdgeKey(left, right, multiplier) {
 
 function createRouteSearchScratch(size) {
   return {
+    resourceModifier: new Float64Array(size),
     cameFrom: new Int32Array(size),
     bestCost: new Float64Array(size),
     seen: new Uint32Array(size),

@@ -272,7 +272,7 @@ export function refreshMarkerResourceEconomy(pack, markers, options = {}) {
 }
 
 function addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity, options = {}) {
-  const pool = options.ordered ? rankMarkerCandidates(options.context, config, candidates, random) : shuffle(candidates, random);
+  const pool = options.ordered ? rankMarkerCandidates(options.context, config, candidates, random, quantity) : shuffle(candidates, random);
   for (const packCell of pool.slice(0, quantity)) {
     occupied.add(packCell);
     markers.push(createMarker((options.idOffset || 0) + markers.length, config, pack, grid, packCell));
@@ -384,18 +384,24 @@ function markerTypeQuotas(configs, target) {
   return quotas;
 }
 
-function rankMarkerCandidates(context, config, candidates, random) {
+function rankMarkerCandidates(context, config, candidates, random, quantity) {
   if (config.category !== "resource") return shuffle(candidates, random);
-  return candidates
-    .map(cell => ({
-      cell,
-      score: resourceCandidateScore(context, config, cell) * (0.86 + random.next() * 0.28)
-    }))
-    .sort((a, b) => b.score - a.score)
-    .map(item => item.cell);
+  if (quantity > 128) return candidates.map(cell => ({cell, score: resourceCandidateScore(context, config, cell) * (0.86 + random.next() * 0.28)}))
+    .sort((a, b) => b.score - a.score).slice(0, quantity).map(item => item.cell);
+  const ranked = [];
+  for (const cell of candidates) {
+    const score = resourceCandidateScore(context, config, cell) * (0.86 + random.next() * 0.28);
+    if (!quantity || (ranked.length === quantity && score <= ranked[quantity - 1].score)) continue;
+    let i = ranked.length;
+    while (i && score > ranked[i - 1].score) i--;
+    ranked.splice(i, 0, {cell, score});
+    if (ranked.length > quantity) ranked.pop();
+  }
+  return ranked.map(item => item.cell);
 }
 
-function resourceCandidateScore({grid, pack}, config, packCell) {
+function resourceCandidateScore(context, config, packCell) {
+  const {grid, pack} = context;
   const gridCell = pack.cells.g?.[packCell];
   const height = Number(pack.cells.h?.[packCell] ?? grid?.cells?.h?.[gridCell] ?? 0);
   const temperature = Number(grid?.cells?.temp?.[gridCell] ?? 10);
@@ -403,13 +409,20 @@ function resourceCandidateScore({grid, pack}, config, packCell) {
   const suitability = Number(pack.cells.s?.[packCell] || 0);
   const population = Number(pack.cells.pop?.[packCell] || 0);
   const biome = pack.cells.biome?.[packCell] ?? grid?.cells?.biome?.[gridCell] ?? 0;
-  const neighbors = pack.cells.c?.[packCell] || [];
-  const hasRiver = Boolean(pack.cells.r?.[packCell] || (pack.cells.fl?.[packCell] || 0) > 0);
-  const nearRiver = hasRiver || neighbors.some(neighbor => pack.cells.r?.[neighbor] || (pack.cells.fl?.[neighbor] || 0) > 0);
-  const nearLand = neighbors.some(neighbor => pack.cells.h?.[neighbor] >= 20);
+  const neighborhood = context.resourceNeighborhood ||= new Array(pack.cells.i.length);
+  if (!neighborhood[packCell]) {
+    const neighbors = pack.cells.c?.[packCell] || [];
+    const hasRiver = Boolean(pack.cells.r?.[packCell] || (pack.cells.fl?.[packCell] || 0) > 0);
+    neighborhood[packCell] = {
+      hasRiver,
+      nearRiver: hasRiver || neighbors.some(neighbor => pack.cells.r?.[neighbor] || (pack.cells.fl?.[neighbor] || 0) > 0),
+      nearLand: neighbors.some(neighbor => pack.cells.h?.[neighbor] >= 20),
+      roughness: terrainRoughness(pack, packCell, neighbors)
+    };
+  }
+  const {hasRiver, nearRiver, nearLand, roughness} = neighborhood[packCell];
   const feature = pack.features?.[pack.cells.f?.[packCell]];
   const isLake = feature?.type === "lake";
-  const roughness = terrainRoughness(pack, packCell, neighbors);
   const dry = clamp01((80 - precipitation) / 80);
   const wet = clamp01(precipitation / 120);
   const warmth = clamp01((temperature + 8) / 36);
@@ -500,10 +513,14 @@ function rareBiomeScore(biome) {
 
 function terrainRoughness(pack, packCell, neighbors = []) {
   const height = pack.cells.h?.[packCell] ?? 0;
-  const landNeighbors = neighbors.filter(neighbor => pack.cells.h?.[neighbor] >= 20);
-  if (!landNeighbors.length) return 0;
-  const averageDelta = landNeighbors.reduce((sum, neighbor) => sum + Math.abs(height - (pack.cells.h?.[neighbor] ?? height)), 0) / landNeighbors.length;
-  return clamp01(averageDelta / 38);
+  let total = 0, count = 0;
+  for (const neighbor of neighbors) {
+    const other = pack.cells.h?.[neighbor];
+    if (!(other >= 20)) continue;
+    total += Math.abs(height - other);
+    count++;
+  }
+  return count ? clamp01(total / count / 38) : 0;
 }
 
 function bell(value, center, width) {
@@ -1095,6 +1112,13 @@ function isAvailableMarkerCell(pack, cell, occupied, protectedFeatureIds) {
 }
 
 function uniqueCells(cells) {
+  if (ArrayBuffer.isView(cells)) {
+    let increasing = true;
+    for (let i = 0; i < cells.length; i++) {
+      if (!Number.isInteger(cells[i]) || (i && cells[i] <= cells[i - 1])) { increasing = false; break; }
+    }
+    if (increasing) return Array.from(cells);
+  }
   return [...new Set(cells.filter(Number.isInteger))];
 }
 

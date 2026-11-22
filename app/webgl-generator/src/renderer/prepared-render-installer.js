@@ -80,7 +80,8 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     let profileStartedAt = now();
     if (renderer.map !== map) {
       gate.assertCurrent();
-      cellAttributeStore = createCellAttributeStore(renderer.gl, map, renderer.viewOptions);
+      if (layers.cellAttributes && layers.cellAttributes.cellCount !== map.grid.cells.i.length) throw renderInstallError("render-grid-shape", "地图属性纹理与网格数量不符");
+      cellAttributeStore = createCellAttributeStore(renderer.gl, layers.cellAttributes || map, renderer.viewOptions);
       gate.assertCurrent();
     }
     reportInstallProfile(options, "cell-attributes", profileStartedAt);
@@ -102,10 +103,10 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     profileStartedAt = now();
     if (layers.picking) {
       if (options.rebuildPickingFromMap === true) {
-        gate.assertCurrent();
+        // 各图层各有切片预算；开始同步拾取构建前先结算累计用时。
+        await gate.checkpoint("picking-start", 0, 1);
         decoded.picking = rebuildObjectPickingIndexFromDto(layers.picking, map, binding);
-        gate.assertCurrent();
-        gate.onProgress("picking-direct", {completed: decoded.picking.bucketCount, total: decoded.picking.bucketCount});
+        await gate.checkpoint("picking-direct", decoded.picking.bucketCount, decoded.picking.bucketCount);
       } else {
         decoded.picking = await rebindObjectPickingDtoInChunks(layers.picking, map, binding, {
           ...gate.options("picking"),
@@ -1434,6 +1435,23 @@ async function normalizePreparedShoreSurfaceCellRanges(value, surface, cellCount
     if (!Number.isInteger(floatLength) || floatLength < 0 || floatLength % FLOATS_PER_VERTEX !== 0) {
       throw renderInstallError("render-shore-ranges-shape", `Worker 岸线 ${key} 顶点数组结构无效`);
     }
+    if (source instanceof Uint32Array) {
+      const ranges = new Map();
+      let start = 0;
+      if (source.length % 2) throw renderInstallError("render-shore-ranges-shape", "岸线范围缺少终点");
+      for (let i = 0; i < source.length; i += 2) {
+        const cell = source[i], end = source[i + 1];
+        if (cell >= cellCount || end <= start || end > floatLength || end % FLOATS_PER_VERTEX) throw renderInstallError("render-shore-ranges-shape", "岸线范围越界");
+        let spans = ranges.get(cell);
+        if (!spans) ranges.set(cell, spans = []);
+        spans.push({start, end});
+        start = end;
+        if ((i & 2047) === 2046) await gate.checkpoint(`shore-ranges:${key}`, i + 2, source.length);
+      }
+      if (start !== floatLength) throw renderInstallError("render-shore-ranges-shape", "岸线范围未覆盖全部顶点");
+      result[key] = ranges;
+      continue;
+    }
     if (!(source instanceof Map)) throw renderInstallError("render-shore-ranges-shape", `Worker 岸线 ${key} ranges 结构无效`);
     const target = new Map();
     const allRanges = [];
@@ -1473,6 +1491,20 @@ async function normalizePreparedShoreSurfaceCellRanges(value, surface, cellCount
 }
 
 async function normalizePreparedSurfaceCellRanges(value, surfaceFloatLength, mode, cellVisualMesh, cellCount, gate) {
+  if (value instanceof Uint32Array && mode === "grid-cells") {
+    if (value.length !== cellCount) throw renderInstallError("render-surface-ranges-shape", "Worker grid-cells 范围数量不符");
+    const ranges = new Map();
+    let start = 0;
+    for (let cell = 0; cell < value.length; cell++) {
+      const end = value[cell];
+      if (end <= start || end > surfaceFloatLength || end % FLOATS_PER_VERTEX) throw renderInstallError("render-surface-ranges-shape", "Worker grid-cells 范围无效");
+      ranges.set(cell, {start, end});
+      start = end;
+      if ((cell & 1023) === 1023) await gate.checkpoint("surface-ranges", cell + 1, cellCount);
+    }
+    if (start !== surfaceFloatLength) throw renderInstallError("render-surface-ranges-shape", "Worker grid-cells 范围未覆盖底面");
+    return ranges;
+  }
   if (!(value instanceof Map)) throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 缺失或结构无效");
   if (mode !== "cell-visual" && mode !== "grid-cells" && mode !== "unavailable") throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 模式无效");
   if (mode === "unavailable" && value.size) throw renderInstallError("render-surface-ranges-shape", "Worker unavailable surface cell ranges 必须为空");

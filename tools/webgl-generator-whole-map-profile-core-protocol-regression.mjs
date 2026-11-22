@@ -237,7 +237,9 @@ assertProtocol(() => validateHeadlessWriteCommit({
 
 const appSource = readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 const generationFlow = appSource.slice(appSource.indexOf("async function generateMapOffMainThread"), appSource.indexOf("function setGenerationStatus"));
-assert.ok(generationFlow.indexOf("validateWholeMapAdoptionEnvelope") < generationFlow.indexOf("materializeMapAdoptionHandoff"), "生成必须先验 envelope 再解包");
+assert.ok(generationFlow.indexOf("validateWholeMapAdoptionEnvelope") < generationFlow.indexOf("await decodeHandoff(output.handoff)"), "普通生成必须先验终态 envelope 再解包");
+assert.match(generationFlow, /validateGeneratedHandoff\(handoff\);\s*earlyDocument = Promise\.all/u, "提前解包必须校验当前请求的交接描述");
+assert.ok(generationFlow.indexOf("digest !== output.handoffDigest") < generationFlow.indexOf("validateWholeMapAdoptionDocument"), "提前返回的资料必须与终态校验值一致");
 assert.ok(generationFlow.indexOf("materializeMapAdoptionHandoff") < generationFlow.indexOf("validateWholeMapAdoptionDocument"), "生成必须在解包后核对文档回执");
 const importFlow = appSource.slice(appSource.indexOf("async function parseMapDocumentViaWorker"), appSource.indexOf("function storageClock"));
 assert.ok(importFlow.indexOf("parseMapDocumentPayloadAsync") < importFlow.indexOf("validateWholeMapAdoptionEnvelope"), "导入必须并行启动主线程 canonical 解析");

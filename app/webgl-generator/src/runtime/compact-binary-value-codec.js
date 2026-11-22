@@ -748,6 +748,7 @@ function requireString(strings, index) {
 class BinaryWriter {
   constructor() {
     this.buffer = new Uint8Array(1024);
+    this.view = new DataView(this.buffer.buffer);
     this.length = 0;
     this.encoder = new TextEncoder();
   }
@@ -758,10 +759,11 @@ class BinaryWriter {
     const next = new Uint8Array(size);
     next.set(this.buffer);
     this.buffer = next;
+    this.view = new DataView(next.buffer);
   }
   u8(value) { this.ensure(1); this.buffer[this.length++] = Number(value) & 255; }
   bytes(value) { this.ensure(value.length); this.buffer.set(value, this.length); this.length += value.length; }
-  f64(value) { this.ensure(8); new DataView(this.buffer.buffer).setFloat64(this.length, value, true); this.length += 8; }
+  f64(value) { this.ensure(8); this.view.setFloat64(this.length, value, true); this.length += 8; }
   varuint(value) {
     let remaining = Number(value);
     if (!Number.isSafeInteger(remaining) || remaining < 0) throw codecError("compact_binary_integer_invalid", "varuint 必须是非负安全整数");
@@ -790,29 +792,29 @@ class BinaryWriter {
 class BinaryReader {
   constructor(value) {
     this.value = value instanceof Uint8Array ? value : new Uint8Array(value);
+    this.view = new DataView(this.value.buffer, this.value.byteOffset, this.value.byteLength);
     this.offset = 0;
     this.decoder = new TextDecoder();
   }
   require(length) { if (this.offset + length > this.value.length) throw codecError("compact_binary_truncated", "紧凑二进制分区被截断"); }
   u8() { this.require(1); return this.value[this.offset++]; }
   bytes(length) { this.require(length); const output = this.value.subarray(this.offset, this.offset + length); this.offset += length; return output; }
-  f64() { this.require(8); const output = new DataView(this.value.buffer, this.value.byteOffset, this.value.byteLength).getFloat64(this.offset, true); this.offset += 8; return output; }
+  f64() { this.require(8); const output = this.view.getFloat64(this.offset, true); this.offset += 8; return output; }
   varuint() {
-    let output = 0n;
-    let shift = 0n;
+    let output = 0;
+    let scale = 1;
     for (let count = 0; count < 10; count += 1) {
       const byte = this.u8();
-      output |= BigInt(byte & 127) << shift;
+      output += (byte & 127) * scale;
       if (!(byte & 128)) {
-        const number = Number(output);
-        if (!Number.isSafeInteger(number)) throw codecError("compact_binary_integer_invalid", "紧凑二进制整数超出安全范围");
-        return number;
+        if (!Number.isSafeInteger(output)) throw codecError("compact_binary_integer_invalid", "紧凑二进制整数超出安全范围");
+        return output;
       }
-      shift += 7n;
+      scale *= 128;
     }
     throw codecError("compact_binary_integer_invalid", "紧凑二进制 varuint 过长");
   }
-  svarint() { const value = BigInt(this.varuint()); return Number(value & 1n ? -((value + 1n) >> 1n) : value >> 1n); }
+  svarint() { const value = this.varuint(); return value % 2 ? -(value + 1) / 2 : value / 2; }
   text() { return this.decoder.decode(this.bytes(this.varuint())); }
   done() { return this.offset === this.value.length; }
 }

@@ -108,23 +108,34 @@ export function calculateVoronoi(points, boundary) {
 }
 
 function createVoronoi(delaunay, points, pointsN) {
-  const cells = {v: [], c: [], b: [], i: new Uint32Array()};
-  const vertices = {p: [], v: [], c: []};
+  const cells = {v: new Array(pointsN), c: new Array(pointsN), b: new Array(pointsN), i: new Uint32Array()};
+  const triangleCount = delaunay.triangles.length / 3;
+  const vertices = {p: new Array(triangleCount), v: new Array(triangleCount), c: new Array(triangleCount)};
 
   for (let edge = 0; edge < delaunay.triangles.length; edge++) {
     const point = delaunay.triangles[nextHalfedge(edge)];
     if (point < pointsN && !cells.c[point]) {
-      const edges = edgesAroundPoint(delaunay, edge);
-      cells.v[point] = edges.map(item => triangleOfEdge(item));
-      cells.c[point] = edges.map(item => delaunay.triangles[item]).filter(cell => cell < pointsN);
-      cells.b[point] = edges.length > cells.c[point].length ? 1 : 0;
+      const faces = [], neighbors = [];
+      let incoming = edge;
+      do {
+        faces.push(triangleOfEdge(incoming));
+        const neighbor = delaunay.triangles[incoming];
+        if (neighbor < pointsN) neighbors.push(neighbor);
+        incoming = delaunay.halfedges[nextHalfedge(incoming)];
+      } while (incoming !== -1 && incoming !== edge && faces.length < 20);
+      cells.v[point] = faces;
+      cells.c[point] = neighbors;
+      cells.b[point] = faces.length > neighbors.length ? 1 : 0;
     }
 
-    const triangle = triangleOfEdge(edge);
-    if (!vertices.p[triangle]) {
-      vertices.p[triangle] = triangleCenter(delaunay, points, triangle);
-      vertices.v[triangle] = trianglesAdjacentToTriangle(delaunay, triangle);
-      vertices.c[triangle] = pointsOfTriangle(delaunay, triangle);
+    if (edge % 3 === 0) {
+      const triangle = edge / 3;
+      const a = delaunay.triangles[edge];
+      const b = delaunay.triangles[edge + 1];
+      const c = delaunay.triangles[edge + 2];
+      vertices.c[triangle] = [a, b, c];
+      vertices.p[triangle] = circumcenter(points[a], points[b], points[c]);
+      vertices.v[triangle] = [triangleOfEdge(delaunay.halfedges[edge]), triangleOfEdge(delaunay.halfedges[edge + 1]), triangleOfEdge(delaunay.halfedges[edge + 2])];
     }
   }
 
@@ -137,34 +148,6 @@ function fillMissingCells(cells, pointsN) {
     if (!cells.c[cell]) cells.c[cell] = [];
     if (!cells.b[cell]) cells.b[cell] = 0;
   }
-}
-
-function edgesAroundPoint(delaunay, start) {
-  const result = [];
-  let incoming = start;
-  do {
-    result.push(incoming);
-    const outgoing = nextHalfedge(incoming);
-    incoming = delaunay.halfedges[outgoing];
-  } while (incoming !== -1 && incoming !== start && result.length < 20);
-  return result;
-}
-
-function triangleCenter(delaunay, points, triangleIndex) {
-  const [a, b, c] = pointsOfTriangle(delaunay, triangleIndex).map(point => points[point]);
-  return circumcenter(a, b, c);
-}
-
-function pointsOfTriangle(delaunay, triangleIndex) {
-  return edgesOfTriangle(triangleIndex).map(edge => delaunay.triangles[edge]);
-}
-
-function trianglesAdjacentToTriangle(delaunay, triangleIndex) {
-  return edgesOfTriangle(triangleIndex).map(edge => triangleOfEdge(delaunay.halfedges[edge]));
-}
-
-function edgesOfTriangle(triangleIndex) {
-  return [3 * triangleIndex, 3 * triangleIndex + 1, 3 * triangleIndex + 2];
 }
 
 function triangleOfEdge(edge) {

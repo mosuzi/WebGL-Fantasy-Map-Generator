@@ -436,6 +436,18 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           fail(protocolStateError("worker_protocol_not_accepted", `Worker 在 accepted 前返回 ${message.type}`));
           return;
         }
+        if (message.type === WORKER_TASK_MESSAGE.GENERATED_HANDOFF) {
+          if (request.task !== "generation.compute" || !request.adoptResultMap || typeof runOptions.onGeneratedHandoff !== "function") {
+            fail(protocolStateError("worker_protocol_unexpected_handoff", "生成地图资料与当前请求不匹配"));
+            return;
+          }
+          try {
+            runOptions.onGeneratedHandoff(message.handoff);
+          } catch (error) {
+            finish(reject, error);
+          }
+          return;
+        }
         if (message.type === WORKER_TASK_MESSAGE.PROGRESS) {
           try {
             (runOptions.onProgress || onProgress)?.(message.stage, message.detail || {}, {task: request.task, binding: request.binding});

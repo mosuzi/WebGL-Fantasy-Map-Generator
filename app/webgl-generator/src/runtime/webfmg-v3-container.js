@@ -8,6 +8,7 @@ const MAGIC = new Uint8Array([0x57, 0x45, 0x42, 0x46, 0x4d, 0x47, 0x33, 0x00]);
 const HEADER_BYTES = 16;
 const DIRECTORY_BYTES = 24;
 const CODEC_COMPACT_VALUE = 1;
+const CODEC_TRANSIENT_JSON = 2;
 const TOPOLOGY_MARKER = "webfmg-derived-vertex-topology-v1";
 const derivedVertexEncodingCache = new WeakMap();
 const KNOWN_ALIASES = Object.freeze([
@@ -35,14 +36,15 @@ export function encodeWebfmgV3Document(document, options = {}) {
     const prepareStartedAt = profile ? containerNow() : 0;
     const sectionValue = prepareSectionForEncoding(descriptor.path, document.map[descriptor.path], aliases);
     const encodeStartedAt = profile ? containerNow() : 0;
-    const payload = encodeCompactBinaryValue(sectionValue);
+    const json = options.generatedHandoff ? encodeTransientJson(sectionValue) : null;
+    const payload = json ?? encodeCompactBinaryValue(sectionValue);
     if (profile) profile.push({
       name: descriptor.path,
       prepareMs: roundProfileMs(encodeStartedAt - prepareStartedAt),
       encodeMs: roundProfileMs(containerNow() - encodeStartedAt),
       bytes: payload.byteLength
     });
-    entries.push({id: index + 1, name: descriptor.path, payload});
+    entries.push({id: index + 1, name: descriptor.path, payload, codec: json ? CODEC_TRANSIENT_JSON : CODEC_COMPACT_VALUE});
   }
   const directorySize = entries.length * DIRECTORY_BYTES;
   const totalBytes = HEADER_BYTES + directorySize + entries.reduce((total, entry) => total + entry.payload.byteLength, 0);
@@ -58,7 +60,7 @@ export function encodeWebfmgV3Document(document, options = {}) {
     const entry = entries[index];
     const directoryOffset = HEADER_BYTES + index * DIRECTORY_BYTES;
     view.setUint16(directoryOffset, entry.id, true);
-    view.setUint16(directoryOffset + 2, CODEC_COMPACT_VALUE, true);
+    view.setUint16(directoryOffset + 2, entry.codec ?? CODEC_COMPACT_VALUE, true);
     view.setUint32(directoryOffset + 4, payloadOffset, true);
     view.setUint32(directoryOffset + 8, entry.payload.byteLength, true);
     view.setUint32(directoryOffset + 12, entry.payload.byteLength, true);
@@ -70,7 +72,7 @@ export function encodeWebfmgV3Document(document, options = {}) {
   return output;
 }
 
-export function decodeWebfmgV3Document(source) {
+export function decodeWebfmgV3Document(source, options = {}) {
   const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);
   if (!isWebfmgV3Bytes(bytes)) throw containerError("webfmg_v3_magic_invalid", "文件不是 `.webfmg v3` 容器");
   if (bytes.byteLength < HEADER_BYTES) throw containerError("webfmg_v3_truncated", "v3 地图容器头被截断");
@@ -91,13 +93,14 @@ export function decodeWebfmgV3Document(source) {
     const length = view.getUint32(offset + 8, true);
     const rawLength = view.getUint32(offset + 12, true);
     const checksum = view.getUint32(offset + 16, true);
-    if (seen.has(id) || codec !== CODEC_COMPACT_VALUE || rawLength !== length || start < HEADER_BYTES + count * DIRECTORY_BYTES || start + length > bytes.byteLength) {
+    const transientJson = options.generatedHandoff && codec === CODEC_TRANSIENT_JSON && id !== 0;
+    if (seen.has(id) || (!transientJson && codec !== CODEC_COMPACT_VALUE) || rawLength !== length || start < HEADER_BYTES + count * DIRECTORY_BYTES || start + length > bytes.byteLength) {
       throw containerError("webfmg_v3_directory_invalid", `v3 地图分区目录项无效：${id}`);
     }
     seen.add(id);
     const payload = bytes.subarray(start, start + length);
     if (checksumBytes(payload) !== checksum) throw containerError("webfmg_v3_checksum_mismatch", `v3 地图分区 checksum 不一致：${id}`);
-    const value = decodeCompactBinaryValue(payload);
+    const value = transientJson ? JSON.parse(new TextDecoder().decode(payload)) : decodeCompactBinaryValue(payload);
     if (id === 0) header = value;
     else {
       const descriptor = descriptors[id - 1];
@@ -197,7 +200,8 @@ export async function decodeWebfmgV3DocumentChunksAsync(sourceChunks, options = 
       rawLength: directoryView.getUint32(offset + 12, true),
       checksum: directoryView.getUint32(offset + 16, true)
     };
-    if (seen.has(entry.id) || entry.codec !== CODEC_COMPACT_VALUE || entry.rawLength !== entry.length || entry.start < directoryEnd || entry.start + entry.length > byteLength) {
+    const transientJson = options.generatedHandoff && entry.codec === CODEC_TRANSIENT_JSON && entry.id !== 0;
+    if (seen.has(entry.id) || (!transientJson && entry.codec !== CODEC_COMPACT_VALUE) || entry.rawLength !== entry.length || entry.start < directoryEnd || entry.start + entry.length > byteLength) {
       throw containerError("webfmg_v3_directory_invalid", `v3 地图分区目录项无效：${entry.id}`);
     }
     seen.add(entry.id);
@@ -214,7 +218,7 @@ export async function decodeWebfmgV3DocumentChunksAsync(sourceChunks, options = 
     if (await checksumBytesAsync(payload, checkpoint) !== entry.checksum) {
       throw containerError("webfmg_v3_checksum_mismatch", `v3 地图分区 checksum 不一致：${entry.id}`);
     }
-    const value = await decodeCompactBinaryValueAsync(payload, options);
+    const value = entry.codec === CODEC_TRANSIENT_JSON ? JSON.parse(new TextDecoder().decode(payload)) : await decodeCompactBinaryValueAsync(payload, options);
     if (entry.id === 0) documentHeader = value;
     else {
       const descriptor = descriptors[entry.id - 1];
@@ -285,6 +289,28 @@ function prepareSectionForEncoding(name, value, aliases) {
     };
   }
   return section;
+}
+
+// 临时交接只对可以精确回读的普通数据使用浏览器原生编解码，存档仍使用紧凑二进制。
+function encodeTransientJson(value) {
+  let hasNegativeZero = false;
+  function isExact(item) {
+    if (typeof item === "number") {
+      if (Object.is(item, -0)) hasNegativeZero = true;
+      return Number.isFinite(item);
+    }
+    if (item === null || typeof item === "string" || typeof item === "boolean") return true;
+    if (Array.isArray(item)) {
+      for (let i = 0; i < item.length; i++) if (!isExact(item[i])) return false;
+      return true;
+    }
+    if (typeof item !== "object" || Object.getPrototypeOf(item) !== Object.prototype) return false;
+    for (const key in item) if (Object.hasOwn(item, key) && item[key] !== undefined && !isExact(item[key])) return false;
+    return true;
+  }
+  if (!isExact(value) || (hasNegativeZero && typeof JSON.rawJSON !== "function")) return null;
+  const text = hasNegativeZero ? JSON.stringify(value, (_, item) => Object.is(item, -0) ? JSON.rawJSON("-0") : item) : JSON.stringify(value);
+  return new TextEncoder().encode(text);
 }
 
 function normalizeContainerChunk(value) {

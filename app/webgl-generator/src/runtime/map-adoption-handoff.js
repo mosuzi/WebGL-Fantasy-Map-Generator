@@ -6,6 +6,7 @@ import {
 } from "./webfmg-v3-container.js";
 import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
 import {migrateMapDocument} from "./map-file-io.js";
+import {attachGeneratedCellColumns, attachGeneratedGeometry, detachGeneratedCellColumns, detachGeneratedGeometry, restoreGeneratedWorkerColumns} from "./generated-map-geometry-handoff.js";
 
 export const MAP_ADOPTION_HANDOFF_KIND = "map-adoption-v3-sections";
 export const MAP_ADOPTION_HANDOFF_CHUNK_BYTES = 256 * 1024;
@@ -23,6 +24,31 @@ export function createCanonicalMapAdoptionPackage(document) {
     document: canonicalDocument,
     handoff: createMapAdoptionHandoffFromBytes(bytes)
   };
+}
+
+export function createGeneratedMapAdoptionPackage(document, gridGeometry = null) {
+  const geometry = detachGeneratedGeometry(document, false, gridGeometry);
+  const cells = detachGeneratedCellColumns(geometry.document.map);
+  const bytes = encodeWebfmgV3Document(geometry.document, {generatedHandoff: true});
+  const handoff = createMapAdoptionHandoffFromBytes(bytes);
+  handoff.encoding = "generated-map-columns-v1";
+  handoff.geometry = geometry.columns;
+  handoff.cells = cells;
+  const canonical = decodeWebfmgV3Document(bytes, {generatedHandoff: true});
+  restoreGeneratedWorkerColumns(canonical.map, document.map, cells);
+  applyMainThreadMapProjection(canonical.map);
+  return {document: canonical, handoff};
+}
+
+export async function generatedHandoffDigest(handoff) {
+  const manifest = handoff.cells.map(({section, key, plain, values}) => [section, key, plain, values.constructor.name]);
+  const views = [new TextEncoder().encode(JSON.stringify(manifest)), ...handoff.chunks,
+    ...handoff.geometry.flatMap(({ends, values}) => [ends, values]), ...handoff.cells.map(({values}) => values)];
+  const hashes = await Promise.all(views.map(view => crypto.subtle.digest("SHA-256", view)));
+  const bytes = new Uint8Array(hashes.length * 32);
+  hashes.forEach((digest, i) => bytes.set(new Uint8Array(digest), i * 32));
+  const aggregate = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(aggregate, value => value.toString(16).padStart(2, "0")).join("");
 }
 
 export function createParsedMapAdoptionPackage(document, options = {}) {
@@ -53,7 +79,8 @@ function createMapAdoptionHandoffFromBytes(bytes, options = {}) {
 }
 
 export async function materializeMapAdoptionHandoff(handoff, options = {}) {
-  if (!handoff || handoff.kind !== MAP_ADOPTION_HANDOFF_KIND || handoff.encoding !== "webfmg-v3") {
+  const generated = handoff?.encoding === "generated-map-columns-v1";
+  if (!handoff || handoff.kind !== MAP_ADOPTION_HANDOFF_KIND || (!generated && handoff.encoding !== "webfmg-v3")) {
     throw handoffError("map_adoption_handoff_invalid", "Worker 地图 adoption handoff 无效");
   }
   if (!Array.isArray(handoff.chunks) || !handoff.chunks.length) {
@@ -72,8 +99,13 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
       expectedSections: Number(handoff.sections),
       expectedSchemaVersion: Number(handoff.schemaVersion),
       consumeChunks: true,
+      generatedHandoff: generated,
       yieldToMain
     });
+    if (generated) {
+      attachGeneratedCellColumns(document.map, handoff.cells);
+      await attachGeneratedGeometry(document.map, handoff.geometry, yieldToMain);
+    }
     if (handoff.migrateOnMaterialize === true) document = migrateMapDocument(document);
     applyMainThreadMapProjection(document.map);
     return document;

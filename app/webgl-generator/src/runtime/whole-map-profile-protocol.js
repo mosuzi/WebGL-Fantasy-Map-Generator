@@ -84,7 +84,7 @@ export function validateWholeMapAdoptionEnvelope({profile, binding, output, rend
       throw protocolError("whole-map-adoption-canonical-mode-invalid", "整图 adoption 外部 canonical 文档契约无效");
     }
   } else {
-    validateAdoptionHandoff(result.handoff);
+    validateAdoptionHandoff(result.handoff, profile);
   }
   validateDocumentMetadataShape(result.metadata, "wholeMap.adoption.output.metadata");
   validatePreparedRender(result.preparedRender, renderBinding);
@@ -163,9 +163,15 @@ function validatePersistedIdentityReceipt(value) {
   return Object.freeze({documentId, version: PERSISTED_DOCUMENT_IDENTITY_VERSION});
 }
 
-function validateAdoptionHandoff(value) {
+export function validateGeneratedHandoff(value) {
+  if (value?.encoding !== "generated-map-columns-v1") throw protocolError("whole-map-adoption-handoff-invalid", "提前返回的新地图资料格式无效");
+  validateAdoptionHandoff(value, "generation-adoption");
+}
+
+function validateAdoptionHandoff(value, profile) {
   const handoff = record(value, "wholeMap.adoption.output.handoff");
-  if (handoff.kind !== "map-adoption-v3-sections" || handoff.encoding !== "webfmg-v3" || !Array.isArray(handoff.chunks) || !handoff.chunks.length) {
+  const generated = ADOPTION_RESULT_KIND[profile] === "map-generation-adoption-result" && handoff.encoding === "generated-map-columns-v1" && Array.isArray(handoff.geometry);
+  if (handoff.kind !== "map-adoption-v3-sections" || (!generated && handoff.encoding !== "webfmg-v3") || !Array.isArray(handoff.chunks) || !handoff.chunks.length) {
     throw protocolError("whole-map-adoption-handoff-invalid", "整图 adoption handoff 描述无效");
   }
   const chunks = handoff.chunks.map((chunk, index) => binaryView(chunk, `wholeMap.adoption.output.handoff.chunks.${index}`));

@@ -1562,7 +1562,7 @@ export class PlaceholderMapRenderer {
     await stage("river-screen-mesh", "构建河流屏幕 mesh", () => {
       if (this.layerVisibility.rivers) this.updateRiverBuffer();
     });
-    await stage("overlay-draw", "刷新标签和图标", () => this.draw({updateDynamicBuffers: false, updateOverlay: true}));
+    await stage("overlay-draw", "刷新标签和图标", () => this.updateLabels());
     this.lastLoad = profile.finish();
   }
 

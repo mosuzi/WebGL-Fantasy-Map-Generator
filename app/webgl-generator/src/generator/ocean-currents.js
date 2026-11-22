@@ -261,20 +261,26 @@ function chooseSeparatedStarts(grid, candidates, center, bounds, count, random, 
   const starts = [];
   const radiusX = Math.max(1, bounds.width * 0.38);
   const radiusY = Math.max(1, bounds.height * 0.38);
+  const startPoints = [];
+  const minimumSeparation = Math.max(bounds.width, bounds.height) ** 2 * 0.015;
   for (let index = 0; index < count; index++) {
     const angle = (index / count) * Math.PI * 2 + (random.next() - 0.5) * 0.35;
     const target = [center[0] + Math.cos(angle) * radiusX, center[1] + Math.sin(angle) * radiusY];
     let best = null;
     let bestScore = Infinity;
     for (const cell of candidates) {
-      if (starts.some(start => squaredDistance(pointForCell(grid, start), pointForCell(grid, cell)) < Math.max(bounds.width, bounds.height) ** 2 * 0.015)) continue;
       const point = pointForCell(grid, cell);
-      const score = squaredDistance(point, target) * (0.92 + hashUnit(seed, featureId, cell + index * 997) * 0.16);
+      const distance = squaredDistance(point, target);
+      if (distance * 0.92 >= bestScore || startPoints.some(start => squaredDistance(start, point) < minimumSeparation)) continue;
+      const score = distance * (0.92 + hashUnit(seed, featureId, cell + index * 997) * 0.16);
       if (score >= bestScore) continue;
       best = cell;
       bestScore = score;
     }
-    if (best !== null) starts.push(best);
+    if (best !== null) {
+      starts.push(best);
+      startPoints.push(pointForCell(grid, best));
+    }
   }
   return starts;
 }

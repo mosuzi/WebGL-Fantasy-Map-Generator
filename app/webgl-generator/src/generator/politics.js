@@ -9,7 +9,7 @@ import {
   compactRiverPoliticalBoundaryDiagnostics,
   createRiverPoliticalBarrier,
   describeRiverPoliticalBoundaries,
-  riverPoliticalTransition
+  riverPoliticalStrength, riverPoliticalCost
 } from "./river-political-barrier.js";
 
 const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "云渡", "栖梧", "北辰", "东衡", "西麓", "南浦", "霜川", "泽阳", "柏原", "海津", "长岚", "玄丘", "玉津"];
@@ -29,6 +29,10 @@ export const NEW_STATE_COLOR_PALETTE = [...new Set([
   ...STATE_COLOR_PALETTE,
   ...Array.from({length: 120}, (_, index) => pastelColor((index * 137.508) % 360, 0.45 + (index % 4) * 0.045, 0.68 + (Math.floor(index / 4) % 3) * 0.045))
 ])];
+
+const paletteDistances = new Map(STATE_COLOR_PALETTE.map(color =>
+  [color, new Map(STATE_COLOR_PALETTE.map(other => [other, colorDistance(color, other)]))]
+));
 
 function pastelColor(hueDegrees, saturation, lightness) {
   const chroma = saturation * Math.min(lightness, 1 - lightness);
@@ -875,7 +879,7 @@ function politicalRiverBoundaryDiagnostics(riverBarrier, stateOwners, provinceOw
 }
 
 function isStrongRiverPoliticalTransition(riverBarrier, from, to, level) {
-  return riverPoliticalTransition(riverBarrier, from, to, {level}).strong;
+  return Boolean(riverBarrier) && riverPoliticalStrength(riverBarrier, from, to) >= riverBarrier.strongThreshold;
 }
 
 function orientPackStateDirectionalNames(pack, states, protectedIds = new Set()) {
@@ -1082,7 +1086,7 @@ function expandPackStates(pack, states, society, preservedAnchors = null, locked
       const biomeCost = getStateBiomeCost(nativeBiome, cells.biome[neighbor], state.type);
       const heightCost = getStateHeightCost(pack.features[cells.f[neighbor]], cells.h[neighbor], state.type);
       const riverCost = riverBarrier
-        ? riverPoliticalTransition(riverBarrier, cell, neighbor, {level: "state"}).cost
+        ? riverPoliticalCost(riverBarrier, cell, neighbor, "state")
         : getStateRiverCost(cells.r?.[neighbor], cells.fl?.[neighbor], state.type);
       const typeCost = getStateTypeCost(cells.t[neighbor], state.type);
       const expansionism = Math.max(0.1, state.expansionism || 1);
@@ -1331,7 +1335,10 @@ export function chooseNewStateColor(state, states) {
 
 function minColorDistance(color, colors, emptyValue) {
   if (!colors.length) return emptyValue;
-  return Math.min(...colors.map(other => colorDistance(color, other)));
+  const distances = paletteDistances.get(color);
+  let minimum = Infinity;
+  for (const other of colors) minimum = Math.min(minimum, distances?.get(other) ?? colorDistance(color, other));
+  return minimum;
 }
 
 function colorDistance(a, b) {
@@ -1791,7 +1798,7 @@ function expandPackProvinces(pack, provinces, provinceIds, maxGrowth, fixedOwner
       if (land && cells.state[neighbor] !== state) continue;
       const elevationCost = cells.h[neighbor] >= 70 ? 100 : cells.h[neighbor] >= 50 ? 30 : cells.h[neighbor] >= 20 ? 10 : 100;
       const nextGrowthCost = growthCost + elevationCost;
-      const totalCost = cost + elevationCost + riverPoliticalTransition(riverBarrier, cell, neighbor, {level: "province"}).cost;
+      const totalCost = cost + elevationCost + riverPoliticalCost(riverBarrier, cell, neighbor, "province");
       if (nextGrowthCost > maxGrowth || totalCost >= costs[neighbor]) continue;
       tentativeOwners[neighbor] = province;
       costs[neighbor] = totalCost;
@@ -1870,7 +1877,7 @@ function absorbBoundarySpikes(cells, values, {passes = 1, protectedCells = new S
 function boundarySpikeAbsorptionValue(cells, values, cell, canUseNeighbor, canAbsorbTo) {
   const ownValue = values[cell] || 0;
   if (!ownValue) return null;
-  const counts = new Map();
+  let counts;
   let ownNeighbors = 0;
   let inspectedNeighbors = 0;
 
@@ -1879,14 +1886,15 @@ function boundarySpikeAbsorptionValue(cells, values, cell, canUseNeighbor, canAb
     inspectedNeighbors++;
     const neighborValue = values[neighbor] || 0;
     if (neighborValue === ownValue) {
-      ownNeighbors++;
+      if (++ownNeighbors > 2) return null;
       continue;
     }
     if (!canAbsorbTo(neighborValue)) continue;
+    counts ||= new Map();
     counts.set(neighborValue, (counts.get(neighborValue) || 0) + 1);
   }
 
-  if (inspectedNeighbors < 3 || !counts.size) return null;
+  if (inspectedNeighbors < 3 || !counts) return null;
   let bestValue = 0;
   let bestCount = 0;
   for (const [value, count] of counts) {
@@ -1909,10 +1917,23 @@ function repairDisconnectedPoliticalComponents(cells, values, records, {
   protectedIds = new Set()
 } = {}) {
   let changed = 0;
+  const groups = collectPoliticalComponents(cells, values, records);
+  const orderedGroups = [...groups].sort(([a], [b]) => a.localeCompare(b));
+  const cellOrder = new Uint32Array(values.length);
+  for (let i = 0; i < cells.i.length; i++) cellOrder[cells.i[i]] = i;
+  const componentByCell = new Array(values.length);
+  const firstSeen = new Map();
+  for (const components of groups.values()) for (const component of components) {
+    let first = Infinity;
+    for (const cell of component) {
+      componentByCell[cell] = component;
+      first = Math.min(first, cellOrder[cell]);
+    }
+    firstSeen.set(component, first);
+  }
   for (let pass = 0; pass < values.length; pass++) {
-    const groups = collectPoliticalComponents(cells, values, records);
     let repaired = false;
-    for (const [key, components] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
+    for (const [key, components] of orderedGroups) {
       if (components.length < 2) continue;
       const owner = Number(key.split(":", 1)[0]);
       if (protectedIds.has(owner)) continue;
@@ -1923,6 +1944,30 @@ function repairDisconnectedPoliticalComponents(cells, values, records, {
         if (component === anchor || component.some(cell => protectedCells.has(cell))) continue;
         const target = connectedComponentAbsorptionTarget(cells, values, records, component, owner, level, riverBarrier, protectedIds);
         if (!target) continue;
+        // 整个连通块换属只会合并目标一侧相邻的块，其余连通关系保持。
+        const feature = Number(cells.f?.[component[0]]) || 0;
+        const targetGroup = groups.get(`${target}:${feature}`);
+        const touching = new Set();
+        for (const cell of component) for (const neighbor of cells.c[cell] || []) {
+          if (values[neighbor] === target && cells.h[neighbor] >= 20 && (Number(cells.f?.[neighbor]) || 0) === feature) {
+            touching.add(componentByCell[neighbor]);
+          }
+        }
+        const merged = component.slice();
+        let first = firstSeen.get(component);
+        for (const adjacent of touching) {
+          for (const cell of adjacent) merged.push(cell);
+          targetGroup.splice(targetGroup.indexOf(adjacent), 1);
+          first = Math.min(first, firstSeen.get(adjacent));
+          firstSeen.delete(adjacent);
+        }
+        components.splice(components.indexOf(component), 1);
+        firstSeen.delete(component);
+        merged.sort((a, b) => a - b);
+        firstSeen.set(merged, first);
+        for (const cell of merged) componentByCell[cell] = merged;
+        targetGroup.push(merged);
+        targetGroup.sort((a, b) => firstSeen.get(a) - firstSeen.get(b));
         for (const cell of component) values[cell] = target;
         changed += component.length;
         repaired = true;
@@ -1973,7 +2018,7 @@ function connectedComponentAbsorptionTarget(cells, values, records, component, o
     if (level === "province" && Number(records[target].state) !== Number(records[owner]?.state)) continue;
     const entry = candidates.get(target) || {edges: 0, cost: 0};
     entry.edges++;
-    entry.cost += riverPoliticalTransition(riverBarrier, cell, neighbor, {level}).cost;
+    entry.cost += riverPoliticalCost(riverBarrier, cell, neighbor, level);
     candidates.set(target, entry);
   }
   return [...candidates]
@@ -2050,7 +2095,7 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
           const land = cells.h[neighbor] >= 20;
           const step = land ? (cells.state[neighbor] === state.i ? 3 : 20) : cells.t[neighbor] ? 10 : 30;
           const nextGrowthCost = growthCost + step;
-          const nextCost = cost + step + riverPoliticalTransition(riverBarrier, cell, neighbor, {level: "province"}).cost;
+          const nextCost = cost + step + riverPoliticalCost(riverBarrier, cell, neighbor, "province");
           const currentCost = seen[neighbor] === runId ? costs[neighbor] : Infinity;
           if (nextGrowthCost > maxGrowth || nextCost >= currentCost) continue;
           if (land && cells.state[neighbor] === state.i) {
@@ -2260,7 +2305,7 @@ function expandStates(grid, features, states, riverCells, riverBarrier = null) {
     const religionCost = grid.cells.religion[to] === center.religion ? 0 : 18;
     const mountainCost = height > 72 ? (height - 72) * 8 : height > 58 ? (height - 58) * 2 : 0;
     const riverCost = riverBarrier
-      ? riverPoliticalTransition(riverBarrier, from, to, {level: "state"}).cost
+      ? riverPoliticalCost(riverBarrier, from, to, "state")
       : riverCells.has(to) && !riverCells.has(from) ? 28 : 0;
     return Math.max(6, distance(grid.points[from], grid.points[to]) + cultureCost + religionCost + mountainCost + slope * 4 + riverCost);
   });
@@ -2280,7 +2325,7 @@ function expandProvinces(grid, features, provinces, riverCells, riverBarrier = n
       const height = grid.cells.h[to];
       const slope = Math.abs(height - grid.cells.h[from]);
       const riverCost = riverBarrier
-        ? riverPoliticalTransition(riverBarrier, from, to, {level: "province"}).cost
+        ? riverPoliticalCost(riverBarrier, from, to, "province")
         : riverCells.has(to) && !riverCells.has(from) ? 20 : 0;
       return distance(grid.points[from], grid.points[to]) + Math.max(0, height - 60) * 2.5 + slope * 3 + riverCost;
     });
