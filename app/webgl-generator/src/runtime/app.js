@@ -105,7 +105,7 @@ import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange
 import {prepareMapFileIoWorkerPayload} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
 import {generatedHandoffDigest, materializeMapAdoptionHandoff} from "./map-adoption-handoff.js";
-import {isWebfmgV3Bytes} from "./webfmg-v3-container.js";
+import {gunzipWebfmgV3Bytes, isWebfmgV3Bytes} from "./webfmg-v3-container.js";
 import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
 import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {
@@ -6306,16 +6306,17 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     Blob: documentRef.defaultView?.Blob || Blob,
     yieldToMain: () => yieldToBrowser(documentRef)
   });
+  const canonicalInput = await shareMapImportInput(prepared.payload.input, documentRef.defaultView || window);
+  prepared.payload.input = canonicalInput;
   const requestBinding = beginPendingMapAdoptionBindingOwner(state, {kind: "import", targetMapIdentity: renderBinding.mapIdentity, operation});
   const secondaryCoordinator = createWorkerTaskCoordinator({
     createWorker: () => takePrewarmedComputeWorker(state),
     getBinding: () => requestBinding
   });
-  const canonicalInput = clonePreparedMapImportInput(prepared.payload.input);
-  const secondaryInput = clonePreparedMapImportInput(prepared.payload.input);
   const primaryRender = {
     ...render,
     layers: ["shore", "shore-surface", "line"],
+    surfaceTransferMode: "gpu-resident-compact",
     lineComposition: "shore"
   };
   const secondaryRender = {
@@ -6327,21 +6328,16 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     surfaceTransferMode: "gpu-resident-compact"
   };
   const parallelDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
-  const canonicalDecodeStartedAt = parallelDecodeStartedAt;
   const useWorkerCanonicalHandoff = shouldUseMapImportWorkerCanonicalHandoff(canonicalInput);
   let canonicalDecodeMs = 0;
-  const canonicalDocumentPromise = useWorkerCanonicalHandoff
-    ? Promise.resolve(null)
-    : unwrapPreparedMapImportInput(documentRef, canonicalInput)
-      .then(canonicalPayload => parseMapDocumentPayloadAsync(
-        documentRef,
-        canonicalPayload,
-        {budgetMs: 4, yieldToMain: () => yieldMapHandoffDecode(documentRef)}
-      )).then(document => {
-        applyMainThreadMapProjection(document.map);
-        canonicalDecodeMs = roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - canonicalDecodeStartedAt);
-        return document;
-      });
+  let signalReading;
+  const inputsReceived = new Promise(resolve => { signalReading = resolve; });
+  const readers = new Set();
+  function reportRead(worker, stage) {
+    if (stage !== "read") return;
+    readers.add(worker);
+    if (readers.size === 2) signalReading();
+  }
   let output = null;
   try {
     const primaryPayload = useWorkerCanonicalHandoff
@@ -6354,6 +6350,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
       allowFallback: false,
       readyTimeoutMs: 10000,
       onProgress: (stage, detail = {}) => {
+        reportRead("shore", stage);
         if (stage === "upgrade") {
           dismissMapToast(documentRef);
           setMythicGenerationLoading(documentRef, true, detail.message);
@@ -6366,7 +6363,6 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     });
     const secondaryPromise = secondaryCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, {
       ...prepared.payload,
-      input: secondaryInput,
       render: secondaryRender,
       renderOnly: true
     }, {
@@ -6375,6 +6371,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
       allowFallback: false,
       readyTimeoutMs: 10000,
       onProgress: (stage, detail = {}) => {
+        reportRead("core", stage);
         if (stage === "upgrade") {
           dismissMapToast(documentRef);
           setMythicGenerationLoading(documentRef, true, detail.message);
@@ -6385,11 +6382,17 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
         });
       }
     });
-    const [primaryOutput, secondaryOutput, externalCanonicalDocument] = await Promise.all([
-      primaryPromise,
-      secondaryPromise,
-      canonicalDocumentPromise
-    ]);
+    const rendering = Promise.all([primaryPromise, secondaryPromise]);
+    // 主线程先送出两份输入。立即开始分片解码会反复抢在输入确认消息前运行，导致绘制一直等候。
+    const canonicalDocumentPromise = useWorkerCanonicalHandoff ? null : Promise.race([inputsReceived, rendering]).then(async () => {
+      const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
+      const payload = await unwrapPreparedMapImportInput(documentRef, canonicalInput);
+      const document = await parseMapDocumentPayloadAsync(documentRef, payload, {budgetMs: 4, yieldToMain: () => yieldMapHandoffDecode(documentRef)});
+      applyMainThreadMapProjection(document.map);
+      canonicalDecodeMs = roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - startedAt);
+      return document;
+    });
+    const [[primaryOutput, secondaryOutput], externalCanonicalDocument] = await Promise.all([rendering, canonicalDocumentPromise]);
     output = primaryOutput;
     if (state.pendingMapImportId !== importId) {
       const error = new Error("地图导入结果已被新的请求取代");
@@ -6442,12 +6445,14 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
   }
 }
 
-function clonePreparedMapImportInput(input) {
-  if (input?.kind === "bytes" && input.bytes instanceof Uint8Array) {
-    return {...input, bytes: input.bytes.slice()};
-  }
-  if (input?.kind === "text-chunks" && Array.isArray(input.chunks)) {
-    return {...input, chunks: [...input.chunks]};
+async function shareMapImportInput(input, view) {
+  const source = input?.kind === "bytes" ? input.bytes : input;
+  const bytes = source instanceof ArrayBuffer ? new Uint8Array(source)
+    : ArrayBuffer.isView(source) ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength) : null;
+  // 两份渲染输入流各自复制要交接的分片，可以共读同一份解包字节。
+  if (bytes?.[0] === 0x1f && bytes[1] === 0x8b && typeof view.DecompressionStream === "function") {
+    const decoded = await gunzipWebfmgV3Bytes(bytes, view);
+    return {kind: "bytes", bytes: decoded};
   }
   return structuredClone(input);
 }

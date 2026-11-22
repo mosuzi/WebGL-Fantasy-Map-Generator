@@ -261,8 +261,8 @@ export async function gzipWebfmgV3Bytes(source, view = globalThis) {
 export async function gunzipWebfmgV3Bytes(source, view = globalThis) {
   if (typeof view.DecompressionStream !== "function") throw containerError("webfmg_v3_gzip_unavailable", "当前环境不支持 gzip 解压");
   const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);
-  const blob = await new view.Response(new view.Blob([bytes]).stream().pipeThrough(new view.DecompressionStream("gzip"))).blob();
-  return new Uint8Array(await blob.arrayBuffer());
+  const stream = new view.Blob([bytes]).stream().pipeThrough(new view.DecompressionStream("gzip"));
+  return new Uint8Array(await new view.Response(stream).arrayBuffer());
 }
 
 function prepareSectionForEncoding(name, value, aliases) {
@@ -362,25 +362,74 @@ function releaseChunk(chunks, sourceChunks, index, consume) {
 }
 
 function restoreDecodedSection(name, value) {
-  if ((name === "grid" || name === "pack") && value?.cells?.v) {
-    const cellDescriptor = value.vertices.c;
-    const vertexDescriptor = value.vertices.v;
-    value.vertices.c = decodeDerivedVertexRows(value.cells.v, cellDescriptor, "cells", value.vertices.p?.length || 0);
-    value.vertices.v = decodeDerivedVertexRows(value.cells.v, vertexDescriptor, "vertices", value.vertices.p?.length || 0);
-    primeDerivedVertexEncodingCache(value.cells.v, value.vertices.c, value.vertices.v, cellDescriptor, vertexDescriptor);
-  }
+  for (const _ of restoreTopologyBatches(name, value)) { /* 同步解码无需让出执行。 */ }
   return value;
 }
 
 async function restoreDecodedSectionAsync(name, value, checkpoint) {
-  if ((name === "grid" || name === "pack") && value?.cells?.v) {
-    const cellDescriptor = value.vertices.c;
-    const vertexDescriptor = value.vertices.v;
-    value.vertices.c = await decodeDerivedVertexRowsAsync(value.cells.v, cellDescriptor, "cells", value.vertices.p?.length || 0, checkpoint);
-    value.vertices.v = await decodeDerivedVertexRowsAsync(value.cells.v, vertexDescriptor, "vertices", value.vertices.p?.length || 0, checkpoint);
-    primeDerivedVertexEncodingCache(value.cells.v, value.vertices.c, value.vertices.v, cellDescriptor, vertexDescriptor);
-  }
+  for (const _ of restoreTopologyBatches(name, value)) await checkpoint();
   return value;
+}
+
+function* restoreTopologyBatches(name, value) {
+  if ((name !== "grid" && name !== "pack") || !value?.cells?.v) return;
+  const cellVertices = value.cells.v;
+  const count = value.vertices.p?.length || 0;
+  const cellDescriptor = value.vertices.c;
+  const vertexDescriptor = value.vertices.v;
+  const cellExceptions = topologyExceptions(cellDescriptor, "cells", count);
+  const vertexExceptions = topologyExceptions(vertexDescriptor, "vertices", count);
+  const cells = new Array(count).fill(null);
+  const vertices = new Array(count);
+
+  for (let cell = 0; cell < cellVertices.length; cell++) {
+    const ring = cellVertices[cell];
+    for (let i = 0; i < ring.length; i++) {
+      const vertex = ring[i];
+      if (cells[vertex] === undefined) continue;
+      const incident = cells[vertex] ||= [];
+      if (incident[incident.length - 1] !== cell) incident.push(cell);
+      const neighbors = vertices[vertex] ||= [];
+      const previous = ring[(i + ring.length - 1) % ring.length];
+      const next = ring[(i + 1) % ring.length];
+      if (!neighbors.includes(previous)) neighbors.push(previous);
+      if (!neighbors.includes(next)) neighbors.push(next);
+    }
+    if ((cell & 1023) === 1023) yield;
+  }
+  for (let i = 0; i < count; i++) {
+    const neighbors = vertices[i] || [];
+    if (neighbors.length === 3) {
+      if (neighbors[0] - neighbors[1] > 0) [neighbors[0], neighbors[1]] = [neighbors[1], neighbors[0]];
+      if (neighbors[1] - neighbors[2] > 0) [neighbors[1], neighbors[2]] = [neighbors[2], neighbors[1]];
+      if (neighbors[0] - neighbors[1] > 0) [neighbors[0], neighbors[1]] = [neighbors[1], neighbors[0]];
+    } else neighbors.sort((a, b) => a - b);
+    if (neighbors.length === 2) neighbors.unshift(-1);
+    // 相邻地块按地块编号依次加入，已是排列码使用的升序。
+    cells[i] = restoreTopologyRow(cells[i] || [], cellDescriptor, cellExceptions, i);
+    vertices[i] = restoreTopologyRow(neighbors, vertexDescriptor, vertexExceptions, i);
+    if ((i & 1023) === 1023) yield;
+  }
+  value.vertices.c = cells;
+  value.vertices.v = vertices;
+  primeDerivedVertexEncodingCache(cellVertices, cells, vertices, cellDescriptor, vertexDescriptor);
+}
+
+function topologyExceptions(descriptor, kind, count) {
+  if (descriptor?.format !== TOPOLOGY_MARKER || descriptor.kind !== kind || descriptor.rows !== count) {
+    throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑描述无效`);
+  }
+  const exceptions = new Map(descriptor.exceptions.map(entry => [entry.index, entry.row]));
+  if (exceptions.size !== descriptor.exceptions.length) throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑例外重复`);
+  return exceptions;
+}
+
+function restoreTopologyRow(sorted, descriptor, exceptions, index) {
+  const rank = descriptor.permutations[index];
+  if (rank !== 255) return applyPermutationRank(sorted, rank);
+  const row = exceptions.get(index);
+  if (!row) throw containerError("webfmg_v3_topology_invalid", `v3 ${descriptor.kind} 拓扑例外缺失：${index}`);
+  return row;
 }
 
 function encodeDerivedVertexTopology(cellVertices, cellRows, vertexRows) {
@@ -439,61 +488,6 @@ function derivedVertexTopologyFingerprint(...collections) {
   return `${first >>> 0}:${second >>> 0}`;
 }
 
-function decodeDerivedVertexRows(cellVertices, descriptor, kind, rows) {
-  if (descriptor?.format !== TOPOLOGY_MARKER || descriptor.kind !== kind || descriptor.rows !== rows) {
-    throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑描述无效`);
-  }
-  const output = deriveVertexRows(cellVertices, rows, kind);
-  const exceptions = new Map(descriptor.exceptions.map(entry => [entry.index, entry.row]));
-  for (let index = 0; index < output.length; index += 1) {
-    if (descriptor.permutations[index] === 255) {
-      const row = exceptions.get(index);
-      if (!row) throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑例外缺失：${index}`);
-      output[index] = row;
-    } else output[index] = applyPermutationRank(output[index], descriptor.permutations[index]);
-  }
-  if (exceptions.size !== descriptor.exceptions.length) throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑例外重复`);
-  return output;
-}
-
-async function decodeDerivedVertexRowsAsync(cellVertices, descriptor, kind, rows, checkpoint) {
-  if (descriptor?.format !== TOPOLOGY_MARKER || descriptor.kind !== kind || descriptor.rows !== rows) {
-    throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑描述无效`);
-  }
-  const output = await deriveVertexRowsAsync(cellVertices, rows, kind, checkpoint);
-  const exceptions = new Map(descriptor.exceptions.map(entry => [entry.index, entry.row]));
-  for (let index = 0; index < output.length; index += 1) {
-    if (descriptor.permutations[index] === 255) {
-      const row = exceptions.get(index);
-      if (!row) throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑例外缺失：${index}`);
-      output[index] = row;
-    } else output[index] = applyPermutationRank(output[index], descriptor.permutations[index]);
-    if (!(index & 1023)) await checkpoint();
-  }
-  if (exceptions.size !== descriptor.exceptions.length) throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑例外重复`);
-  return output;
-}
-
-function deriveVertexRows(cellVertices, count, kind) {
-  const sets = Array.from({length: count}, () => new Set());
-  for (let cell = 0; cell < cellVertices.length; cell += 1) {
-    const vertices = cellVertices[cell];
-    for (let index = 0; index < vertices.length; index += 1) {
-      const vertex = vertices[index];
-      if (!sets[vertex]) continue;
-      if (kind === "cells") sets[vertex].add(cell);
-      else {
-        sets[vertex].add(vertices[(index + vertices.length - 1) % vertices.length]);
-        sets[vertex].add(vertices[(index + 1) % vertices.length]);
-      }
-    }
-  }
-  return sets.map(set => {
-    const row = [...set].sort((left, right) => left - right);
-    if (kind === "vertices" && row.length === 2) row.unshift(-1);
-    return row;
-  });
-}
 
 function deriveVertexTopologyRows(cellVertices, count) {
   const cellSets = Array.from({length: count}, () => new Set());
@@ -518,30 +512,6 @@ function deriveVertexTopologyRows(cellVertices, count) {
   };
 }
 
-async function deriveVertexRowsAsync(cellVertices, count, kind, checkpoint) {
-  const sets = Array.from({length: count}, () => new Set());
-  for (let cell = 0; cell < cellVertices.length; cell += 1) {
-    const vertices = cellVertices[cell];
-    for (let index = 0; index < vertices.length; index += 1) {
-      const vertex = vertices[index];
-      if (!sets[vertex]) continue;
-      if (kind === "cells") sets[vertex].add(cell);
-      else {
-        sets[vertex].add(vertices[(index + vertices.length - 1) % vertices.length]);
-        sets[vertex].add(vertices[(index + 1) % vertices.length]);
-      }
-    }
-    if (!(cell & 1023)) await checkpoint();
-  }
-  const output = new Array(sets.length);
-  for (let index = 0; index < sets.length; index += 1) {
-    const row = [...sets[index]].sort((left, right) => left - right);
-    if (kind === "vertices" && row.length === 2) row.unshift(-1);
-    output[index] = row;
-    if (!(index & 1023)) await checkpoint();
-  }
-  return output;
-}
 
 function permutationRank(row, sorted) {
   if (!Array.isArray(row) || row.length !== sorted.length || row.length > 6) return -1;
@@ -557,6 +527,17 @@ function permutationRank(row, sorted) {
 }
 
 function applyPermutationRank(sorted, rank) {
+  if (rank === 0) return sorted;
+  if (sorted.length === 3) {
+    const [a, b, c] = sorted;
+    switch (rank) {
+      case 1: return [a, c, b];
+      case 2: return [b, a, c];
+      case 3: return [b, c, a];
+      case 4: return [c, a, b];
+      case 5: return [c, b, a];
+    }
+  }
   const available = [...sorted];
   const output = [];
   let remaining = rank;

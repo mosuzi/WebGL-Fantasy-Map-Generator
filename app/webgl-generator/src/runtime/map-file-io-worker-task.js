@@ -11,12 +11,13 @@ import {
 import {
   decodeBrowserMapStorageImportPayload
 } from "./browser-map-storage.js";
-import {isCompressedMapDocumentFilename} from "./map-filename.js";
 import {encodeWebfmgV3Document, gzipWebfmgV3Bytes} from "./webfmg-v3-container.js";
 import {createParsedMapAdoptionPackage} from "./map-adoption-handoff.js";
 import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
 import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
+import {buildCellAttributeSnapshot} from "../renderer/cell-attribute-store.js";
+import {packGeneratedGridRanges, packShoreCellRanges} from "./generated-map-geometry-handoff.js";
 import {mergeUserVisualThemes, normalizeVisualThemeId, resolveVisualTheme} from "../renderer/themes.js";
 import {createWholeMapDocumentMetadata} from "./whole-map-profile-protocol.js";
 
@@ -82,7 +83,7 @@ async function importMapFile(payload, context) {
 
   reportTaskProgress(context, "parse", 0.45, "解析、迁移并校验地图文档");
   const parseStartedAt = taskNow();
-  const parsed = await parseImportSource(source, payload, {
+  const parsed = await parseImportSource(source, {
     onUpgrade: () => reportTaskProgress(context, "upgrade", 0.5, "旧卷待整，正依今制重理山河")
   });
   const parsedDocument = parsed.document;
@@ -230,7 +231,7 @@ async function prepareImportedMapRender(document, render, context) {
   const userThemes = Array.isArray(map?.visualTheme?.userThemes) ? map.visualTheme.userThemes : [];
   if (userThemes.length) mergeUserVisualThemes(userThemes);
   const themeId = normalizeVisualThemeId(map?.visualTheme?.preset || map?.options?.visualTheme || document?.options?.visualTheme);
-  return executeRenderPreparationTask({
+  const prepared = await executeRenderPreparationTask({
     ...render,
     map,
     selection: null,
@@ -238,6 +239,17 @@ async function prepareImportedMapRender(document, render, context) {
     unitPreferences: map?.display?.units || render.unitPreferences,
     visualTheme: resolveVisualTheme(themeId)
   }, context);
+  if (render.surfaceTransferMode === "gpu-resident-compact") {
+    const {surface, shoreSurface} = prepared.layers;
+    if (surface?.surfaceCellRangesMode === "grid-cells" && surface.surfaceCellRanges instanceof Map) {
+      surface.surfaceCellRanges = packGeneratedGridRanges(surface.surfaceCellRanges, {allowExplicitIds: true});
+    }
+    if (shoreSurface) {
+      shoreSurface.cellRanges = packShoreCellRanges(shoreSurface.cellRanges);
+      prepared.layers.cellAttributes = buildCellAttributeSnapshot(map, render.viewOptions);
+    }
+  }
+  return prepared;
 }
 
 function normalizeImportSource(payload) {
@@ -263,7 +275,7 @@ function normalizeImportSource(payload) {
   return source;
 }
 
-async function parseImportSource(source, payload, options = {}) {
+async function parseImportSource(source, options = {}) {
   const view = runtimeView();
   const decodedBrowserStorage = await decodeBrowserMapStorageImportPayload({defaultView: view}, source);
   if (decodedBrowserStorage !== source) {
@@ -273,17 +285,7 @@ async function parseImportSource(source, payload, options = {}) {
   if (isBinarySource(source)) {
     const bytes = binarySourceBytes(source);
     if (source?.kind === "bytes" && !isBinarySourceValue(bytes)) throw new Error("地图存档字节 packet 缺少有效 bytes");
-    const blob = source instanceof view.Blob
-      ? source
-      : new view.Blob([bytes], {type: payload.mimeType || source.mimeType || ""});
-    const filename = String(payload.filename || source.name || source.filename || "");
-    const compressed = payload.encoding === "gzip"
-      || isCompressedMapDocumentFilename(filename)
-      || /gzip/i.test(String(payload.mimeType || source.type || source.mimeType || ""));
-    if (compressed && !/gzip/i.test(blob.type)) {
-      return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, new view.Blob([blob], {type: "application/gzip"}), options);
-    }
-    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, blob, options);
+    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, bytes, options);
   }
   if (source?.encoding === "plain" || source?.encoding === "gzip-base64" || typeof source?.base64 === "string") {
     return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, source, options);

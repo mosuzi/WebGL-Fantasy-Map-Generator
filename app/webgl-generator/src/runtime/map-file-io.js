@@ -198,6 +198,15 @@ export async function parseMapDocumentPayloadAsync(documentRef, payload, options
     if (isWebfmgV3Bytes(decodedBytes)) {
       assertSupportedWebfmgSchemaVersion(decodedBytes);
       const document = await decodeWebfmgV3DocumentAsync(decodedBytes, options);
+      if (typeof options.yieldToMain === "function") {
+        const stages = mapDocumentMigrationStages(document, options);
+        let stage;
+        do {
+          await options.yieldToMain();
+          stage = stages.next();
+        } while (!stage.done);
+        return stage.value;
+      }
       return migrateMapDocument(document, options);
     }
   }
@@ -285,6 +294,13 @@ export function getMapDocumentUpgradeInfo(document) {
 }
 
 export function migrateMapDocument(document, options = {}) {
+  const stages = mapDocumentMigrationStages(document, options);
+  let stage;
+  do { stage = stages.next(); } while (!stage.done);
+  return stage.value;
+}
+
+function* mapDocumentMigrationStages(document, options) {
   assertSupportedMapSchemaVersion(document?.metadata?.mapSchemaVersion, "document");
   assertSupportedMapSchemaVersion(document?.map?.metadata?.schemaVersion, "map");
   const sourceVersion = Number(document?.version);
@@ -299,6 +315,7 @@ export function migrateMapDocument(document, options = {}) {
     targetVersion: MAP_DOCUMENT_VERSION,
     registry: MAP_DOCUMENT_MIGRATORS
   });
+  yield;
   assertMapDocumentCellLimit(versioned.map);
   const identityHint = normalizePersistedDocumentId(versioned.metadata?.documentId);
   const mapIdentity = normalizePersistedDocumentId(versioned.map?.metadata?.documentId);
@@ -318,6 +335,7 @@ export function migrateMapDocument(document, options = {}) {
       }
     : versioned.map;
   const normalizedMap = normalizeCurrentMapSchema(sourceMap, versioned.options);
+  yield;
   let observedCompatibilityBackfill = sourceMap.metadata?.name !== normalizedMap.metadata.name
     || !sameCompatibilityValue(sourceMap.options, normalizedMap.options)
     || !sameCompatibilityValue(sourceMap.display, normalizedMap.display)
@@ -337,6 +355,7 @@ export function migrateMapDocument(document, options = {}) {
     map: normalizedMap
   });
   backfillEconomyDisplayProperties(migrated.map);
+  yield;
   const provinceNames = backfillProvinceNames(migrated.map);
   const sourceDiplomacyMap = migrated.map;
   migrated.map = normalizeDiplomacyMap(migrated.map);
@@ -349,6 +368,7 @@ export function migrateMapDocument(document, options = {}) {
   migrated.map = normalizeZoneMap(migrated.map);
   observedCompatibilityBackfill ||= hasZoneNormalizationChange(sourceZones, migrated.map.zones?.zones);
   const lockCompatibility = applyRegenerationLockCompatibility(migrated.map, versioned.map?.regenerationLocks);
+  yield;
   let repairedBurgs = 0;
   let repairedMirrors = false;
   reconcileSettlementCellIdentity(migrated.map, {
@@ -356,6 +376,7 @@ export function migrateMapDocument(document, options = {}) {
     onRepairBurg: () => { repairedBurgs += 1; },
     onRepairMirror: () => { repairedMirrors = true; }
   });
+  yield;
   diagnoseSettlementPortTopology(migrated.map);
   validateCurrentMapDocument(migrated);
   if (needsCompatibilityBackfill || observedCompatibilityBackfill || provinceNames.changed > 0 || repairedBurgs > 0 || repairedMirrors || lockCompatibility.diagnostics.removed > 0) {

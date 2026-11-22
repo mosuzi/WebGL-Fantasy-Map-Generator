@@ -10,15 +10,34 @@ const rowColumns = [
 
 const gridColumns = rowColumns.filter(([section]) => section === "grid");
 
-export function packGeneratedGridRanges(ranges) {
+export function packGeneratedGridRanges(ranges, {allowExplicitIds = false} = {}) {
   const ends = new Uint32Array(ranges.size);
   let cell = 0;
   let previousEnd = 0;
   for (const [id, {start, end}] of ranges) {
+    // 旧图可能按非编号顺序存放网格；此时保留携带身份的范围表交给安装器校验。
+    if (allowExplicitIds && (id !== cell || start === end)) return ranges;
     if (id !== cell || start !== previousEnd || !Number.isSafeInteger(end) || end <= start || end > 0xffffffff) throw invalidGeometry();
     ends[cell++] = previousEnd = end;
   }
   return ends;
+}
+
+export function packShoreCellRanges(cellRanges) {
+  return Object.fromEntries(Object.entries(cellRanges).map(([name, ranges]) => {
+    const ordered = [];
+    for (const [cell, spans] of ranges) for (const span of spans) ordered.push({cell, ...span});
+    ordered.sort((a, b) => a.start - b.start);
+    const pairs = new Uint32Array(ordered.length * 2);
+    for (let i = 0; i < ordered.length; i++) {
+      const {cell, start, end} = ordered[i];
+      if (start !== (i ? ordered[i - 1].end : 0) || !Number.isSafeInteger(end) || end <= start || end > 0xffffffff
+        || !Number.isInteger(cell) || cell < 0 || cell > 0xffffffff) throw new Error("岸线顶点范围无效");
+      pairs[i * 2] = cell;
+      pairs[i * 2 + 1] = end;
+    }
+    return [name, pairs];
+  }));
 }
 
 const scalarColumns = new Set("b i p h t f temp prec biome pack s pop culture religion burg state province region g area haven harbor fl r conf good goodSupply goodSource suitabilityBase suitabilityOverride market".split(" "));

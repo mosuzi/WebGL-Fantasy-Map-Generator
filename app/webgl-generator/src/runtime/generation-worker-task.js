@@ -8,7 +8,7 @@ import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {collectWorkerTransferables} from "./worker-snapshot.js";
 import {createWholeMapDocumentMetadata} from "./whole-map-profile-protocol.js";
 import {startGenerationTerrainPreparation} from "./generation-terrain-preparation.js";
-import {packGeneratedGridRanges} from "./generated-map-geometry-handoff.js";
+import {packGeneratedGridRanges, packShoreCellRanges} from "./generated-map-geometry-handoff.js";
 import {buildCellAttributeSnapshot} from "../renderer/cell-attribute-store.js";
 
 export const GENERATION_WORKER_TASK = "generation.compute";
@@ -77,18 +77,7 @@ async function generateAndPrepare(payload, context, terrain) {
     const {surface, shoreSurface} = preparedRender.layers;
     const {cellRanges, ...vertices} = shoreSurface;
     Object.assign(surface, vertices, {
-      shoreSurfaceCellRanges: Object.fromEntries(Object.entries(cellRanges).map(([name, ranges]) => {
-        const ordered = [];
-        for (const [cell, spans] of ranges) for (const span of spans) ordered.push({cell, ...span});
-        ordered.sort((a, b) => a.start - b.start);
-        const pairs = new Uint32Array(ordered.length * 2);
-        for (let i = 0; i < ordered.length; i++) {
-          if (ordered[i].start !== (i ? ordered[i - 1].end : 0)) throw new Error("岸线顶点范围不连续");
-          pairs[i * 2] = ordered[i].cell;
-          pairs[i * 2 + 1] = ordered[i].end;
-        }
-        return [name, pairs];
-      })),
+      shoreSurfaceCellRanges: packShoreCellRanges(cellRanges),
       smoothShoreSurfaceKey: preparedRender.presentation.display.shoreSurfaceKey,
       shoreSurfaceEnabled: preparedRender.presentation.display.smoothCellBorders
     });

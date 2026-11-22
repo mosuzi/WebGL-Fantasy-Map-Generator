@@ -339,11 +339,20 @@ function deleteIndexedDbRecord(view) {
 
 function withIndexedDbStore(view, mode, action) {
   return openIndexedDb(view).then(db => new Promise((resolve, reject) => {
-    const transaction = db.transaction(BROWSER_MAP_STORAGE_FALLBACK_STORE, mode);
-    const request = action(transaction.objectStore(BROWSER_MAP_STORAGE_FALLBACK_STORE));
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("IndexedDB 存档操作失败"));
-    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB 存档事务失败"));
-    transaction.oncomplete = () => db.close();
+    try {
+      const transaction = db.transaction(BROWSER_MAP_STORAGE_FALLBACK_STORE, mode);
+      const request = action(transaction.objectStore(BROWSER_MAP_STORAGE_FALLBACK_STORE));
+      transaction.onabort = () => {
+        db.close();
+        reject(transaction.error || new Error("IndexedDB 存档事务已中止"));
+      };
+      transaction.oncomplete = () => {
+        db.close();
+        resolve(request.result);
+      };
+    } catch (error) {
+      db.close();
+      reject(error);
+    }
   }));
 }

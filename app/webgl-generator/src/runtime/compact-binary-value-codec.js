@@ -592,6 +592,10 @@ function packIntegers(values, min, bits) {
 
 function unpackIntegers(bytes, length, min, bits) {
   const output = new Array(length);
+  if (bits <= 25 && bytes.length >= Math.ceil(length * bits / 8)) {
+    unpackSmallIntegerBlock(bytes, output, min, bits, 0, length);
+    return output;
+  }
   if (bits <= 46) {
     const divisor = 2 ** bits;
     let accumulator = 0;
@@ -626,6 +630,13 @@ function unpackIntegers(bytes, length, min, bits) {
 
 async function unpackIntegersAsync(bytes, length, min, bits, checkpoint) {
   const output = new Array(length);
+  if (bits <= 25 && bytes.length >= Math.ceil(length * bits / 8)) {
+    for (let start = 0; start < length; start += 4096) {
+      unpackSmallIntegerBlock(bytes, output, min, bits, start, Math.min(length, start + 4096));
+      await checkpoint();
+    }
+    return output;
+  }
   if (bits <= 46) {
     const divisor = 2 ** bits;
     let accumulator = 0;
@@ -658,6 +669,23 @@ async function unpackIntegersAsync(bytes, length, min, bits, checkpoint) {
     if (!(index & 1023)) await checkpoint();
   }
   return output;
+}
+
+// 每块从整字节开始。最多 25 位加至多 7 位余数，刚好装进 32 位寄存器。
+function unpackSmallIntegerBlock(bytes, output, min, bits, start, end) {
+  const mask = (1 << bits) - 1;
+  let offset = start * bits / 8;
+  let remaining = 0;
+  let word = 0;
+  for (let i = start; i < end; i++) {
+    while (remaining < bits) {
+      word |= bytes[offset++] << remaining;
+      remaining += 8;
+    }
+    output[i] = min + (word & mask);
+    word >>>= bits;
+    remaining -= bits;
+  }
 }
 
 function createDecodeCheckpoint(options) {

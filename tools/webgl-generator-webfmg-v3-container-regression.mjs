@@ -39,6 +39,14 @@ const integerPackingFixture = {
 const integerPackingBytes = encodeCompactBinaryValue(integerPackingFixture);
 assert.equal(createHash("sha256").update(integerPackingBytes).digest("hex"), "d0a33c21f4f687eb05019b5f2ecd53fcc14ff2dcd1d96b0f52a297768528764b", "整数快路径改变了既有紧凑二进制格式");
 assert.deepEqual(decodeCompactBinaryValue(integerPackingBytes), integerPackingFixture);
+for (const bits of [1, 7, 8, 17, 24, 25, 26]) {
+  const maximum = 2 ** bits - 1;
+  const row = Array.from({length: 8211}, (_, i) => (Math.imul(i, 65537) & maximum) - 5);
+  row[4095] = maximum - 5;
+  const bytes = encodeCompactBinaryValue(row);
+  assert.deepEqual(decodeCompactBinaryValue(bytes), row);
+  assert.deepEqual(await decodeCompactBinaryValueAsync(bytes), row);
+}
 
 const map = generatePlaceholderMap({seed: `canonical-map-registry-${target}`, cellsTarget: target, heightmapTemplate: "continents"});
 const holeyMap = structuredClone(map);

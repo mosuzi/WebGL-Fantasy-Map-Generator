@@ -180,6 +180,25 @@ try {
     assert.deepEqual(normalConsoleErrors, []);
     assert.deepEqual(normalPageErrors, []);
     longTasks.push(...await collectTask350LongTaskWindow(normalPage, "direct-binary-10000"));
+    const aborted = await normalPage.evaluate(async () => {
+      const put = IDBObjectStore.prototype.put;
+      let didAbort = false;
+      IDBObjectStore.prototype.put = function (...args) {
+        const request = put.apply(this, args);
+        if (this.transaction.db.name === "webgl-generator-map-storage-v1") {
+          request.addEventListener("success", () => { this.transaction.abort(); didAbort = true; }, {once: true});
+        }
+        return request;
+      };
+      try {
+        const result = await window.webglGeneratorApi.data.saveBrowserMap({toast: false});
+        return {didAbort, ok: result.ok};
+      } finally {
+        IDBObjectStore.prototype.put = put;
+      }
+    });
+    assert.deepEqual(aborted, {didAbort: true, ok: false}, "写入请求成功后事务中止，保存仍误报成功");
+    assert.deepEqual(await readIndexedDbRecord(normalPage), normalIndexedDbRecord, "中止的事务覆盖了上次存档");
     normal = {generated: normalGenerated, saved: normalSaved.data, localStorage: normalLocalStorage, indexedDbRecord: normalIndexedDbRecord, restored: normalRestored.data, consoleErrors: normalConsoleErrors, pageErrors: normalPageErrors};
     finalReport.normal = {saved: normal.saved, restored: normal.restored};
     compactReport.normal = normal;
@@ -233,7 +252,9 @@ async function readIndexedDbRecord(page) {
         rawType: typeof record?.raw,
         type: record?.raw?.type || "",
         bytes: Number(record?.raw?.bytes) || 0,
-        dataBytes: Number(record?.raw?.data?.byteLength) || 0
+        dataBytes: Number(record?.raw?.data?.byteLength) || 0,
+        savedAt: record?.raw?.savedAt,
+        digest: Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", record.raw.data)))
       };
     } finally {
       db.close();
