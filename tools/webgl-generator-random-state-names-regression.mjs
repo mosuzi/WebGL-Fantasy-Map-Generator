@@ -29,7 +29,10 @@ for (const [id, previous] of [[22993, "青楼"], [6639, "开门"], [94188, "开�
   assert.notEqual(root, previous);
   assert.equal(draw({id}), root);
 }
-for (const term of ["青楼", "北青樓城", "賭坊", "妓院", "茅廁", "会阴", "北會陰", "上楼", "開庭", "关门", "开春"]) {
+for (const term of [
+  "青楼", "北青樓城", "賭坊", "妓院", "茅廁", "会阴", "北會陰", "上楼", "開庭", "关门", "开春",
+  "开关", "開關", "开光", "開光", "北開關城", "新开光王国", "开灯", "關燈", "開機", "关机", "开店", "關店"
+]) {
   assert.equal(isUnsuitableGeneratedStateName(term), true, term);
   const bound = withStateNames([term]);
   const substitutes = [
@@ -40,7 +43,7 @@ for (const term of ["青楼", "北青樓城", "賭坊", "妓院", "茅廁", "会
   assert.ok(substitutes.every(name => wholeRoots.has(name)), term);
 }
 assert.equal(draw({id: 22992}), "罗");
-for (const cultureRoot of ["楼兰", "青岚", "会宁", "江阴", "山阴", "开封", "玉门", "上京"]) {
+for (const cultureRoot of ["楼兰", "青岚", "会宁", "江阴", "山阴", "开封", "开元", "关中", "光山", "玉门", "上京"]) {
   assert.equal(draw({id: 6, cultureRoot}), cultureRoot);
   assert.equal(draw({id: 1}, withStateNames([cultureRoot])), cultureRoot);
 }
@@ -54,14 +57,16 @@ for (const style of ["european", "english", "antique", "highFantasy", "darkFanta
 }
 
 const map = generatePlaceholderMap({seed: "state-name-grid-469", cellsTarget: 3000, culturesSet: "oriental"});
-for (const name of ["会阴文化", "会宁文化"]) {
+for (const [name, kept] of [["会阴文化", false], ["会宁文化", true], ["開關文化", false], ["开光文化", false], ["光州文化", true]]) {
   const society = {...map.society, cultures: map.society.cultures.map(culture => culture && {...culture, name})};
   const politics = buildPolitics(map.grid, map.features, society, map.rivers, createRandom("grid"), map.options, null);
   const states = politics.states.filter(state => state.culture > 0);
   assert.ok(states.length > 0);
   for (const state of states) {
-    assert.ok(state.name && !state.fullName.includes("会阴"));
-    if (name === "会宁文化") assert.equal(state.name, "会宁");
+    const root = name.replace("文化", "");
+    assert.ok(state.name);
+    assert.equal(state.name === root, kept);
+    assert.equal(state.fullName.includes(root), kept);
   }
 }
 

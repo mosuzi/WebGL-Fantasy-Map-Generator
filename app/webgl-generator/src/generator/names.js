@@ -1112,7 +1112,7 @@ function trimStateForm(name) {
 
 // 场所词在长名称中仍有明显歧义；动作和身体部位只按完整词根匹配，以保留“江阴道”等地名。
 const UNSUITABLE_STATE_VENUE = /青[楼樓]|妓院|妓[馆館]|[窑窯]子|[赌賭][场場坊]|[厕廁]所|茅[厕廁]|[粪糞]坑/u;
-const NON_PLACE_STATE_ROOT = /^(?:[东東西南北前后後新古])?(?:[会會][阴陰]|[阴陰](?:道|[茎莖]|蒂|囊|唇)|肛[门門]|[开開](?:[门門]|庭|春|[会會])|[关關][门門]|[上下](?:[楼樓]|班|床)|上[门門])(?:城|[镇鎮]|州|郡|[县縣])?$/u;
+const NON_PLACE_STATE_ROOT = /^(?:[东東西南北前后後新古])?(?:[会會][阴陰]|[阴陰](?:道|[茎莖]|蒂|囊|唇)|肛[门門]|[开開][关關光庭春会會]|[开開关關][门門灯燈机機店]|[上下](?:[楼樓]|班|床)|上[门門])(?:城|[镇鎮]|州|郡|[县縣])?$/u;
 
 export function isUnsuitableGeneratedStateName(name) {
   const root = trimPoliticalForm(String(name || "").replace(/\s+/gu, "").replace(/國/gu, "国"));
