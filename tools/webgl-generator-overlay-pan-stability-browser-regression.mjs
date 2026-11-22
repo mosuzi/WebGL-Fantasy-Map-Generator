@@ -167,10 +167,15 @@ try {
   await page.mouse.down({button: "middle"});
   for (let step = 1; step <= 8; step++) {
     await page.mouse.move(start.x + before.direction * before.distance * step / 8, start.y, {steps: 1});
-    previewFrames.push(await page.evaluate(() => {
+    previewFrames.push(await page.evaluate(async () => {
+      await new Promise(requestAnimationFrame);
       const renderer = window.__webglGeneratorApp.renderer;
-      const matrix = getComputedStyle(renderer.overlay).transform.match(/^matrix\(([^)]+)\)$/)?.[1]?.split(",").map(Number) || [];
+      const overlayTransform = getComputedStyle(renderer.overlay).transform;
+      const matrix = overlayTransform.match(/^matrix\(([^)]+)\)$/)?.[1]?.split(",").map(Number) || [];
       return {
+        overlayTransform,
+        inheritedPanStyles: ["--map-interaction-transform", "--map-interaction-inverse-scale", "--state-label-preview-opacity"]
+          .filter(name => renderer.stage.style.getPropertyValue(name)),
         x: matrix[4] || 0,
         y: matrix[5] || 0,
         drawCalls: renderer.getStats().cityIconWebgl.drawCalls,
@@ -314,6 +319,8 @@ try {
   assert(previewFrames.every((frame, index) => !index || frame.drawCalls > previewFrames[index - 1].drawCalls), "平移预览没有逐帧绘制 WebGL 城镇层");
   assert(before.measurementPaths > 0, "测量世界层夹具没有建立");
   assert(previewFrames.every(frame => frame.measurementSvgTransform !== "none"), "平移预览没有变换测量 SVG 世界层");
+  assert(previewFrames.every(frame => frame.overlayTransform === frame.measurementSvgTransform), "测量线与地图标签的位移不一致");
+  assert(previewFrames.every(frame => !frame.inheritedPanStyles.length), "纯平移向地图子树写入了继承样式");
   assert(previewFrames.every(frame => frame.measurementReadoutTransform === "none"), "测量 HUD 读数被错误地随世界层变换");
   for (const kind of ["city", "resource", "marker", "military"]) {
     assert(exiting.some(item => item.kind === kind), `平移没有命中 ${kind} 离场稳定性样本`);

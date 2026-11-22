@@ -4407,7 +4407,8 @@ async function runPendingViewportGate(page) {
         css: {
           stageClass: renderer.stage?.classList.contains("map-stage--interaction-transform") || false,
           overlayClass: renderer.overlay?.classList.contains("map-overlay--interaction-transform") || false,
-          transform: renderer.stage?.style.getPropertyValue("--map-interaction-transform") || "",
+          transform: renderer.overlay?.style.transform || "",
+          measurementTransform: renderer.measurementSvg?.style.transform || "",
           inverseScale: renderer.stage?.style.getPropertyValue("--map-interaction-inverse-scale") || "",
           labelOpacity: renderer.stage?.style.getPropertyValue("--state-label-preview-opacity") || ""
         },
@@ -4427,7 +4428,7 @@ async function runPendingViewportGate(page) {
       assert.equal(value.byteLength, value.vertexCount * 24, `${mode} pending viewport ${name} GPU bytes 与 vertexCount 不符`);
     }
     assert.deepEqual(after.timers, {timer: false, event: false, frame: false, interaction: false, pointer: null, installSuspended: 0, installViewportChanged: false}, `${mode} pending viewport 留下 timer/event/pointer`);
-    assert.deepEqual(after.css, {stageClass: false, overlayClass: false, transform: "", inverseScale: "", labelOpacity: ""}, `${mode} pending viewport 留下 CSS transform`);
+    assert.deepEqual(after.css, {stageClass: false, overlayClass: false, transform: "", measurementTransform: "", inverseScale: "", labelOpacity: ""}, `${mode} pending viewport 留下 CSS transform`);
     assert.equal(after.loadingVisible, 0, `${mode} pending viewport 未清 Loading`);
     const baseline = await page.evaluate(() => ({domain: window.__task322PendingViewport.domain, history: window.__task322PendingViewport.history}));
     if (mode === "fault") {

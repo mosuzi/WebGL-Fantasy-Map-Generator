@@ -51,6 +51,7 @@ try {
   const beforeZoom = await snapshotOverlay(page);
   await page.mouse.move(center.x, center.y);
   await page.mouse.wheel(0, -720);
+  await page.waitForFunction(() => window.__webglGeneratorApp.renderer.overlayPreviewTransform.scale !== 1);
   const zoomPreview = await snapshotOverlay(page);
   assert.equal(zoomPreview.suspended, true, "缩放后没有进入覆盖层预览态");
   assert(zoomPreview.inverseScale > 0 && zoomPreview.inverseScale < 1, "缩放预览没有设置固定屏幕字号的反向比例");
@@ -60,7 +61,12 @@ try {
 
   const zoomCommon = intersectKeys(beforeZoom.labels, zoomPreview.labels, zoomSettled.labels);
   assert(zoomCommon.length >= 4, "缩放没有保留足够的既有标签样本");
-  const zoomSizeErrors = zoomCommon.map(key => maxSizeDelta(beforeZoom.labels[key], zoomPreview.labels[key]));
+  const zoomRatio = zoomPreview.cameraScale / beforeZoom.cameraScale;
+  const zoomSizeErrors = zoomCommon.map(key => {
+    const before = beforeZoom.labels[key];
+    const factor = before.scalesWithMap ? zoomRatio : 1;
+    return maxSizeDelta({width: before.width * factor, height: before.height * factor}, zoomPreview.labels[key]);
+  });
   const zoomAnchorErrors = zoomCommon.map(key => anchorDistance(zoomPreview.labels[key], zoomSettled.labels[key]));
   const zoomCandidateChanges = zoomCommon.filter(key => zoomPreview.labels[key].candidate !== zoomSettled.labels[key].candidate);
   const zoomStableAnchors = zoomCommon.filter(key => !zoomCandidateChanges.includes(key));
@@ -170,6 +176,7 @@ async function snapshotOverlay(page) {
         const content = element.querySelector(".map-label-content") || element;
         return [`${element.dataset.labelTargetKind}:${element.dataset.labelTargetId}`, {
           ...readRect(content),
+          scalesWithMap: element.matches(".state-label:not(.position-locked)"),
           candidate: element.dataset.labelCandidate || "0",
           opacity: Number(getComputedStyle(element).opacity),
           opacityTarget: Number(getComputedStyle(element).getPropertyValue("--state-label-opacity")) || 0

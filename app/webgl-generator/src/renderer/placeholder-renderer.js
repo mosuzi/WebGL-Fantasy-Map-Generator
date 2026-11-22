@@ -562,6 +562,7 @@ export class PlaceholderMapRenderer {
     this.canvas = canvas;
     this.stage = canvas.closest?.(".map-stage") || canvas.parentElement || null;
     this.overlay = canvas.parentElement?.querySelector("#map-overlay") || null;
+    this.measurementSvg = this.stage?.querySelector?.("#measurement-svg") || null;
     this.onViewChange = onViewChange;
     this.onHover = onHover;
     this.onSelect = onSelect;
@@ -4630,7 +4631,6 @@ export class PlaceholderMapRenderer {
     else if (nextKind === "zoom") this.viewportInteractionKind = "zoom";
     this.viewportCommitVersion += 1;
     this.suspendOverlayForInteraction();
-    this.updateOverlayPreviewTransform();
     this.markViewportBuffersDirty();
     if (!this.viewportPointerInteractionKind) {
       this.scheduleViewportCommit({delayMs: nextKind === "zoom" ? 180 : 120});
@@ -4703,7 +4703,8 @@ export class PlaceholderMapRenderer {
     this.overlayInteractionSuspended = false;
     this.stage?.classList.remove("map-stage--interaction-transform");
     this.overlay?.classList.remove("map-overlay--interaction-transform");
-    this.stage?.style.removeProperty("--map-interaction-transform");
+    this.overlay?.style.removeProperty("transform");
+    this.measurementSvg?.style.removeProperty("transform");
     this.stage?.style.removeProperty("--map-interaction-inverse-scale");
     this.stage?.style.removeProperty("--state-label-preview-opacity");
     this.overlayPreviewTransform = {scale: 1, translateX: 0, translateY: 0};
@@ -4718,15 +4719,22 @@ export class PlaceholderMapRenderer {
     const scale = to.scale / Math.max(0.000001, from.scale);
     const translateX = width * 0.5 * (1 - scale + to.offsetX - scale * from.offsetX);
     const translateY = height * 0.5 * (1 - scale - to.offsetY + scale * from.offsetY);
-    this.overlayPreviewTransform = {
+    const previous = this.overlayPreviewTransform;
+    const preview = {
       scale: roundTransformScale(scale),
       translateX: snapCssPixel(translateX, this.canvasSize?.pixelRatio),
       translateY: snapCssPixel(translateY, this.canvasSize?.pixelRatio)
     };
-    const preview = this.overlayPreviewTransform;
-    this.stage.style.setProperty("--map-interaction-transform", `matrix(${preview.scale}, 0, 0, ${preview.scale}, ${preview.translateX}, ${preview.translateY})`);
-    this.stage.style.setProperty("--map-interaction-inverse-scale", String(roundTransformScale(1 / Math.max(0.000001, preview.scale))));
-    this.stage.style.setProperty("--state-label-preview-opacity", String(stateLabelScaleBehavior(to.scale).opacity));
+    if (previous.scale === preview.scale && previous.translateX === preview.translateX && previous.translateY === preview.translateY) return;
+    this.overlayPreviewTransform = preview;
+    // 位移只属于两个容器。继承到每个标签的自定义属性只在缩放时更新。
+    const matrix = `matrix(${preview.scale}, 0, 0, ${preview.scale}, ${preview.translateX}, ${preview.translateY})`;
+    if (this.overlay) this.overlay.style.transform = matrix;
+    if (this.measurementSvg) this.measurementSvg.style.transform = matrix;
+    if (previous.scale !== preview.scale) {
+      this.stage.style.setProperty("--map-interaction-inverse-scale", String(roundTransformScale(1 / Math.max(0.000001, preview.scale))));
+      this.stage.style.setProperty("--state-label-preview-opacity", String(stateLabelScaleBehavior(to.scale).opacity));
+    }
   }
 
   scheduleViewportCommit({delayMs = 120} = {}) {

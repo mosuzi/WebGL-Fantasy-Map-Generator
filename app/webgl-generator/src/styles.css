@@ -1739,7 +1739,6 @@ select:disabled {
 
 .map-overlay.map-overlay--interaction-transform,
 .map-stage.map-stage--interaction-transform .measurement-svg {
-  transform: var(--map-interaction-transform, none);
   transform-origin: 0 0;
   will-change: transform;
 }

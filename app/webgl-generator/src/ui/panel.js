@@ -930,11 +930,12 @@ function updateMapScaleBar(documentRef, map, stats, unitPreferences) {
     return;
   }
 
-  const rect = canvas.getBoundingClientRect();
+  // 比例尺和渲染器共用画布的 CSS 尺寸，避免标签刚归位时同步刷新布局。
+  const cssWidth = stats.canvasSize?.cssWidth || canvas.getBoundingClientRect().width;
   const cameraScale = Math.max(0.001, Number(stats.camera?.scale) || 1);
-  const worldPerPixel = map.metadata.graphWidth / Math.max(1, rect.width * cameraScale);
+  const worldPerPixel = map.metadata.graphWidth / Math.max(1, cssWidth * cameraScale);
   const minPixels = 82;
-  const maxPixels = Math.max(minPixels, Math.min(220, rect.width * 0.2));
+  const maxPixels = Math.max(minPixels, Math.min(220, cssWidth * 0.2));
   const distance = niceScaleDistance(worldPerPixel * minPixels, worldPerPixel * maxPixels, unitPreferences);
   const widthPx = distance / worldPerPixel;
 
