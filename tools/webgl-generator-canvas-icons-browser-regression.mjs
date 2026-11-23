@@ -377,7 +377,7 @@ try {
     });
     const imageAudit = [...root.querySelectorAll("img")].map(image => ({src: image.src, width: image.naturalWidth, height: image.naturalHeight}));
     // 将右上方向转为水平，比较枪尖或箭头前后两个截面的中心位置。
-    const eliteRanks = ["infantry-elite", "archers-elite"].map(key => {
+    const weaponRanks = ["infantry", "infantry-heavy", "infantry-elite", "archers", "archers-heavy", "archers-elite"].map(key => {
       const image = root.querySelector(`[data-icon-key="${key}"] img`);
       const canvas = new OffscreenCanvas(120, 120);
       const context = canvas.getContext("2d");
@@ -398,7 +398,10 @@ try {
         }
         return centers;
       }
-      return {key, middle: centersAt(72), tip: centersAt(84)};
+      // 单支武器取盾牌前方的两个截面，以免把盾沿与枪头连成一段。
+      return key.endsWith("-elite")
+        ? {key, middle: centersAt(72), tip: centersAt(84)}
+        : {key, middle: centersAt(84), tip: centersAt(88)};
     });
     const iconCards = [...root.querySelectorAll("[data-icon-key]")].map(card => ({
       key: card.dataset.iconKey,
@@ -425,7 +428,7 @@ try {
       cityFingerprints: new Set(cityEntries.map(([, svg]) => normalizedFingerprint(svg))).size,
       svgAudit,
       imageAudit,
-      eliteRanks,
+      weaponRanks,
       iconCards,
       extraCards
     };
@@ -440,10 +443,11 @@ try {
   assert(atlas.svgAudit.every(icon => !icon.forbiddenContent), "SVG 图标包含文字、外部图像或远程资源");
   assert.equal(atlas.imageAudit.length, 14, "军事图标数量错误");
   assert(atlas.imageAudit.every(icon => icon.width > 0 && icon.height > 0), "存在无法加载的军事图标");
-  for (const {key, middle, tip} of atlas.eliteRanks) {
-    assert.equal(middle.length, 3, `${key} 中段必须能数清三支`);
-    assert.equal(tip.length, 3, `${key} 尖端必须能数清三支`);
-    assert(tip.every((center, i) => Math.abs(center - middle[i]) <= 1), `${key} 三支必须平行朝右上方`);
+  for (const {key, middle, tip} of atlas.weaponRanks) {
+    const count = key.endsWith("-elite") ? 3 : 1;
+    assert.equal(middle.length, count, `${key} 中段应有 ${count} 支`);
+    assert.equal(tip.length, count, `${key} 尖端应有 ${count} 支`);
+    assert(tip.every((center, i) => Math.abs(center - middle[i]) <= 1), `${key} 的枪或箭应指向右上方`);
   }
   assert(atlas.iconCards.every(card => card.scrollWidth <= card.clientWidth), "图鉴卡片存在横向裁切");
   assert.deepEqual(atlas.extraCards.map(card => card.key), [
@@ -502,7 +506,8 @@ try {
     counts: atlas.counts,
     declaredCounts: atlas.declaredCounts,
     fingerprints: {city: atlas.cityFingerprints, markers: atlas.markerFingerprints},
-    eliteRanks: atlas.eliteRanks,
+    weaponRanks: atlas.weaponRanks,
+    eliteRanks: atlas.weaponRanks.filter(({key}) => key.endsWith("-elite")),
     entryViewports,
     atlasViewports,
     consoleErrors,

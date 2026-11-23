@@ -184,6 +184,7 @@ for (const [unit, threshold] of Object.entries({infantry: 5200, archers: 3600, c
   }
 }
 assert.equal(new Set(MILITARY_ICON_KEYS.map(key => geometryFingerprint(MILITARY_ICON_SVGS[key]))).size, 14, "军事图标必须各自具有稳定轮廓");
+assert(MILITARY_ICON_SVGS["horse-archers"].includes(MILITARY_ICON_SVGS.archers), "弓骑兵应佩带完整的弓、弦和箭");
 assert.match(rendererSource, /militaryIconDataUrl\(item\.iconVariant\)/, "军事观察图必须使用受控扁平 SVG");
 assert(!rendererSource.includes("militaryIconUrlForVariant"), "正式 renderer 不得继续把旧军事 PNG 打入 bundle");
 assert(!militaryAssetsSource.includes("assets/military-icons"), "军事兼容模块不得静态导入旧 PNG");

@@ -180,9 +180,12 @@ export function cityRoleBadgeSvg(roles = []) {
 
 // Geometry is authored in a 20 × 20 box for the 19px map symbol.
 const spearhead = '<path class="military-glyph-fill" d="M10 1.2 13.4 10.2 10 13.2 6.6 10.2Z"/><path d="M10 6.3V18.5"/>';
-const shield = '<path class="military-glyph-accent" d="M9.2 9.8 14.1 8.3 18.9 9.8V13.2Q18.5 16.8 14.1 19Q9.5 16.7 9.2 13.2Z"/><path d="M14.1 10.6v5.8" stroke="#f2dfaa" stroke-width="1.2"/>';
+const diagonalSpear = `<g transform="translate(10 10) rotate(45) scale(1.15) translate(-10 -10)">${spearhead}</g>`;
+const cornerShield = '<path class="military-glyph-accent" stroke-width="1.2" d="m11 11.5 4.1-1.2 4 1.2v2.9q-.3 3-4 4.9-3.8-1.9-4.1-4.9z"/><path d="M15.1 12.2V17" stroke="#f2dfaa" stroke-width="1"/>';
 const bow = '<path d="M4 2Q15 10 4 18" stroke-width="2"/><path d="m4 2-2 8 2 8" stroke-width="1"/>';
 const arrow = '<path d="M2 10h14.4"/><path fill="#241b12" stroke-width=".8" d="m14 7.7 4.9 2.3-4.9 2.3.9-2.3z"/>';
+const diagonalBow = projectiles => `<g transform="rotate(-45 10 10) translate(.8 .8) scale(.92)">${bow}${projectiles}</g>`;
+const singleShot = diagonalBow(arrow);
 const spearCenters = [4.2, 10, 15.8];
 const spearBlades = spearCenters.map(x => `M${x} 2l1.9 6.7-1.9 2-1.9-2Z`).join(" ");
 const spearShafts = spearCenters.map(x => `M${x} 7.5V18`).join(" ");
@@ -196,16 +199,16 @@ const horseBarding = '<path class="military-glyph-accent" d="M11.6 4.1Q16.5 5.8 
 const chamfron = '<path class="military-glyph-accent" d="m3.2 8.3 5.3-4 3 .6-3.7 4.8-3.5 1.9-2-.9Z"/><path d="m6.3 7.9 1.7-.8" stroke="#f2dfaa" stroke-width="1.15"/>';
 
 export const MILITARY_ICON_SVGS = Object.freeze({
-  infantry: spearhead,
-  "infantry-heavy": `<g transform="translate(-4 0)">${spearhead}</g>${shield}`,
+  infantry: diagonalSpear,
+  "infantry-heavy": diagonalSpear + cornerShield,
   "infantry-elite": `<g transform="rotate(45 10 10) translate(.6 .6) scale(.94)">${spearRank}</g>`,
-  archers: bow + arrow,
-  "archers-heavy": `${bow}<g transform="rotate(-15 2 10)">${arrow}</g>${shield}`,
-  "archers-elite": `<g transform="rotate(-45 10 10) translate(.8 .8) scale(.92)">${bow}${arrowRank}</g>`,
+  archers: singleShot,
+  "archers-heavy": singleShot + cornerShield,
+  "archers-elite": diagonalBow(arrowRank),
   cavalry: horse,
   "cavalry-heavy": horse + horseBarding,
   "cavalry-elite": `<g transform="translate(0 1.5) scale(.81)">${horse}${horseBarding}</g><g transform="translate(13 1) scale(.55 .96)">${bow}</g>`,
-  "horse-archers": horse + chamfron,
+  "horse-archers": `<g transform="translate(0 .3) scale(.66)">${horse}${chamfron}</g><g transform="translate(5.6 3.2) scale(.85)">${singleShot}</g>`,
   artillery: '<circle class="military-glyph-fill" cx="7" cy="15" r="3"/><circle class="military-glyph-fill" cx="14.8" cy="15" r="2.1"/><path d="M5 12.7 15.6 7l1.2 2.3-7.5 4M14.8 7.4l1.8-2.7"/>',
   mountain: '<path class="military-glyph-fill" d="m2.7 17.4 5.4-9.7 2.2 3.7 2.6-5.3 4.4 11.3z"/><path d="m6.4 10.7 1.7 1.8 1.2-1.1m1.8-2.9 1.8 2 1.3-1.2M5.3 17.4h10.4"/>',
   "fleet-small": '<path class="military-glyph-fill" d="M3 13.4h14c-1 3.1-3.3 4.7-7 4.7s-6-1.6-7-4.7z"/><path d="M10 13.4V4.2m.2 1 4.5 2.6-4.5 2.6M4 18.1c1.3-.7 2.7-.7 4 0s2.7.7 4 0 2.7-.7 4 0"/>',
