@@ -736,6 +736,15 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   };
   let selectionStore = null;
   let runtimeActions = null;
+  // 城市表格可能在启动空闲期间提前挂载，所有列表订阅前必须已有同一个锁定会话。
+  state.regenerationLockUiSession = installRegenerationLockUiSession(documentRef, {
+    getMap: () => state.map,
+    setLock: (reference, locked) => runtimeActions.regenerationLocks.set(reference, locked),
+    setLocks: (references, locked) => runtimeActions.regenerationLocks.setMany(references, locked),
+    startMapSelection: context => enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.REGENERATION_LOCK_SELECT, context),
+    stopMapSelection: reason => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.REGENERATION_LOCK_SELECT, reason),
+    updateHighlights: (references, {active}) => updateRegenerationLockSelectionHighlights(state, references, active)
+  });
   const refreshBrushCursor = () => state.brushCursorPreview?.refresh();
   const saveBrushRadius = (id, radius) => {
     const next = normalizeSavedBrushRadii({...state.brushRadii, [id]: radius});
@@ -2878,14 +2887,6 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   state.panels.cloudStorage.updateFilenamePreview();
   syncSaveFilenameTemplateUi(documentRef, state);
-  state.regenerationLockUiSession = installRegenerationLockUiSession(documentRef, {
-    getMap: () => state.map,
-    setLock: (reference, locked) => runtimeActions.regenerationLocks.set(reference, locked),
-    setLocks: (references, locked) => runtimeActions.regenerationLocks.setMany(references, locked),
-    startMapSelection: context => enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.REGENERATION_LOCK_SELECT, context),
-    stopMapSelection: reason => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.REGENERATION_LOCK_SELECT, reason),
-    updateHighlights: (references, {active}) => updateRegenerationLockSelectionHighlights(state, references, active)
-  });
   bindRegenerationLockMapSelection(canvas, state, documentRef);
   bindMeasurementTool(canvas, state, documentRef);
   bindHeightEditing(canvas, state, documentRef);

@@ -134,7 +134,7 @@ async function openControlPanel(page) {
 async function measureZonePanel(page) {
   return page.evaluate(() => {
     const panel = document.querySelector('.floating-panel[data-panel-id="zone-panel"]');
-    const labels = ["列表多选", "在地图多选", "锁定选中", "解锁选中", "清空选择"];
+    const labels = ["在地图多选", "全部锁定", "全部解锁", "清空选择"];
     const rects = labels.map(label => {
       const button = panel.querySelector(`button[aria-label="${label}"]`);
       const rect = button.getBoundingClientRect();

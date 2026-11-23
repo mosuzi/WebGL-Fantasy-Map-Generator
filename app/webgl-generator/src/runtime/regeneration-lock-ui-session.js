@@ -100,8 +100,7 @@ export function createRegenerationLockUiSession({
     return notify();
   }
 
-  function apply(locked) {
-    const references = [...selected.values()];
+  function setMany(references, locked) {
     if (!references.length) return {executed: false, reason: "empty"};
     const result = setLocks(references, Boolean(locked));
     notify();
@@ -144,7 +143,7 @@ export function createRegenerationLockUiSession({
     toggle,
     toggleRange,
     clear,
-    apply,
+    setMany,
     setOne,
     beginMapSelection,
     finishMapSelection,

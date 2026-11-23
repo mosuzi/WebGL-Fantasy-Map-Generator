@@ -10678,6 +10678,11 @@ input.ui-switch-native {
   margin: 8px 0;
 }
 
+.regeneration-lock-actions > .secondary-action:not(.ui-icon-action) {
+  width: auto;
+  padding-inline: 8px;
+}
+
 .regeneration-lock-selection-count {
   flex: 1 1 auto;
   min-width: max-content;

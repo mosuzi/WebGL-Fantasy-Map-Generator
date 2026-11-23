@@ -15,26 +15,22 @@
       <ElIcon aria-hidden="true"><Location /></ElIcon>
     </UiButton>
     <UiButton
-      class="ui-icon-action regeneration-lock-action"
       variant="secondary"
-      title="锁定选中"
-      aria-label="锁定选中"
-      :disabled="!selectedCount"
-      circle
+      title="锁定当前列表中的全部可锁项目"
+      aria-label="全部锁定"
+      :disabled="!canLockAll"
       @click="$emit('lock')"
     >
-      <ElIcon aria-hidden="true"><Lock /></ElIcon>
+      <ElIcon aria-hidden="true"><Lock /></ElIcon><span>全部锁定</span>
     </UiButton>
     <UiButton
-      class="ui-icon-action regeneration-lock-action"
       variant="secondary"
-      title="解锁选中"
-      aria-label="解锁选中"
-      :disabled="!selectedCount"
-      circle
+      title="解锁当前列表中的全部已锁项目"
+      aria-label="全部解锁"
+      :disabled="!canUnlockAll"
       @click="$emit('unlock')"
     >
-      <ElIcon aria-hidden="true"><Unlock /></ElIcon>
+      <ElIcon aria-hidden="true"><Unlock /></ElIcon><span>全部解锁</span>
     </UiButton>
     <UiButton
       class="ui-icon-action regeneration-lock-action"
@@ -56,6 +52,8 @@ import UiButton from "./UiButton.vue";
 
 defineOptions({name: "UiRegenerationLockActions"});
 defineProps({
+  canLockAll: Boolean,
+  canUnlockAll: Boolean,
   selectedCount: {type: Number, default: 0},
   mapSelectionActive: {type: Boolean, default: false}
 });

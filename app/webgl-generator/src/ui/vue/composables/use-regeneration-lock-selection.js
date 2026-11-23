@@ -97,6 +97,12 @@ export function useRegenerationLockSelection({
     "batch-row-toggle": handleBatchRowToggle
   };
   const actionProps = reactive({
+    get canLockAll() {
+      return lockedRowIds.value.length < references.value.length;
+    },
+    get canUnlockAll() {
+      return lockedRowIds.value.length > 0;
+    },
     get selectedCount() {
       return selectedCount.value;
     },
@@ -106,8 +112,8 @@ export function useRegenerationLockSelection({
   });
   const actionListeners = {
     "map-select": () => session?.beginMapSelection(panelId, activeKind.value, unref(mapSelectionContext) || {}),
-    lock: () => session?.apply(true),
-    unlock: () => session?.apply(false),
+    lock: () => session?.setMany(references.value, true),
+    unlock: () => session?.setMany(references.value, false),
     clear: () => session?.clear()
   };
 
@@ -122,8 +128,6 @@ export function useRegenerationLockSelection({
     handleSelectionChange,
     handleRangeSelection,
     handleBatchRowToggle,
-    lockSelected: () => session?.apply(true),
-    unlockSelected: () => session?.apply(false),
     clearSelection: () => session?.clear(),
     startMapSelection: () => session?.beginMapSelection(panelId, activeKind.value, unref(mapSelectionContext) || {}),
     tableProps,

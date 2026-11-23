@@ -61,7 +61,7 @@ assert.match(
 assert.match(composableSource, /getRegenerationLockUiSession/);
 assert.match(composableSource, /get selectedCount\(\)/, "地图选中不可见行时动作条仍须使用完整会话计数");
 assert.match(actionsSource, /已选 \{\{ selectedCount \}\} 项/);
-for (const label of ["在地图多选", "地图多选中", "锁定选中", "解锁选中", "清空选择"]) {
+for (const label of ["在地图多选", "地图多选中", "全部锁定", "全部解锁", "清空选择"]) {
   assert.match(actionsSource, new RegExp(`(?:aria-label|title)=[^>]*${label}`), `共享批量操作缺少 ${label} 的稳定名称`);
 }
 for (const icon of ["Location", "Lock", "Unlock", "CircleClose"]) {
@@ -69,7 +69,9 @@ for (const icon of ["Location", "Lock", "Unlock", "CircleClose"]) {
 }
 assert.equal((actionsSource.match(/aria-pressed=/g) || []).length, 1, "地图选择保留 aria-pressed");
 assert.match(actionsSource, /Ctrl\+点击多选/);
-assert.equal((actionsSource.match(/:disabled="!selectedCount"/g) || []).length, 3, "锁定、解锁和清空必须保留空选择禁用态");
+assert.match(actionsSource, /:disabled="!canLockAll"/);
+assert.match(actionsSource, /:disabled="!canUnlockAll"/);
+assert.equal((actionsSource.match(/:disabled="!selectedCount"/g) || []).length, 1, "只有清空选择随已选数量禁用");
 assert.match(stylesSource, /\.regeneration-lock-actions\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-flow:\s*row wrap;[\s\S]*?gap:\s*8px;/, "共享批量操作没有一行优先、安全换行和稳定按钮间距");
 
 const previousWarn = console.warn;
@@ -81,6 +83,8 @@ assert.equal(vueBinding.tableProps.showRegenerationLock, true);
 assert.deepEqual(vueBinding.tableProps.lockableRowIds, [1]);
 assert.equal(isRef(vueBinding.actionProps), false, "动作条 v-bind 不能收到 ComputedRef");
 assert.equal(vueBinding.actionProps.selectedCount, 0);
+assert.equal(vueBinding.actionProps.canLockAll, true);
+assert.equal(vueBinding.actionProps.canUnlockAll, false);
 
 const map = {regenerationLocks: {version: 1, entries: []}};
 const writes = [];
@@ -124,11 +128,14 @@ assert.equal(session.mapPicked({kind: "state", id: 2}), true);
 assert.deepEqual(session.snapshot().selectedIds, [1, 3]);
 assert.deepEqual(highlights.at(-1), ["state:1", "state:3"]);
 
-session.apply(true);
+assert.equal(session.setMany([], true).executed, false);
+const filteredRows = [{kind: "state", id: 2}, {kind: "state", id: 3}];
+session.setMany(filteredRows, true);
 assert.equal(writes.length, 1);
 assert.equal(writes[0].type, "many");
-assert.deepEqual(map.regenerationLocks.entries, [{kind: "state", id: 1}, {kind: "state", id: 3}]);
-assert.equal(session.snapshot().lockedKeys.has(regenerationLockKey({kind: "state", id: 1})), true);
+assert.deepEqual(map.regenerationLocks.entries, filteredRows);
+assert.equal(session.snapshot().lockedKeys.has(regenerationLockKey({kind: "state", id: 2})), true);
+assert.deepEqual(session.snapshot().selectedIds, [1, 3]);
 
 session.setOne({kind: "state", id: 1}, false);
 assert.equal(writes.length, 2);

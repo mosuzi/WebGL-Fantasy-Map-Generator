@@ -18,7 +18,8 @@ const distDir = join(rootDir, "dist", "webgl-generator");
 const host = "127.0.0.1";
 const port = 5533;
 const timeoutMs = 600000;
-const scaleTargets = parseNumberList(readArgument("scales", "10000,50000,100000"));
+const listsOnly = process.argv.includes("--lists-only");
+const scaleTargets = listsOnly ? [] : parseNumberList(readArgument("scales", "10000,50000,100000"));
 const uiCells = Number(readArgument("ui-cells", "10000"));
 const scaleSeeds = new Map([
   [50000, "regeneration-lock-stage-f-scale-valid-50000-v9"],
@@ -86,9 +87,8 @@ try {
     ui.push(await exercisePanelUi(page, item));
   }
 
-  console.log(`[stage-f] protection ${uiCells}`);
-  const protection = await exerciseProtection(page, panelCases, uiCells);
-  assert.deepEqual(protection.unlockGaps, [], `解锁后对象未变化：${JSON.stringify(protection.unlockGaps)}`);
+  const protection = listsOnly ? null : await exerciseProtection(page, panelCases, uiCells);
+  if (protection) assert.deepEqual(protection.unlockGaps, [], `解锁后对象未变化：${JSON.stringify(protection.unlockGaps)}`);
 
   const scales = [];
   for (const cellsTarget of scaleTargets) {
@@ -425,7 +425,7 @@ async function exerciseProtection(page, cases, cellsTarget) {
 async function exercisePanelUi(page, item) {
   await clearLocks(page, item.kind);
   const panelRoot = await openPanel(page, item);
-  const rows = panelRoot.locator(".object-table-row");
+  const rows = panelRoot.locator(".object-table-row").filter({has: page.locator(".object-table-lock-action")});
   await rows.first().waitFor({state: "visible"});
   assert.ok(await rows.count() >= 2, `${item.panelId}/${item.kind} 缺少两行列表批量样本`);
 
@@ -438,17 +438,30 @@ async function exercisePanelUi(page, item) {
   await expectLockCount(page, item.kind, 0);
 
   const toolbar = panelRoot.getByRole("toolbar", {name: "重生成锁定批量操作"});
-  await toolbar.getByRole("button", {name: "列表多选", exact: true}).click();
-  const rowCheckboxes = panelRoot.locator(".object-table-row-selection-checkbox");
-  await rowCheckboxes.nth(0).click();
-  await rowCheckboxes.nth(1).click();
+  const listSize = (await collectLockableKeys(panelRoot)).length;
+  const lockAll = toolbar.getByRole("button", {name: "全部锁定", exact: true});
+  const unlockAll = toolbar.getByRole("button", {name: "全部解锁", exact: true});
+  if (item.kind === "city") {
+    const [lockBox, unlockBox] = await Promise.all([lockAll.boundingBox(), unlockAll.boundingBox()]);
+    assert.equal(lockBox.y, unlockBox.y, "桌面城市工具栏的两个批量按钮应并排");
+  }
+  await expectSelectionCount(toolbar, 0);
+  assert.equal(await unlockAll.isDisabled(), true);
+  await lockAll.click();
+  await expectLockCount(page, item.kind, listSize);
+  assert.equal(await lockAll.isDisabled(), true);
+  await rows.nth(0).click({modifiers: ["Control"]});
+  await rows.nth(1).click({modifiers: ["Control"]});
   await expectSelectionCount(toolbar, 2);
-  await toolbar.getByRole("button", {name: "锁定选中", exact: true}).click();
-  await expectLockCount(page, item.kind, 2);
-  await toolbar.getByRole("button", {name: "解锁选中", exact: true}).click();
+  await unlockAll.click();
   await expectLockCount(page, item.kind, 0);
+  await expectSelectionCount(toolbar, 2);
   await toolbar.getByRole("button", {name: "清空选择", exact: true}).click();
-  await toolbar.getByRole("button", {name: "结束列表多选", exact: true}).click();
+  if (item.kind === "city") await exerciseFilteredCities(page, panelRoot, lockAll, unlockAll, listSize);
+  if (listsOnly) {
+    await closePanel(panelRoot);
+    return {kind: item.kind, listSize};
+  }
 
   const locate = rows.first().getByRole("button", {name: "定位", exact: true});
   if (await locate.count()) await locate.click();
@@ -457,9 +470,9 @@ async function exercisePanelUi(page, item) {
   assert.ok(point, `${item.panelId}/${item.kind} 找不到可点击的真实画布命中样本`);
   await page.mouse.click(point.x, point.y);
   await expectSelectionCount(toolbar, 1);
-  await toolbar.getByRole("button", {name: "锁定选中", exact: true}).click();
-  await expectLockCount(page, item.kind, 1);
-  await toolbar.getByRole("button", {name: "解锁选中", exact: true}).click();
+  await lockAll.click();
+  await expectLockCount(page, item.kind, listSize);
+  await unlockAll.click();
   await expectLockCount(page, item.kind, 0);
   await toolbar.getByRole("button", {name: "清空选择", exact: true}).click();
   const mapButton = toolbar.getByRole("button", {name: "地图多选中", exact: true});
@@ -469,12 +482,69 @@ async function exercisePanelUi(page, item) {
     panelId: item.panelId,
     kind: item.kind,
     rowLock: true,
-    listBatch: 2,
-    mapBatch: 1,
+    listSize,
+    mapSelection: 1,
     canvasPoint: point
   };
   await closePanel(panelRoot);
   return report;
+}
+
+async function collectLockableKeys(panelRoot) {
+  const wrap = panelRoot.locator(".object-table-wrap").filter({has: panelRoot.page().locator(".object-table-lock-action")}).first();
+  return wrap.evaluate(async element => {
+    const keys = new Set();
+    const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    for (let top = 0; ; top += Math.max(1, element.clientHeight)) {
+      element.scrollTop = top;
+      await frame();
+      await frame();
+      for (const button of element.querySelectorAll(".object-table-lock-action")) keys.add(button.closest("tr").dataset.rowKey);
+      if (element.scrollTop + element.clientHeight >= element.scrollHeight - 1) break;
+    }
+    element.scrollTop = 0;
+    await frame();
+    return [...keys];
+  });
+}
+
+async function exerciseFilteredCities(page, panelRoot, lockAll, unlockAll, listSize) {
+  const query = await page.evaluate(() => {
+    const names = window.__webglGeneratorApp.map.settlements.cities.filter(city => city && !city.removed).map(city => city.name);
+    const initials = new Map();
+    for (const name of names) initials.set(name[0], (initials.get(name[0]) || 0) + 1);
+    return [...initials].find(([, count]) => count >= 2 && count < names.length / 2)[0];
+  });
+  const input = panelRoot.getByPlaceholder("筛选名称 / 编号 / 国家 / 省份");
+  const readLocks = () => page.evaluate(() => window.__webglGeneratorApp.map.regenerationLocks.entries.filter(r => r.kind === "city").map(r => `n:${r.id}`).sort());
+  await lockAll.click();
+  const allKeys = await readLocks();
+  assert.equal(allKeys.length, listSize);
+  await input.fill(query);
+  await input.press("Enter");
+  const filtered = new Set(await collectLockableKeys(panelRoot));
+  assert.ok(filtered.size >= 2 && filtered.size < listSize);
+  const hidden = allKeys.filter(key => !filtered.has(key));
+  const undoBefore = await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo);
+  await unlockAll.click();
+  assert.deepEqual(await readLocks(), hidden);
+  assert.equal(await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo), undoBefore + 1);
+  await panelRoot.getByRole("button", {name: "撤销", exact: true}).click();
+  assert.deepEqual(await readLocks(), allKeys);
+  await panelRoot.getByRole("button", {name: "重做", exact: true}).click();
+  assert.deepEqual(await readLocks(), hidden);
+  await input.fill("没有这样的城镇__477");
+  await input.press("Enter");
+  assert.ok(await lockAll.isDisabled() && await unlockAll.isDisabled());
+  await input.fill(query);
+  await input.press("Enter");
+  await lockAll.click();
+  assert.deepEqual(await readLocks(), allKeys);
+  await input.fill("");
+  await input.press("Enter");
+  await unlockAll.click();
+  await expectLockCount(page, "city", 0);
+  console.log(`[stage-f] 筛选城市 ${filtered.size}/${listSize}，保留隐藏项 ${hidden.length}`);
 }
 
 async function exerciseScale(page, cellsTarget) {
@@ -482,19 +552,18 @@ async function exerciseScale(page, cellsTarget) {
   const listPanel = await openPanel(page, panel("city", "city-panel", "open-city-panel"));
   const toolbar = listPanel.getByRole("toolbar", {name: "重生成锁定批量操作"});
   const wrap = listPanel.locator(".object-table-wrap");
-  const headerCheckbox = listPanel.getByRole("checkbox", {name: "选择当前列表", exact: true});
-  const selectStarted = Date.now();
-  await headerCheckbox.click();
-  const selectedCount = await readSelectionCount(toolbar);
-  const listSelectionMs = Date.now() - selectStarted;
+  const lockAll = toolbar.getByRole("button", {name: "全部锁定", exact: true});
+  const lockStarted = Date.now();
+  await lockAll.click();
+  const lockedCount = await page.evaluate(() => window.webglGeneratorApi.regenerationLocks.list({kind: "city"}).data.count);
+  const lockAllMs = Date.now() - lockStarted;
   const domRows = await listPanel.locator(".object-table-row").count();
   const spacerRows = await listPanel.locator(".object-table-spacer-row").count();
-  assert.ok(selectedCount > 120, `${cellsTarget} cells 城市表未进入高基数样本：${selectedCount}`);
-  assert.ok(domRows < selectedCount, `${cellsTarget} cells 城市表没有缩小 DOM 窗口：${domRows}/${selectedCount}`);
+  assert.ok(lockedCount > 120, `${cellsTarget} cells 城市表未进入高基数样本：${lockedCount}`);
+  assert.ok(domRows < lockedCount, `${cellsTarget} cells 城市表没有缩小 DOM 窗口：${domRows}/${lockedCount}`);
   assert.ok(spacerRows > 0, `${cellsTarget} cells 城市表没有虚拟占位行`);
-  await toolbar.getByRole("button", {name: "清空选择", exact: true}).click();
+  await toolbar.getByRole("button", {name: "全部解锁", exact: true}).click();
 
-  await toolbar.getByRole("button", {name: "列表多选", exact: true}).click();
   await listPanel.locator(".object-table-row").first().click();
   await wrap.evaluate(node => {
     node.scrollTop = node.scrollHeight;
@@ -505,7 +574,6 @@ async function exerciseScale(page, cellsTarget) {
   const shiftCount = await readSelectionCount(toolbar);
   assert.ok(shiftCount > domRows, `${cellsTarget} cells Shift 没有跨越虚拟窗口：${shiftCount}/${domRows}`);
   await toolbar.getByRole("button", {name: "清空选择", exact: true}).click();
-  await toolbar.getByRole("button", {name: "结束列表多选", exact: true}).click();
   await closePanel(listPanel);
 
   const statePanel = await openPanel(page, panel("state", "state-panel", "open-state-panel"));
@@ -792,11 +860,11 @@ async function exerciseScale(page, cellsTarget) {
 
   return {
     cellsTarget,
-    selectedCount,
+    lockedCount,
     domRows,
     spacerRows,
     shiftCount,
-    listSelectionMs,
+    lockAllMs,
     mapSelectionMs,
     constraint
   };
