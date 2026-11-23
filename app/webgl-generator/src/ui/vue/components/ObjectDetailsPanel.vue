@@ -29,6 +29,7 @@ import UiInlineValue from "./base/UiInlineValue.vue";
 import {populationUnitsToPeople, peopleToPopulationUnits, formatArea, formatDistance, formatMilitary, formatNumber, formatPopulation, formatPrecipitation, formatRiverFlow, formatRiverRunoffFlowRange} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
+import {MILITARY_ICON_LABELS, regimentIconVariant} from "../../../generator/regiment-symbols.js";
 import {describeObjectDetailsActions, OBJECT_DETAILS_EDIT_MODE} from "../../../runtime/object-details-actions.js";
 import {formatPlayerText, joinPlayerDetailValues, normalizeObjectDetailRows} from "../../object-detail-values.js";
 
@@ -176,7 +177,7 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
   [OBJECT_KIND.MILITARY]: object => [
     {label: "国家", value: object.state || object.stateId || "none"},
     {label: "态势", value: object.statusLabel || object.status || "未知"},
-    {label: "主兵种", value: object.dominantUnitLabel || object.dominantUnit || "未知"},
+    {label: "主兵种", value: MILITARY_ICON_LABELS[regimentIconVariant(object)]},
     {label: "兵力", value: formatMilitaryValue(object.troops)},
     {label: "cell", value: object.cell ?? "none", debug: true},
     {label: "对象 id", value: object.id, debug: true}

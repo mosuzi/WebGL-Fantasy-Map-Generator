@@ -4,6 +4,8 @@ import {createHash} from "node:crypto";
 import {readFile} from "node:fs/promises";
 
 import {MARKER_TYPE_OPTIONS} from "../app/webgl-generator/src/generator/markers.js";
+import {applyRegimentIconProfile} from "../app/webgl-generator/src/generator/military.js";
+import {MILITARY_ICON_LABELS, regimentIconVariant} from "../app/webgl-generator/src/generator/regiment-symbols.js";
 import {
   CANVAS_ICON_COUNTS,
   CITY_BASE_ICON_SVGS,
@@ -26,7 +28,7 @@ const [rendererSource, cityLayerSource, panelSource, generatorSource, militaryAs
   readFile(new URL("../app/webgl-generator/src/renderer/city-icon-layer.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/MarkerPanel.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/generator/markers.js", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/renderer/military-icon-assets.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/generator/regiment-symbols.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/runtime/city-visuals.js", import.meta.url), "utf8")
 ]);
@@ -37,8 +39,8 @@ assert.deepEqual(CANVAS_ICON_COUNTS, {
   markerTypes: 58,
   markerCategories: 9,
   legacyMarkerSymbols: 16,
-  military: 10,
-  total: 80
+  military: 14,
+  total: 84
 });
 
 const generatorTypes = new Set(MARKER_TYPE_OPTIONS.map(option => option.type));
@@ -141,7 +143,7 @@ const cityScaleFingerprints = new Set(scaleKeys.map(key => geometryFingerprint(c
 assert.equal(cityScaleFingerprints.size, 4, "城市四级基础轮廓必须各自唯一");
 assert.equal(new Set(cityBaseKeys.map(key => geometryFingerprint(cityBaseIconSvg(key)))).size, 9, "九个城市基础剪影必须各自唯一");
 for (const role of Object.keys(CITY_ROLE_BADGE_SVGS)) assertSvgContract(`<svg>${cityRoleBadgeSvg([role])}</svg>`, `城市角色 ${role}`);
-assert.match(rendererSource, /createCityIconWebglLayer\(this\.gl\)/, "正式地图没有创建 WebGL 城镇实例层");
+assert.match(rendererSource, /renderer\.cityIconLayer = createCityIconWebglLayer\(gl\)/, "正式地图没有创建 WebGL 城镇实例层");
 assert.match(rendererSource, /this\.cityIconLayer\.setInstances\(this\.cityIconItems/, "城镇模型没有批量上传到实例层");
 assert.match(rendererSource, /this\.cityIconLayer\.draw\(/, "正式绘制没有调用城镇实例层");
 assert.match(rendererSource, /visual\.manual \? visual\.silhouette : cityRoleSilhouette\(roles, visual\.silhouette\)/, "自动首都、省会和港口没有使用角色主体图形");
@@ -157,18 +159,31 @@ assert.match(rendererSource, /renderMarkerIconSvg\(item\)/);
 assert(!rendererSource.includes("function cityBaseIconSvg("), "renderer 不得保留第二套城市基础几何");
 assert(!rendererSource.includes("function cityRoleBadgeSvg("), "renderer 不得保留第二套城市角色几何");
 
-assert.equal(MILITARY_ICON_KEYS.length, 10);
-assert.deepEqual(new Set(Object.keys(MILITARY_ICON_SVGS)), new Set(MILITARY_ICON_KEYS), "军事图形注册表与十键分母不一致");
+assert.equal(MILITARY_ICON_KEYS.length, 14);
+assert.deepEqual(new Set(Object.keys(MILITARY_ICON_LABELS)), new Set(MILITARY_ICON_KEYS), "军团图形与名称应一一对应");
 for (const key of MILITARY_ICON_KEYS) {
   const svg = militaryIconSvg(key);
   assertSvgContract(svg, `军事 ${key}`);
   assert.match(svg, new RegExp(`data-icon-variant="${key}"`));
-  assert(militaryAssetsSource.includes(`"${key}"`) || militaryAssetsSource.includes(`${key}:`), `军事资产兼容表缺少 ${key}`);
+  assert.equal(regimentIconVariant({iconVariant: key, icon: "步"}), key);
 }
-for (const legacyAlias of ["步", "弓", "骑", "械", "舟", "▴", "▴🛡", "🏹", "🏹⋯", "♞", "♞◈", "⚙", "⛵", "🚢", "👒"]) {
-  assert(militaryAssetsSource.includes(`"${legacyAlias}"`), `军事旧字符别名丢失：${legacyAlias}`);
+for (const [icon, label] of Object.entries({
+  "步": "步兵", "弓": "轻弓兵", "骑": "轻骑兵", "械": "器械", "舟": "小舰队", "▴": "步兵", "▴🛡": "重装步兵",
+  "🏹": "轻弓兵", "🏹⋯": "重装弓兵", "♞": "轻骑兵", "♞◈": "重装骑兵", "⚙": "器械", "⛵": "小舰队", "🚢": "大舰队", "👒": "山地兵"
+})) {
+  assert.equal(MILITARY_ICON_LABELS[regimentIconVariant({icon, iconLabel: "旧称", iconVariant: "旧版"})], label);
 }
-assert.equal(new Set(MILITARY_ICON_KEYS.map(key => geometryFingerprint(MILITARY_ICON_SVGS[key]))).size, 10, "军事十键必须各自具有稳定轮廓");
+assert.equal(regimentIconVariant({dominantUnit: "archers"}), "archers");
+assert.equal(regimentIconVariant({type: "fleet"}), "fleet-small");
+assert.equal(regimentIconVariant({icon: "constructor"}), "infantry");
+for (const [unit, threshold] of Object.entries({infantry: 5200, archers: 3600, cavalry: 2800})) {
+  for (const [count, total, expected] of [[threshold - 1, threshold, unit], [threshold, threshold * 2, unit + "-heavy"], [threshold, threshold * 3, unit], [threshold * 10, threshold * 26, unit + "-heavy"]]) {
+    const profile = applyRegimentIconProfile({dominantUnit: unit, a: total, u: {[unit]: count}});
+    assert.equal(profile.iconVariant, expected);
+    assert.equal(profile.iconLabel, MILITARY_ICON_LABELS[expected]);
+  }
+}
+assert.equal(new Set(MILITARY_ICON_KEYS.map(key => geometryFingerprint(MILITARY_ICON_SVGS[key]))).size, 14, "军事图标必须各自具有稳定轮廓");
 assert.match(rendererSource, /militaryIconDataUrl\(item\.iconVariant\)/, "军事观察图必须使用受控扁平 SVG");
 assert(!rendererSource.includes("militaryIconUrlForVariant"), "正式 renderer 不得继续把旧军事 PNG 打入 bundle");
 assert(!militaryAssetsSource.includes("assets/military-icons"), "军事兼容模块不得静态导入旧 PNG");
@@ -187,7 +202,7 @@ console.log(JSON.stringify({
   cityPrimaryOutlineFingerprints: 9,
   cityDrawableCounts,
   formalCityRenderer: "webgl-instanced",
-  militaryFingerprints: 10,
+  militaryFingerprints: MILITARY_ICON_KEYS.length,
   generationWorkerImportsRegistry: false
 }, null, 2));
 

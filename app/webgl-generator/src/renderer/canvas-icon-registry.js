@@ -178,26 +178,36 @@ export function cityRoleBadgeSvg(roles = []) {
   return parts.join("");
 }
 
-export const MILITARY_ICON_KEYS = Object.freeze([
-  "fleet-large", "fleet-small", "archers", "archers-heavy", "cavalry",
-  "cavalry-heavy", "infantry", "infantry-heavy", "mountain", "artillery"
-]);
+// Geometry is authored in a 20 × 20 box for the 19px map symbol.
+const spearhead = '<path class="military-glyph-fill" d="M10 1.2 13.4 10.2 10 13.2 6.6 10.2Z"/><path d="M10 6.3V18.5"/>';
+const shield = '<path class="military-glyph-accent" d="M9.2 9.8 14.1 8.3 18.9 9.8V13.2Q18.5 16.8 14.1 19Q9.5 16.7 9.2 13.2Z"/><path d="M14.1 10.6v5.8" stroke="#f2dfaa" stroke-width="1.2"/>';
+const bow = '<path d="M4 2Q15 10 4 18" stroke-width="2"/><path d="m4 2-2 8 2 8" stroke-width="1"/>';
+const arrow = '<path d="M2 10h14.4"/><path fill="#241b12" stroke-width=".8" d="m14 7.7 4.9 2.3-4.9 2.3.9-2.3z"/>';
+const horse = '<path class="military-glyph-fill" d="M11 4 10 1.3 7.8 4.8 3.1 8.1 1.6 10.7 3.7 12.5 7.5 11.2Q6.4 14.6 4.9 18H18Q18.5 9 14 5.2L13.8 2.1Z"/><circle cx="7.5" cy="7.6" r=".8" fill="#241b12" stroke="none"/>';
+const horseBarding = '<path class="military-glyph-accent" d="M11.6 4.1Q16.5 5.8 18 13.5L15.5 17.8 10.8 16.4 12.6 13.9 9.4 12.8 11.4 10.2 8.4 9Z"/><path d="m12.4 8.3 3.9 1.9m-3.2 1.7 3.9 1.8" stroke="#f2dfaa" stroke-width="1"/>';
+const chamfron = '<path class="military-glyph-accent" d="m3.2 8.3 5.3-4 3 .6-3.7 4.8-3.5 1.9-2-.9Z"/><path d="m6.3 7.9 1.7-.8" stroke="#f2dfaa" stroke-width="1.15"/>';
 
 export const MILITARY_ICON_SVGS = Object.freeze({
-  infantry: '<path class="military-glyph-fill" d="M5 17.5V9l5-3 5 3v8.5z"/><path d="M7.4 17.5v-5.2h5.2v5.2M10 5.8V3.4m-2.4 1.2h4.8"/>',
-  "infantry-heavy": '<path class="military-glyph-fill" d="M4.6 16.8V8.3L10 5l5.4 3.3v8.5L10 19z"/><path d="M7.3 16.7v-5h5.4v5M6.2 9.3h7.6M10 5V2.8m-2.6 1.1h5.2"/><path class="military-glyph-accent" d="M15.5 7.1h2v7.2h-2z"/>',
-  archers: '<path d="M5.1 17.6c6.1-3 6.1-12.2 0-15.2M6.1 10h9.5m-2.6-2.6 2.8 2.6-2.8 2.6"/><path class="military-glyph-accent" d="m5.1 2.4 1.2 7.6-1.2 7.6"/>',
-  "archers-heavy": '<path d="M4.3 17.8c6.3-3.1 6.3-12.5 0-15.6M5.5 10h10.8m-3-2.8 3 2.8-3 2.8"/><path class="military-glyph-accent" d="m4.3 2.2 1.4 7.8-1.4 7.8M8.6 4.6h2v10.8h-2z"/>',
-  cavalry: '<path class="military-glyph-fill" d="M4.2 16.8V9.6l4.1-4.1 5.8 1.8 2.1 5-4.4 1.1-1.5 4.4z"/><path d="M8.5 5.7 6.6 3.8m7.1 3.7 2.2-1.8M5 12.6h7m-4.8 4.6-2 1.1m7.2-4.8 2.4 4"/>',
-  "cavalry-heavy": '<path class="military-glyph-fill" d="M3.8 16.8V9.3l4.4-4.4 6.2 2 2.2 5.2-4.8 1.2-1.5 4.5z"/><path d="M8.4 5.1 6.3 3m7.9 4.1 2.3-1.9M4.7 12.2h7.4M7 17.1l-2.2 1.2m7.5-5 2.6 4.3"/><path class="military-glyph-accent" d="M7.1 8.7h5.8l-1.2 3.8H7.4z"/>',
+  infantry: spearhead,
+  "infantry-heavy": `<g transform="translate(-4 0)">${spearhead}</g>${shield}`,
+  "infantry-elite": `<g transform="translate(-3 3) rotate(-18 10 16) scale(.70 .84) translate(4.3 0)">${spearhead}</g><g transform="translate(3 3) rotate(18 10 16) scale(.70 .84) translate(4.3 0)">${spearhead}</g>${spearhead}`,
+  archers: bow + arrow,
+  "archers-heavy": `${bow}<g transform="rotate(-15 2 10)">${arrow}</g>${shield}`,
+  "archers-elite": `${bow}<g transform="rotate(-24 2 10)">${arrow}</g>${arrow}<g transform="rotate(24 2 10)">${arrow}</g>`,
+  cavalry: horse,
+  "cavalry-heavy": horse + horseBarding,
+  "cavalry-elite": `<g transform="translate(0 1.5) scale(.81)">${horse}${horseBarding}</g><g transform="translate(13 1) scale(.55 .96)">${bow}</g>`,
+  "horse-archers": horse + chamfron,
   artillery: '<circle class="military-glyph-fill" cx="7" cy="15" r="3"/><circle class="military-glyph-fill" cx="14.8" cy="15" r="2.1"/><path d="M5 12.7 15.6 7l1.2 2.3-7.5 4M14.8 7.4l1.8-2.7"/>',
   mountain: '<path class="military-glyph-fill" d="m2.7 17.4 5.4-9.7 2.2 3.7 2.6-5.3 4.4 11.3z"/><path d="m6.4 10.7 1.7 1.8 1.2-1.1m1.8-2.9 1.8 2 1.3-1.2M5.3 17.4h10.4"/>',
   "fleet-small": '<path class="military-glyph-fill" d="M3 13.4h14c-1 3.1-3.3 4.7-7 4.7s-6-1.6-7-4.7z"/><path d="M10 13.4V4.2m.2 1 4.5 2.6-4.5 2.6M4 18.1c1.3-.7 2.7-.7 4 0s2.7.7 4 0 2.7-.7 4 0"/>',
   "fleet-large": '<path class="military-glyph-fill" d="M2.2 13h15.6c-1.1 3.5-3.7 5.2-7.8 5.2S3.3 16.5 2.2 13z"/><path d="M10 13V2.8m.2 1.1 5.1 2.9-5.1 2.9m-6.8 8.5c1.5-.8 2.9-.8 4.4 0s2.9.8 4.4 0 2.9-.8 4.4 0M5 12.9V9.8h2.2v3.1"/>'
 });
 
+export const MILITARY_ICON_KEYS = Object.freeze(Object.keys(MILITARY_ICON_SVGS));
+
 export function militaryIconSvg(variant = "infantry") {
-  const key = MILITARY_ICON_SVGS[variant] ? variant : "infantry";
+  const key = Object.hasOwn(MILITARY_ICON_SVGS, variant) ? variant : "infantry";
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" aria-hidden="true" focusable="false" data-icon-variant="${key}"><style>.military-icon-glyph{fill:none;stroke:#241b12;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}.military-glyph-fill{fill:#f2dfaa}.military-glyph-accent{fill:#b34835}</style><g class="military-icon-glyph">${MILITARY_ICON_SVGS[key]}</g></svg>`;
 }
 

@@ -2393,11 +2393,14 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .military-map-icon--archers .military-map-icon-symbol,
+.military-map-icon--archers-elite .military-map-icon-symbol,
 .military-map-icon--archers-heavy .military-map-icon-symbol {
   background: rgba(107, 178, 112, 0.9);
 }
 
 .military-map-icon--cavalry .military-map-icon-symbol,
+.military-map-icon--cavalry-elite .military-map-icon-symbol,
+.military-map-icon--horse-archers .military-map-icon-symbol,
 .military-map-icon--cavalry-heavy .military-map-icon-symbol {
   background: rgba(218, 178, 91, 0.92);
 }
@@ -9047,9 +9050,6 @@ input.ui-switch-native {
   border-radius: 8px;
   background: linear-gradient(180deg, var(--panel-surface), var(--panel-surface)),
     var(--panel-surface);
-  color: var(--panel-text);
-  font-size: 21px;
-  line-height: 1;
   box-shadow: 0 8px 18px rgba(30, 48, 64, 0.13);
 }
 
@@ -9065,11 +9065,6 @@ input.ui-switch-native {
 .military-overview-heading span {
   color: var(--panel-text);
   font-size: 12px;
-}
-
-.military-overview-heading .military-overview-icon {
-  color: var(--panel-text);
-  font-size: 21px;
 }
 
 .military-status-pill {

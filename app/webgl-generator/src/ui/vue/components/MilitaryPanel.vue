@@ -29,7 +29,7 @@
   <section v-if="selected" class="military-overview" aria-label="选中军团概要">
     <div class="military-overview-heading">
       <div class="military-overview-title">
-        <span class="military-overview-icon" aria-hidden="true">{{ overviewMilitaryIcon(selected) }}</span>
+        <span class="military-overview-icon" aria-hidden="true"><img :src="militaryIconDataUrl(selected.iconVariant)" width="28" height="28" alt="" /></span>
         <div>
           <strong>{{ selected.name }}</strong>
           <span>{{ selected.stateName }} / {{ selected.orderLabel }}</span>
@@ -412,6 +412,8 @@ import {useObjectLabel} from "../composables/use-object-label.js";
 const objectLabel = useObjectLabel();
 import {computed, nextTick, reactive, ref, watch} from "vue";
 import {MILITARY_STATUSES, MILITARY_UNITS, normalizeUnitRatios} from "../../../generator/military.js";
+import {MILITARY_ICON_LABELS, regimentIconVariant} from "../../../generator/regiment-symbols.js";
+import {militaryIconDataUrl} from "../../../renderer/canvas-icon-registry.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -466,18 +468,6 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const unitDefinitions = MILITARY_UNITS;
-const militaryOverviewIcons = Object.freeze({
-  "fleet-large": "≋",
-  "fleet-small": "≈",
-  archers: "⌁",
-  "archers-heavy": "⌁",
-  cavalry: "◇",
-  "cavalry-heavy": "◇",
-  infantry: "△",
-  "infantry-heavy": "△",
-  mountain: "⌂",
-  artillery: "✦"
-});
 const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);
@@ -741,6 +731,7 @@ function buildMilitaryMetrics(map) {
     const id = regiment.id ?? `${state.id}:${regiment.i}`;
     const policy = state.state.militaryPolicy || {};
     const stateCampaigns = campaignsForState(campaigns, state.id);
+    const iconVariant = regimentIconVariant(regiment);
     return {
       id,
       regimentId: regiment.i,
@@ -752,13 +743,13 @@ function buildMilitaryMetrics(map) {
       statusLabel: regiment.statusLabel || regiment.status || "未知",
       orderLabel: orderLabel(regiment.order),
       dominantUnit: regiment.dominantUnit,
-      dominantUnitLabel: regiment.dominantUnitLabel || unitLabel(regiment.dominantUnit),
+      dominantUnitLabel: MILITARY_ICON_LABELS[iconVariant],
       troops: Number(regiment.a || 0),
       units: regiment.u || {},
       unitSummary: unitSummary(regiment.u),
       icon: regiment.icon,
-      iconVariant: regiment.iconVariant,
-      iconLabel: regiment.iconLabel,
+      iconVariant,
+      iconLabel: MILITARY_ICON_LABELS[iconVariant],
       x: regiment.x,
       y: regiment.y,
       cell: regiment.cell,
@@ -1036,11 +1027,6 @@ function unitSummary(units = {}) {
     })
     .filter(Boolean)
     .join(" / ") || "无";
-}
-
-function overviewMilitaryIcon(regiment) {
-  const variant = regiment?.iconVariant || regiment?.icon || regiment?.dominantUnit || "infantry";
-  return militaryOverviewIcons[variant] || militaryOverviewIcons[regiment?.dominantUnit] || "◆";
 }
 
 function buildStationDestinationOptions(map, regiment, state) {
@@ -1578,10 +1564,6 @@ function unitBreakdown(regiment) {
       } : null;
     })
     .filter(Boolean);
-}
-
-function unitLabel(unitName) {
-  return unitDefinitions.find(unit => unit.name === unitName)?.label || unitName || "未知";
 }
 
 function orderLabel(order = {}) {

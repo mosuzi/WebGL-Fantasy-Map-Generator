@@ -8,9 +8,10 @@ import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
-const screenshotPath = join(rootDir, "docs", "generated", "screenshots", "canvas-icon-atlas.png");
-const realMapScreenshotPath = join(rootDir, "docs", "generated", "screenshots", "canvas-icons-real-map.png");
-const realMapPngPath = join(rootDir, "docs", "generated", "screenshots", "canvas-icons-real-map-export.png");
+const outputDir = process.env.CANVAS_ICON_OUT || join(rootDir, "docs", "generated", "screenshots");
+const screenshotPath = join(outputDir, "canvas-icon-atlas.png");
+const realMapScreenshotPath = join(outputDir, "canvas-icons-real-map.png");
+const realMapPngPath = join(outputDir, "canvas-icons-real-map-export.png");
 const baseUrl = process.argv.find(value => value.startsWith("http")) || "http://127.0.0.1:5411/";
 const targetUrl = new URL(baseUrl);
 targetUrl.searchParams.set("healthClear", "1");
@@ -118,6 +119,37 @@ try {
   });
   assert.equal(realMapAfterInteraction.checksum, realMap.summary.checksum, "图标定位与拾取改变了地图 checksum");
   assert.equal(realMapAfterInteraction.mapRevision, realMap.summary.mapRevision, "图标定位与拾取写入了地图 revision");
+
+  await page.evaluate(() => window.webglGeneratorApi.layers.setVisible("military", true));
+  for (const [variant, label] of [["infantry", "步兵"], ["infantry-heavy", "重装步兵"]]) {
+    const id = await page.evaluate(variant => {
+      const renderer = window.__webglGeneratorApp.renderer;
+      const items = renderer.militaryIconItems;
+      const item = items.find(item => item.iconVariant === variant && !items.some(other =>
+        other !== item && Math.hypot(other.x - item.x, other.y - item.y) < 12));
+      if (!item) return null;
+      renderer.locateObject({kind: "military", id: item.id, stateId: item.stateId, regimentId: item.regimentId}, {minScale: 12, maxScale: 12});
+      return item.id;
+    }, variant);
+    assert.notEqual(id, null, `测试地图缺少可单独点击的${label}`);
+    await page.waitForFunction(id => {
+      const renderer = window.__webglGeneratorApp.renderer;
+      return !renderer.overlayInteractionSuspended && renderer.militaryIconItems.find(item => item.id === id)?.visible;
+    }, id);
+    const badge = page.locator(`.military-map-icon[data-military-id="${id}"]`);
+    const bounds = await badge.boundingBox();
+    const src = await badge.locator("img").getAttribute("src");
+    await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    const details = page.locator(".floating-panel:visible").filter({has: page.locator(".object-details-list")});
+    await details.locator(".object-details-list").getByText(label, {exact: true}).waitFor();
+    await details.getByRole("button", {name: "军事编辑", exact: true}).click();
+    const management = page.locator(".floating-panel:visible").filter({has: page.locator(".military-overview")});
+    await management.locator(".current-row").getByText(label, {exact: true}).waitFor();
+    await management.locator(".military-overview-stats").getByText(label, {exact: true}).waitFor();
+    assert.equal(await management.locator(".military-overview-icon img").getAttribute("src"), src);
+    await management.locator(".floating-panel-close").click();
+    if (await details.isVisible()) await details.locator(".floating-panel-close").click();
+  }
 
   const entryViewports = [];
   for (const width of [1440, 390, 320]) {
@@ -361,14 +393,14 @@ try {
     };
   });
 
-  assert.deepEqual(atlas.counts, {cityBases: 9, cityRoles: 3, markers: 58, military: 10, total: 80});
+  assert.deepEqual(atlas.counts, {cityBases: 9, cityRoles: 3, markers: 58, military: 14, total: 84});
   assert.equal(atlas.cityFingerprints, 9, "城镇基础剪影存在重复指纹");
   assert.equal(atlas.markerFingerprints, 58, "Marker 注册类型存在重复或空图指纹");
   assert.equal(atlas.svgAudit.length, 77, "稳定图标与附加展示 SVG 图鉴数量错误");
   assert(atlas.svgAudit.every(icon => icon.drawableCount > 0 && icon.width > 0 && icon.height > 0), "图鉴存在空 SVG");
   assert(atlas.svgAudit.every(icon => icon.withinViewBox), `SVG 图形越出 viewBox：${atlas.svgAudit.filter(icon => !icon.withinViewBox).map(icon => icon.key).join(", ")}`);
   assert(atlas.svgAudit.every(icon => !icon.forbiddenContent), "SVG 图标包含文字、外部图像或远程资源");
-  assert.equal(atlas.imageAudit.length, 10, "军事图标数量错误");
+  assert.equal(atlas.imageAudit.length, 14, "军事图标数量错误");
   assert(atlas.imageAudit.every(icon => icon.width > 0 && icon.height > 0), "存在无法加载的军事图标");
   assert(atlas.iconCards.every(card => card.scrollWidth <= card.clientWidth), "图鉴卡片存在横向裁切");
   assert.deepEqual(atlas.extraCards.map(card => card.key), [
@@ -394,7 +426,7 @@ try {
       clippedCards: [...document.querySelectorAll("#canvas-icon-atlas .atlas-card")].filter(card => card.scrollWidth > card.clientWidth).length
     }));
     assert(measurement.scrollWidth <= measurement.width, `${width}px 图鉴出现横向溢出`);
-    assert.equal(measurement.cards, 80, `${width}px 图鉴卡片数量错误`);
+    assert.equal(measurement.cards, 84, `${width}px 图鉴卡片数量错误`);
     assert.equal(measurement.extras, 7, `${width}px 附加展示卡片数量错误`);
     assert.equal(measurement.clippedCards, 0, `${width}px 图鉴卡片出现裁切`);
     atlasViewports.push({requestedWidth: width, ...measurement});

@@ -77,7 +77,7 @@ import {resolveStateLabelPlacement} from "./state-label-territory.js";
 import {homelandOutline, homelandContainsBox, homelandLabelSites} from "./state-label-footprint.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {createPreparedDisplayIntent, gpuResidentShoreSurfaceKey} from "./prepared-display-intent.js";
-import {militaryIconLabelForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
+import {MILITARY_ICON_LABELS, regimentIconVariant} from "../generator/regiment-symbols.js";
 import {
   markerIconSvg as renderMarkerIconSvg,
   militaryIconDataUrl,
@@ -6760,7 +6760,7 @@ function getMilitaryIconItems(map, unitPreferences = {}) {
   return militaryRegiments(map)
     .sort((a, b) => Number(b.a || 0) - Number(a.a || 0))
     .map(regiment => {
-      const iconVariant = militaryIconForRegiment(regiment);
+      const iconVariant = regimentIconVariant(regiment);
       const troops = Number(regiment.a || 0);
       const troopTextWidth = Math.min(18, String(formatMilitaryTroops(troops, unitPreferences)).length * 3);
       return {
@@ -6773,7 +6773,7 @@ function getMilitaryIconItems(map, unitPreferences = {}) {
         stateName: regiment.stateName || map?.politics?.states?.[regiment.state]?.name || "none",
         icon: iconVariant,
         iconVariant,
-        iconLabel: regiment.iconLabel || militaryIconLabelForVariant(iconVariant),
+        iconLabel: MILITARY_ICON_LABELS[iconVariant],
         troops,
         boxBaseWidth: MILITARY_ICON_BASE_WIDTH + troopTextWidth,
         status: regiment.status,
@@ -6802,14 +6802,13 @@ function militaryRegiments(map) {
 
 function militaryIconTooltip(regiment, map, unitPreferences = {}) {
   const state = map?.politics?.states?.[regiment.state] || map?.pack?.states?.[regiment.state];
-  return `${state?.name || "国家"} / ${regiment.name || "军团"} / ${regiment.statusLabel || "待命"} / ${formatMilitaryTroops(regiment.a, unitPreferences)}`;
+  return `${state?.name || "国家"} / ${regiment.name || "军团"} / ${MILITARY_ICON_LABELS[regimentIconVariant(regiment)]} / ${regiment.statusLabel || "待命"} / ${formatMilitaryTroops(regiment.a, unitPreferences)}`;
 }
 
 function militaryIconClassName(item) {
   const classes = ["military-map-icon"];
   if (item.type === "fleet") classes.push("military-map-icon--fleet");
-  const iconVariant = normalizeMilitaryIconVariant(item.iconVariant || item.icon, militaryIconVariantForUnit(item.dominantUnit));
-  if (iconVariant) classes.push(`military-map-icon--${iconVariant}`);
+  classes.push(`military-map-icon--${item.iconVariant}`);
   return classes.join(" ");
 }
 
@@ -6856,23 +6855,6 @@ function militaryObjectFromIconItem(item) {
 function militaryIconScale(scale, item) {
   const troopBonus = item.troops >= 10000 ? 0.08 : item.troops >= 4000 ? 0.04 : 0;
   return clamp(0.82 + troopBonus + (scale - item.minScale) * 0.04, 0.78, 1.16);
-}
-
-function militaryIconForUnit(unit) {
-  return militaryIconVariantForUnit(unit);
-}
-
-function militaryIconForRegiment(regiment = {}) {
-  const fallback = militaryIconVariantForUnit(regiment.dominantUnit);
-  return normalizeMilitaryIconVariant(regiment.iconVariant || regiment.icon, fallback);
-}
-
-function militaryIconVariantForUnit(unit) {
-  if (unit === "archers") return "archers";
-  if (unit === "cavalry") return "cavalry";
-  if (unit === "artillery") return "artillery";
-  if (unit === "fleet") return "fleet-small";
-  return "infantry";
 }
 
 function formatMilitaryTroops(value, unitPreferences = {}) {

@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {MILITARY_ICON_LABELS} from "./regiment-symbols.js";
 import {cityDevelopmentEffects} from "./city-development.js";
 import {isActiveEnemyPair} from "./war-consistency.js";
 import {getGovernmentEffects} from "./governments.js";
@@ -74,18 +75,6 @@ const CIVILIZATION_RATIO_MODIFIERS = Object.freeze({
 });
 
 const WAR_RELATIONS = new Set(["Enemy", "Rival", "Suspicion"]);
-const REGIMENT_ICON_LABELS = Object.freeze({
-  "fleet-large": "大舰队",
-  "fleet-small": "小舰队",
-  "archers": "弓兵",
-  "archers-heavy": "重装弓兵",
-  "cavalry": "骑兵",
-  "cavalry-heavy": "重骑兵",
-  "infantry": "步兵",
-  "infantry-heavy": "重步兵",
-  "mountain": "山地兵",
-  "artillery": "器械"
-});
 
 export function buildMilitary(pack, options = {}) {
   const startedAt = performance.now();
@@ -954,7 +943,7 @@ function getRegimentIconProfile(regiment) {
 }
 
 function iconProfile(variant) {
-  return {icon: variant, variant, label: REGIMENT_ICON_LABELS[variant] || variant};
+  return {icon: variant, variant, label: MILITARY_ICON_LABELS[variant]};
 }
 
 function isMountainRegiment(regiment, dominantUnit, share) {
