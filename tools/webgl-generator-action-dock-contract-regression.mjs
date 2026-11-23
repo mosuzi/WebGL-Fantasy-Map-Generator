@@ -22,7 +22,8 @@ const renameHosts = hosts.filter(host => host.actions.some(action => action.key 
 assert.equal(new Set(hosts.map(host => host.hostId)).size, hosts.length, "UiActionDock hostId 必须唯一");
 assert.equal(new Set(identities).size, identities.length, "动作身份必须按 host + key 唯一");
 assert.ok(actions.every(action => action.resultClass), "每个动作必须显式声明 resultClass");
-assert.deepEqual(resultCounts, {"toggle-canvas-mode": 11, "open-secondary": 18, direct: 0, "open-other-panel": 2});
+assert.deepEqual(resultCounts, {"toggle-canvas-mode": 11, "open-secondary": 18, direct: 1, "open-other-panel": 2});
+assert.ok(actions.some(action => action.identity === "StatePanel:delete-selected" && action.resultClass === "direct"));
 assert.ok(actions.some(action => action.identity === "CulturePanel:namebase"));
 assert.ok(actions.filter(action => action.resultClass === "open-secondary").every(action => action.hasSlot), "二级面板动作必须有同名 slot");
 assert.ok(actions.filter(action => action.resultClass !== "open-secondary").every(action => !action.hasSlot), "非二级动作不得有同名 slot");

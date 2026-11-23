@@ -747,17 +747,22 @@ function assertCreatedStateCoherent(map, {stateId, provinceId, capital, changes,
 function deleteState(map, stateId) {
   const state = map?.politics?.states?.[stateId];
   if (!state || state.removed) throw new Error(`找不到国家 #${stateId}`);
-  const changes = [];
-  for (const gridCell of map?.grid?.cells?.i || []) {
-    if (normalizeStateId(map.grid.cells.state?.[gridCell]) !== stateId) continue;
-    changes.push({gridCell, before: stateId, after: 0});
+  const grid = map.grid.cells, pack = map.pack.cells;
+  const changedGridCells = new Set();
+  for (let cell = 0; cell < (grid.state?.length || 0); cell++) {
+    if (normalizeStateId(grid.state[cell]) !== stateId) continue;
+    grid.state[cell] = 0;
+    if (grid.province) grid.province[cell] = 0;
+    changedGridCells.add(cell);
   }
-  applyStateChanges(map, changes, "after");
-  for (const change of changes) {
-    if (map.grid?.cells?.province) map.grid.cells.province[change.gridCell] = 0;
-    for (const cell of getPackCellsForGrid(map, change.gridCell)) {
-      if (isPackLandCell(map, cell)) map.pack.cells.province[cell] = 0;
-    }
+  const cells = changedGridCells.size;
+  // 边界处两层地块的归属可能不同，分别按实际归属释放领土。
+  for (let cell = 0; cell < (pack.state?.length || 0); cell++) {
+    if (normalizeStateId(pack.state[cell]) !== stateId) continue;
+    pack.state[cell] = 0;
+    if (pack.province) pack.province[cell] = 0;
+    const gridCell = pack.g?.[cell];
+    if (Number.isInteger(gridCell) && gridCell >= 0) changedGridCells.add(gridCell);
   }
   for (const province of map?.politics?.provinces || []) {
     if (province && normalizeStateId(province.state) === stateId) province.removed = true;
@@ -789,7 +794,7 @@ function deleteState(map, stateId) {
   refreshPoliticsMetadata(map);
   syncPackPoliticalRecords(map);
   markDerivedStale(map, ["military", "zones", "state-markers", "economy", "diplomacy"]);
-  return {stateId, cells: changes.length, changedGridCells: changes.map(change => change.gridCell)};
+  return {stateId, cells, changedGridCells: [...changedGridCells]};
 }
 
 function applyStateNameSnapshot(state, snapshot) {

@@ -252,6 +252,7 @@ const stateOptions = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "state-panel", kind: "state", rows: visibleRows});
+const selectedCountries = regenerationLocks.selectedRows;
 const {selectedRowIds: selectedStateIds} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
@@ -292,7 +293,9 @@ const canSubmitTopology = computed(() => Boolean(topologyInspection.value?.valid
 const topologyPreviewRows = computed(() => topologyInspection.value?.preview?.rows || []);
 const stateActions = computed(() => [
   {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图位置作为首都", icon: Plus, panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
-  {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: Delete, panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
+  selectedCountries.value.length && !props.state.deleteMode
+    ? {key: "delete-selected", resultClass: "direct", label: selectedCountries.value.length === 1 ? `删除国家「${selectedCountries.value[0].name}」` : "请单选要删除的国家", icon: Delete, disabled: selectedCountries.value.length !== 1 || props.state.addMode || editActive.value}
+    : {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: Delete, panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
   {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "停止涂抹国土" : "涂抹国土", icon: EditPen, panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
   {key: "province-suffix", resultClass: "open-secondary", label: "调整辖下省份后缀", icon: Notebook, panelWidth: 520, disabled: modalActionActive.value || !canDeleteSelected.value || !provinceSuffixOptions.value.length},
   {key: "merge", resultClass: "open-secondary", label: "合并相邻国家", icon: Connection, panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
@@ -444,6 +447,10 @@ function handleActionSelect(key) {
   }
   if (key === "delete") {
     props.callbacks.onDeleteMode?.(!props.state.deleteMode);
+    return;
+  }
+  if (key === "delete-selected") {
+    if (selectedCountries.value.length === 1) props.callbacks.onDeleteState?.(selectedCountries.value[0].id);
     return;
   }
   if (key === "edit" && selected.value) {
