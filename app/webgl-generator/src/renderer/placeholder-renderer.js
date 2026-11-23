@@ -5466,7 +5466,7 @@ export class PlaceholderMapRenderer {
       const screen = politicalPlacement?.anchor || baseScreen;
       const labelAnchor = politicalPlacement ? screen : overlayLabelAnchor(this, item, screen, scale);
       const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
-      if ((stateLabel || item.manualPath) && politicalPlacement) box.parts = politicalPlacement.glyphs.map(glyph => glyph.box);
+      if ((stateLabel || item.manualPath) && politicalPlacement) box.parts ??= politicalPlacement.glyphs.filter(g => g.character.trim()).map(g => g.box);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const prewarm = politicalLabel ? politicalPrewarm : labelPrewarm;
       const canBuffer = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;

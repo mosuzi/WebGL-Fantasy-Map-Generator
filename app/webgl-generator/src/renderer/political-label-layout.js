@@ -91,7 +91,12 @@ export function placeHomelandLabel({item, screen, scale, sx, sy, sites, banks = 
   }
   const projected = cached.projection;
   const box = translateBox(projected.box, anchor.x, anchor.y);
-  const glyphs = projected.glyphs.map(g => ({...g, box: translateBox(g.box, anchor.x, anchor.y)}));
+  box.parts = [];
+  const glyphs = projected.glyphs.map(g => {
+    const bounds = translateBox(g.box, anchor.x, anchor.y);
+    if (g.character.trim()) box.parts.push(bounds);
+    return {...g, box: bounds};
+  });
   const cityCollides = overlapSummary(glyphs, box, obstacles, padding).count > 0;
   const peerCollides = overlapSummary(glyphs, box, peers, padding).count > 0;
   return {...layout, anchor, box, glyphs, fontSize: size, mapScale: scale, candidateIndex, rootSize: projected.rootSize,
@@ -115,44 +120,66 @@ function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
     ? horizontalHomelandCorridors(outline, item.x, item.y, item.rotation, sx, sy) : [];
   let candidateIndex = 0;
   for (const name of new Set([item.text, short])) {
+    const length = Array.from(name).length;
     const rows = splitHomelandName(name, short);
     const upright = /\p{Script=Han}/u.test(name);
     const direction = (upright && Math.abs(dy) > Math.abs(dx) ? dy : dx) < 0 ? -1 : 1;
     const rotation = Math.atan2(direction * dy, direction * dx) * 180 / Math.PI;
     // Compact countries have room across the axis. An elongated country
     // naturally reads as a single line unless that line will crowd its ends.
-    const preferRows = rows && Array.from(name).length >= 4 && (Array.from(name).length * size > span * 0.54
+    const preferRows = rows && length >= 4 && (length * size > span * 0.54
       || (frame && Math.max(width, height) < 1.8 * Math.min(width, height)));
     const variants = !rows ? [[name]] : preferRows ? [rows, [name]] : [[name], rows];
     const factors = name === short ? [1, 0.82, 0.66, 0.51, 0.38] : [1, 0.82, 0.66];
     for (const factor of factors) {
       const fontSize = size * factor;
       const margin = Math.max(2, fontSize * 0.12);
-      if (horizontalSites.length && Array.from(name).length > 1) {
+      const inside = (layout, site, gap = margin) => layout.glyphs.every(glyph => !glyph.character.trim() || fits(glyph.box, gap, site));
+      if (horizontalSites.length && length > 1) {
         const layout = homelandLineLayout([name], item.resolvedStyle, fontSize, 0, upright);
-        const neededWidth = layout.box.right - layout.box.left + 2 * margin;
-        const site = horizontalSites.find(site => site.span * sx >= neededWidth && fits(layout.box, margin, site));
+        const site = horizontalSites.find(site => inside(layout, site));
         if (site) return {layout, site, fontSize, candidateIndex: ++candidateIndex};
       }
-      const inside = (layout, site) => fits(emptyBox(), 0, site) && layout.glyphs.every(glyph => fits(glyph.box, margin, site));
+      let compact = null;
       for (const lines of variants) {
         const layout = homelandLineLayout(lines, item.resolvedStyle, fontSize, rotation, upright);
         candidateIndex++;
-        const site = sites.find(site => inside(layout, site));
-        if (site) return {layout, site, fontSize, candidateIndex};
-        if (!frame) continue;
-        for (const {left, right, y} of homelandAnchorBands(outline, layout, fontSize, sx, sy)) {
-          const inland = {x: Math.max(left, Math.min(right, frame.cx)), y};
-          if (inside(layout, inland)) return {layout, site: inland, fontSize, candidateIndex};
-          inland.x = (left + right) / 2;
-          if (inside(layout, inland)) return {layout, site: inland, fontSize, candidateIndex};
+        const site = sites.find(site => inside(layout, site)) ?? inlandSite(outline, layout, fontSize, sx, sy, inside);
+        if (site) {
+          compact = {layout, site, fontSize, candidateIndex};
+          break;
         }
       }
-      if (upright && banks.length && name !== short) {
-        const bank = bankLabelLayout({name, fontSize, style: item.resolvedStyle, sx, sy, rotation, banks, fits, axisScale, margin});
+      if (frame && banks.length && upright && length > 1) {
+        const offset = compact ? Math.hypot((compact.site.x - frame.cx) * sx, (compact.site.y - frame.cy) * sy) : Infinity;
+        if (offset > fontSize / 2) {
+          // A modest reduction may fit a narrower shore and bring the full
+          // name back towards the centre. Keep the larger lettering on a tie.
+          for (const ratio of compact ? [1, 0.875, 0.75, 0.66] : [1]) {
+            if (ratio < 1 && fontSize * ratio < 12) break; // Keep the 6px visibility threshold at half zoom.
+            const spread = fitAcrossShores({name, fontSize: fontSize * ratio, style: item.resolvedStyle,
+              rotation, direction, sx, sy, frame, banks, inside});
+            if (spread && spread.distance + fontSize / 2 + (fontSize - spread.fontSize) < offset) return spread;
+          }
+        }
+      }
+      if (compact) return compact;
+      if (upright && banks.length && length > 1) {
+        const bank = bankLabelLayout({name, fontSize, style: item.resolvedStyle, sx, sy, rotation, banks, inside, axisScale});
         if (bank) return {...bank, fontSize};
       }
     }
+  }
+  return null;
+}
+
+function inlandSite(outline, layout, fontSize, sx, sy, inside) {
+  if (!outline?.frame) return null;
+  for (const {left, right, y} of homelandAnchorBands(outline, layout, fontSize, sx, sy)) {
+    const site = {x: Math.max(left, Math.min(right, outline.frame.cx)), y};
+    if (inside(layout, site)) return site;
+    site.x = (left + right) / 2;
+    if (inside(layout, site)) return site;
   }
   return null;
 }
@@ -201,7 +228,41 @@ function homelandStyleAtSize(style, fontSize) {
   return {...style, fontSize, strokeWidth: finite(style.strokeWidth) * ratio};
 }
 
-function bankLabelLayout({name, fontSize, style, sx, sy, rotation, banks, fits, axisScale, margin}) {
+function fitAcrossShores({name, fontSize, style, rotation, direction, sx, sy, frame, banks, inside}) {
+  const normal = homelandLineLayout([name], style, fontSize, rotation, true);
+  const count = normal.glyphs.length;
+  const margin = Math.max(2, fontSize * 0.12);
+  // A sloping coast can clip one corner of a glyph centred on the scanline.
+  // Try translations within its existing margin before reducing the type.
+  const shifts = [0, -margin / 2, margin / 2];
+  let best = null;
+  for (const [index, bank] of banks.entries()) {
+    if (!bank.shores) continue;
+    const [a, b] = bank.shores;
+    const first = direction > 0 ? a : b;
+    // The centres of two consecutive groups are half the character count
+    // apart, measured in advances, regardless of which pair surrounds the bay.
+    const step = 2 * Math.hypot((a.x - b.x) * sx, (a.y - b.y) * sy) / count;
+    const extra = step - fontSize - normal.spacing;
+    if (extra < 0) continue;
+    const layout = homelandLineLayout([name], style, fontSize, rotation, true, extra);
+    for (let i = 1; i < count; i++) {
+      const firstGlyph = layout.glyphs[0], lastOnShore = layout.glyphs[i - 1];
+      const x = first.x - (firstGlyph.x + lastOnShore.x) / (2 * sx);
+      const y = first.y - (firstGlyph.y + lastOnShore.y) / (2 * sy);
+      for (const dx of shifts) for (const dy of shifts) {
+        const site = {x: x + dx / sx, y: y + dy / sy};
+        const distance = Math.hypot((site.x - frame.cx) * sx, (site.y - frame.cy) * sy);
+        if ((!best || distance < best.distance) && inside(layout, site, margin)) {
+          best = {layout: {...layout, splitAt: i}, site, fontSize, distance, candidateIndex: -1 - index};
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function bankLabelLayout({name, fontSize, style, sx, sy, rotation, banks, inside, axisScale}) {
   // Try the smallest tracking first. Any adjacent pair may straddle the water.
   for (const extraEm of [0, 0.125, 0.25, 0.375, 0.5]) {
     const layout = homelandLineLayout([name], style, fontSize, rotation, true, fontSize * extraEm);
@@ -211,7 +272,7 @@ function bankLabelLayout({name, fontSize, style, sx, sy, rotation, banks, fits, 
       for (let i = 1; i < glyphs.length; i++) {
         const a = glyphs[i - 1], b = glyphs[i];
         const site = {x: bank.x - (a.x + b.x) / (2 * sx), y: bank.y - (a.y + b.y) / (2 * sy)};
-        if (glyphs.every(glyph => fits(glyph.box, margin, site))) {
+        if (inside(layout, site)) {
           return {layout: {...layout, splitAt: i}, site, candidateIndex: -1 - bankIndex};
         }
       }
@@ -367,6 +428,7 @@ function overlapSummary(glyphs, candidateBox, boxes, padding) {
     const obstacle = boxes[index];
     if (!boxesOverlap(candidateBox, obstacle, padding)) continue;
     for (const glyph of glyphs) {
+      if (!glyph.character.trim()) continue;
       const overlap = obstacle.parts
         ? obstacle.parts.reduce((sum, part) => sum + overlapArea(glyph.box, part, padding), 0)
         : overlapArea(glyph.box, obstacle, padding);

@@ -73,6 +73,7 @@ try {
           return grid != null && map.grid.cells.state[grid] === item.targetId && map.grid.cells.h[grid] >= 20;
         };
         const inkInside = item.glyphNodes.every(glyph => {
+          if (!glyph.textContent.trim()) return true;
           const r = glyph.getBoundingClientRect();
           return [r.left - 1, r.right + 1].every(x => [r.top - 1, r.bottom + 1].every(y => territory(x, y)));
         });
@@ -85,6 +86,7 @@ try {
         });
         const steps = [];
         let pickedWater = false;
+        let waterSamples = 0;
         for (let i = 1; i < centers.length; i++) {
           const left = centers[i - 1], right = centers[i];
           steps.push(Math.hypot(right.x - left.x, right.y - left.y));
@@ -92,6 +94,7 @@ try {
             const x = left.x + (right.x - left.x) * step / 32, y = left.y + (right.y - left.y) * step / 32;
             const cell = renderer.pickCellClientPoint(x, y)?.gridCell;
             if (cell == null || map.grid.cells.h[cell] >= 20) continue;
+            waterSamples++;
             const picked = renderer.pickLabel(x, y);
             if (picked?.targetKind === "state" && picked.targetId === item.targetId) pickedWater = true;
           }
@@ -100,7 +103,7 @@ try {
           id: item.targetId, name: item.text, short: item.state.name, capital: map.pack.burgs[item.state.capital]?.name,
           cells: cells.size, visible: item.visible, text: item.glyphNodes.map(glyph => glyph.textContent).join(""),
           font: parseFloat(getComputedStyle(item.contentNode).fontSize), scale: renderer.camera.scale, inkInside,
-          centers: centers.map(point => renderer.screenToWorld(point.x, point.y)), steps, pickedWater,
+          centers: centers.map(point => renderer.screenToWorld(point.x, point.y)), steps, pickedWater, waterSamples,
           hitGlyphs: centers.filter(point => {
             const hit = renderer.pickLabel(point.x, point.y);
             return hit?.targetKind === "state" && hit.targetId === item.targetId;
@@ -111,6 +114,26 @@ try {
         };
       }, focus);
       const initial = await sample();
+      if (focus === "焦国" && initial.capital === "海坊") {
+        const checked = await page.evaluate(id => {
+          const {map, renderer} = window.__webglGeneratorApp;
+          const item = renderer.labelItems.find(i => i.targetKind === "state" && i.targetId === id);
+          let pixels = 0;
+          for (const glyph of item.glyphNodes) {
+            const box = glyph.getBoundingClientRect();
+            for (let y = Math.floor(box.top); y <= Math.ceil(box.bottom); y++) {
+              for (let x = Math.floor(box.left); x <= Math.ceil(box.right); x++) {
+                const cell = renderer.pickCellClientPoint(x, y)?.gridCell;
+                if (map.grid.cells.h[cell] < 20 || map.grid.cells.state[cell] !== id) throw Error("字框内有水面或他国领土");
+                pixels++;
+              }
+            }
+          }
+          return pixels;
+        }, initial.id);
+        assert.ok(checked > 0);
+        initial.checkedPixels = checked;
+      }
       if (focus === "奄帝国" && initial.capital === "兰景") {
         assert.ok(initial.centers.length > 1 && initial.centers.every((p, i, glyphs) =>
           Math.abs(p.y - glyphs[0].y) * initial.sy < 0.5 && (!i || p.x > glyphs[i - 1].x)), JSON.stringify(initial));
@@ -150,8 +173,10 @@ try {
           return item.contentNode.getBoundingClientRect().toJSON();
         }, initial.id);
         const viewport = page.viewportSize();
-        const clip = {x: Math.max(0, Math.min(viewport.width - 840, Math.round(center.x + center.width / 2 - 420))),
-          y: Math.max(0, Math.min(viewport.height - 370, Math.round(center.y + center.height / 2 - 185))), width:840, height:370};
+        const width = Math.min(viewport.width, Math.max(360, Math.ceil(center.width) + 220));
+        const height = Math.min(viewport.height, Math.max(360, Math.ceil(center.height) + 200));
+        const clip = {x: Math.max(0, Math.min(viewport.width - width, Math.round(center.x + (center.width - width) / 2))),
+          y: Math.max(0, Math.min(viewport.height - height, Math.round(center.y + (center.height - height) / 2))), width, height};
         await page.screenshot({path:process.env.FMG_LABEL_SCREENSHOT,clip,animations:"disabled"});
       }
       await zoom(500);
@@ -180,6 +205,11 @@ try {
       let settledError = 0;
       for (const view of [initial, detail, far, restored, moved, back]) {
         assert.ok(view.visible && view.inkInside && view.hitGlyphs === initial.centers.length, JSON.stringify(view));
+        if (focus === "焦国" && initial.capital === "海坊") {
+          // 此档中的安邑在北岸 y=162；赵竹所在的南部腹地在 y=210 以南。
+          assert.ok(view.centers.length === 2 && view.centers[0].y < 167 && view.centers[1].y > 210, JSON.stringify(view.centers));
+          assert.ok(view.waterSamples > 0 && !view.pickedWater, "字间必须跨过实际海面，点击海面不能命中国名");
+        }
         assert.equal(view.centers.length, initial.centers.length);
         for (const [i, point] of view.centers.entries()) {
           const expected = initial.centers[i];
@@ -263,15 +293,14 @@ try {
       const city = renderer.labelItems.find(item => item.targetKind === "city");
       if (!state || !city) throw new Error("缺少国家或城市标签样本");
       const rect = renderer.canvas.getBoundingClientRect();
-      const insideLabel = (item, position) => {
-        if (!position && item.politicalPlacementSnapshot?.splitAt) {
+      const insideLabel = (item, point) => {
+        if (!point) {
           return item.glyphNodes.every(glyph => {
+            if (!glyph.textContent.trim()) return true;
             const bounds = glyph.getBoundingClientRect();
             return insideLabel(item, renderer.screenToWorld(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2));
           });
         }
-        const base = renderer.worldToScreen(item.x, item.y, rect);
-        const point = position || renderer.screenToWorld(rect.left + base.x + (item.politicalOffsetX || 0), rect.top + base.y + (item.politicalOffsetY || 0));
         const cells = map.pack.cells;
         const vertices = map.pack.vertices.p;
         return item.componentCells.some(cell => {
@@ -292,6 +321,7 @@ try {
       for (const item of initialVisibleStates) {
         modes[item.displayText === item.text ? "full" : "short"]++;
         for (const glyph of item.glyphNodes) {
+          if (!glyph.textContent.trim()) continue;
           const g = glyph.getBoundingClientRect();
           for (const x of [g.left - 1, g.right + 1]) for (const y of [g.top - 1, g.bottom + 1]) {
             if (!insideLabel(item, renderer.screenToWorld(x,y))) throw Error(`实际字形未在本土留白：${item.text} ${glyph.textContent}`);
@@ -301,7 +331,7 @@ try {
         }
       }
       if (!initialVisibleStates.length || initialVisibleStates.some(item => !insideLabel(item))) {
-        throw new Error(`初始可见国家标签中点越界：${initialVisibleStates.filter(item => !insideLabel(item)).map(item => item.targetId)}`);
+        throw new Error(`初始可见国家标签字形越界：${initialVisibleStates.filter(item => !insideLabel(item)).map(item => item.targetId)}`);
       }
       const originalItems = renderer.labelItems;
       renderer.labelItems = [city, state];
@@ -407,7 +437,7 @@ try {
       centerAt(rect.width / 2, rect.height / 2);
       renderer.updateLabels();
       const zoomSeparated = sample();
-      ensure(zoomSeparated.cityVisible && zoomSeparated.inside, "缩放前国家中点越界或城市未显示");
+      ensure(zoomSeparated.cityVisible && zoomSeparated.inside, "缩放前国家标签字形越界或城市未显示");
       renderer.camera.scale = 1.2;
       centerAt(rect.width / 2, rect.height / 2);
       renderer.viewportInteractionKind = "zoom";

@@ -10,14 +10,27 @@ export function resolveStateLabelPlacement(map, state, text = "") {
       const centroid = weightedCentroid(cells, component.cells);
       const anchorCell = centralInteriorCell(cells, component, centroid);
       const point = cells.p[anchorCell];
+      // Nearby islands can carry individual glyphs. Keep the capital's
+      // mainland as the anchor so distant colonies do not pull the name away.
+      let territory = component.cells;
+      for (const island of components) {
+        if (island === component) continue;
+        const center = weightedCentroid(cells, island.cells);
+        const diameters = 2 * (Math.sqrt(component.area / Math.PI) + Math.sqrt(island.area / Math.PI));
+        if (Math.hypot(center.x - centroid.x, center.y - centroid.y) <= diameters) {
+          if (territory === component.cells) territory = [...territory];
+          for (const cell of island.cells) territory.push(cell);
+        }
+      }
+      const includesIslands = territory !== component.cells;
       return {
         x: point[0],
         y: point[1],
         cell: anchorCell,
-        componentCells: component.cells,
-        componentCellSet: component.cellSet,
+        componentCells: territory,
+        componentCellSet: includesIslands ? new Set(territory) : component.cellSet,
         source: component.cellSet.has(capitalCell) ? "capital-component" : "largest-component",
-        rotation: stateLabelRotation(map.pack, component.cells, centroid)
+        rotation: stateLabelRotation(map.pack, territory, includesIslands ? weightedCentroid(cells, territory) : centroid)
       };
     }
   }

@@ -191,6 +191,35 @@ const gapLabel = resolvePoliticalLabelPlacement({
   peers: [{...across.box, parts: across.glyphs.map(g => g.box)}], viewport: {width: 200, height: 140}
 });
 assert.equal(gapLabel.collides, false, "上一国家国名的字间水面应允许放置其它标签");
+
+// The geometric centre is over water. Only the printed glyphs need land,
+// including when the author put a space into the display name.
+for (const text of ["海国", "海 国"]) {
+  const strait = placeHomelandLabel({item: {...bayItem, x: 0, y: 0, text, state: {name: text},
+    resolvedStyle: {fontSize: 18, letterSpacing: 14}}, screen: {x: 0, y: 0}, sx: 1, sy: 1, scale: 1,
+    sites: [{x: 0, y: 0}], obstacles: [], peers: [], padding: 0,
+    fits: (box, margin) => box.right + margin < -3 || box.left - margin > 3});
+  assert.equal(strait?.glyphs.map(g => g.character).join(""), text);
+  assert.equal(strait.fontSize, 18);
+  assert.ok(strait.glyphs[0].box.right < -3 && strait.glyphs.at(-1).box.left > 3);
+  assert.deepEqual(strait.box.parts, [strait.glyphs[0].box, strait.glyphs.at(-1).box], "空格不应占用拾取范围");
+}
+
+const islandLeft = [0, 76, 51, 510];
+const islands = {metadata: {graphHeight: 60}, pack: {burgs: [null, {i: 1, cell: 0}], cells: {
+  i: [0,1,2,3], state: [1,1,2,1], h: [30,30,30,30], c: [[], [], [], []], area: [2640,2640,600,2640],
+  p: [[22,30],[98,30],[56,30],[532,30]], v: islandLeft.map((_, i) => [0,1,2,3].map(j => i*4+j))
+}, vertices: {p: islandLeft.flatMap((x, i) => [[x,0],[x+(i === 2 ? 10 : 44),0],[x+(i === 2 ? 10 : 44),60],[x,60]])}}};
+const cluster = resolveStateLabelPlacement(islands, {i: 1, capital: 1});
+assert.deepEqual(cluster.componentCells, [0,1], "首都附近两岛可共同承载国名，邻国和远方飞地不牵动本土");
+const clusterOutline = homelandOutline(islands, cluster.componentCellSet);
+const clusterLabel = placeHomelandLabel({item: {...bayItem, ...cluster, text: "海国", state: {name: "海"}},
+  screen: {x: cluster.x, y: cluster.y}, sx: 1, sy: 1, scale: 1, ...homelandLabelSites(clusterOutline, cluster.x, cluster.y, cluster.rotation),
+  outline: clusterOutline, obstacles: [], peers: [], padding: 0,
+  fits: (b, m, {x, y}) => homelandContainsBox(clusterOutline, x+b.left-m, y+b.top-m, x+b.right+m, y+b.bottom+m)});
+assert.equal(clusterLabel.glyphs.map(g => g.character).join(""), "海国");
+assert.ok(clusterLabel.glyphs[0].box.right < 44 && clusterLabel.glyphs[1].box.left > 76);
+assert.ok(!homelandContainsBox(clusterOutline, clusterLabel.anchor.x, clusterLabel.anchor.y, clusterLabel.anchor.x, clusterLabel.anchor.y));
 // A single-cell country still has a two-dimensional interior. Its principal
 // direction and the shortlist near the shore cannot justify dropping its name.
 const singleCell = {metadata: {graphHeight: 60}, pack: {

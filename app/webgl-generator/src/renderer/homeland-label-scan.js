@@ -78,7 +78,7 @@ export function* homelandAnchorBands(outline, layout, fontSize, sx, sy) {
   const margin = Math.max(2, fontSize * 0.12);
   const pitch = Math.max(0.25, 1 / sy);
   const steps = Math.ceil(frame.height / pitch);
-  const ink = layout.glyphs.map(({box}) => ({
+  const ink = layout.glyphs.filter(g => g.character.trim()).map(({box}) => ({
     left: (box.left - margin) / sx, right: (box.right + margin) / sx,
     top: (box.top - margin) / sy, bottom: (box.bottom + margin) / sy
   }));

@@ -99,7 +99,8 @@ export function homelandLabelSites(outline, x, y, rotation) {
   }
   const candidates = [];
   const banks = [];
-  const centerAlong = x * cos + y * sin;
+  const centerX = outline.frame?.cx ?? x, centerY = outline.frame?.cy ?? y;
+  const centerAlong = centerX * cos + centerY * sin;
   const scanRows = 45;
   for (let row = 0; row < scanRows; row++) {
     const across = low + (row + 0.5) / scanRows * (high - low);
@@ -133,11 +134,11 @@ export function homelandLabelSites(outline, x, y, rotation) {
       const left = substantial[i - 1], right = substantial[i];
       const gap = right.start - left.end;
       if (left.along >= centerAlong || right.along <= centerAlong || gap <= 0) continue;
-      if (gap > Math.min(left.end - left.start, right.end - right.start)) continue;
       const along = (left.end + right.start) / 2;
       const px = along * cos - across * sin, py = along * sin + across * cos;
-      const score = Math.min(left.room, right.room) - 0.35 * Math.hypot(px - x, py - y);
-      banks.push({x: px, y: py, gap, score});
+      const score = Math.min(left.room, right.room) - 0.35 * Math.hypot(px - centerX, py - centerY);
+      const shore = span => ({x: span.along * cos - across * sin, y: span.along * sin + across * cos});
+      banks.push({x: px, y: py, gap, score, shores: [shore(left), shore(right)]});
     }
   }
   const sites = homelandContainsBox(outline, x, y, x, y) ? [{x, y}] : [];
