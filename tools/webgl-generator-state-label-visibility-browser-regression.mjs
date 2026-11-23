@@ -13,7 +13,7 @@ const browser = await chromium.launch({channel: "chrome", headless: true});
 const reports = [];
 const archive = process.env.FMG_REAL_ARCHIVE;
 try {
-  for (const cellsTarget of archive || process.argv.includes("--large") ? [100000] : [10000, 100000]) {
+  for (const cellsTarget of archive ? [Number(process.env.FMG_ARCHIVE_CELLS || 100000)] : process.argv.includes("--large") ? [100000] : [10000, 100000]) {
     const page = await browser.newPage({viewport: {width: 1440, height: 900}});
     page.setDefaultTimeout(180000);
     const errors = [];
@@ -32,8 +32,8 @@ try {
     if (archive) {
       await page.evaluate(() => {window.__previousMap = window.__webglGeneratorApp.map;});
       await page.locator("#import-map-file").setInputFiles(archive);
-      await page.waitForFunction(() => window.__webglGeneratorApp.map !== window.__previousMap
-        && window.__webglGeneratorApp.map?.grid.cells.i.length === 100000);
+      await page.waitForFunction(target => window.__webglGeneratorApp.map !== window.__previousMap
+        && window.__webglGeneratorApp.map?.grid.cells.i.length === target, cellsTarget);
     } else {
       const generated = await page.evaluate(target => window.webglGeneratorApi.generate.newMap({confirm: true, seed: `state-label-visibility-${target}`, cellsTarget: target}), cellsTarget);
       assert.equal(generated.ok, true, JSON.stringify(generated.error));
@@ -111,6 +111,10 @@ try {
         };
       }, focus);
       const initial = await sample();
+      if (focus === "奄帝国" && initial.capital === "兰景") {
+        assert.ok(initial.centers.length > 1 && initial.centers.every((p, i, glyphs) =>
+          Math.abs(p.y - glyphs[0].y) * initial.sy < 0.5 && (!i || p.x > glyphs[i - 1].x)), JSON.stringify(initial));
+      }
       const zoomStarted = await page.evaluate(() => performance.now());
       let previewError = 0;
       const zoom = async (delta, checkPreview = false) => {
@@ -141,7 +145,13 @@ try {
       await page.mouse.move(initial.origin.x, initial.origin.y);
       const detail = await zoom(-500, true);
       if (process.env.FMG_LABEL_SCREENSHOT) {
-        const clip = {x:Math.max(0,Math.round(detail.origin.x)-415),y:Math.max(0,Math.round(detail.origin.y)-140),width:840,height:370};
+        const center = await page.evaluate(id => {
+          const item = window.__webglGeneratorApp.renderer.labelItems.find(i => i.targetKind === "state" && i.targetId === id);
+          return item.contentNode.getBoundingClientRect().toJSON();
+        }, initial.id);
+        const viewport = page.viewportSize();
+        const clip = {x: Math.max(0, Math.min(viewport.width - 840, Math.round(center.x + center.width / 2 - 420))),
+          y: Math.max(0, Math.min(viewport.height - 370, Math.round(center.y + center.height / 2 - 185))), width:840, height:370};
         await page.screenshot({path:process.env.FMG_LABEL_SCREENSHOT,clip,animations:"disabled"});
       }
       await zoom(500);

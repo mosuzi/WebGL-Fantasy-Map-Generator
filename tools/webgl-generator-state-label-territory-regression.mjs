@@ -207,6 +207,43 @@ const inlandName = placeHomelandLabel({
 });
 assert.equal(inlandName?.glyphs.map(g => g.character).join(""), ringLabel.text);
 assert.ok(Math.abs(inlandName.anchor.x - 40) < 5 && Math.abs(inlandName.anchor.y - 15) < 5);
+
+function labelInsidePolygon(vertices, center) {
+  const map = {metadata: {graphHeight: 360}, pack: {
+    cells: {i: [0], state: [1], h: [30], p: [center], v: [vertices.map((_, i) => i)]}, vertices: {p: vertices}
+  }};
+  const placement = resolveStateLabelPlacement(map, {i: 1});
+  const item = {...ringLabel, ...placement, resolvedStyle: {fontSize: 22}};
+  const outline = homelandOutline(map, placement.componentCellSet);
+  const {sites, banks} = homelandLabelSites(outline, item.x, item.y, item.rotation);
+  const fits = (box, margin, {x, y}) => homelandContainsBox(outline,
+    x + box.left - margin, y + box.top - margin, x + box.right + margin, y + box.bottom + margin);
+  const options = {item, screen: {x: item.x, y: item.y}, sx: 1, sy: 1, scale: 1, sites, banks, outline, fits,
+    obstacles: [], peers: [], padding: 0};
+  const initial = placeHomelandLabel(options);
+  assert.equal(initial.glyphs.map(g => g.character).join(""), item.text);
+  const covered = placeHomelandLabel({...options, obstacles: [initial.box]});
+  assert.ok(covered.cityCollides);
+  assert.deepEqual(covered.glyphs, initial.glyphs);
+  assert.equal(homelandLabelSites(outline, item.x, item.y, item.rotation).sites, sites);
+  return {initial, axis: item.rotation, outline};
+}
+
+// The southern arm determines the PCA, but the northern mainland has ample horizontal space.
+const hooked = labelInsidePolygon([[0,0],[160,0],[160,330],[130,330],[130,62],[0,62]], [145,165]);
+assert.ok(Math.abs(hooked.axis) > 60);
+assert.equal(hooked.initial.lines, 1);
+assert.equal(hooked.initial.rotation, 0);
+assert.ok(hooked.initial.anchor.y < 62 && homelandContainsBox(hooked.outline, hooked.initial.box.left,
+  hooked.initial.box.top, hooked.initial.box.right, hooked.initial.box.bottom));
+// This strip is wide enough for three small glyphs across, but its interior consistently runs north-south.
+const meridian = labelInsidePolygon([[0,0],[85,0],[85,340],[0,340]], [42.5,170]);
+assert.equal(meridian.initial.rotation, 90);
+assert.equal(meridian.initial.lines, 1);
+const diagonal = labelInsidePolygon([[0,26],[26,0],[236,210],[210,236]], [118,118]);
+assert.ok(Math.abs(diagonal.initial.rotation - 45) < 1);
+assert.equal(diagonal.initial.lines, 1);
+
 const label = {text:"燕王国", state:{name:"燕"}, targetId:71, resolvedStyle:{fontSize:20}, rotation:90, x:0, y:0};
 const place = (overrides={}) => placeHomelandLabel({item:{...label}, screen:{x:0,y:0}, sx:1,sy:1, scale:1,
   fits:()=>true, obstacles:[],peers:[],padding:0,...overrides});

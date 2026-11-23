@@ -1,4 +1,5 @@
 import {homelandAnchorBands} from "./homeland-label-scan.js";
+import {horizontalHomelandCorridors} from "./state-label-footprint.js";
 
 const STATE_MIN_LETTER_SPACING = 2.4;
 const PROVINCE_MIN_LETTER_SPACING = 0.7;
@@ -110,6 +111,8 @@ function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
   const size = frame ? base * Math.min(1.15, Math.max(0.55, Math.sqrt(width * height) / 180)) : base;
   const axisScale = Math.hypot(dx, dy);
   const span = frame ? (Math.abs(dx) * width + Math.abs(dy) * height) / axisScale : Infinity;
+  const horizontalSites = frame && item.rotation && Array.from(item.text).length > 1
+    ? horizontalHomelandCorridors(outline, item.x, item.y, item.rotation, sx, sy) : [];
   let candidateIndex = 0;
   for (const name of new Set([item.text, short])) {
     const rows = splitHomelandName(name, short);
@@ -125,6 +128,12 @@ function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
     for (const factor of factors) {
       const fontSize = size * factor;
       const margin = Math.max(2, fontSize * 0.12);
+      if (horizontalSites.length && Array.from(name).length > 1) {
+        const layout = homelandLineLayout([name], item.resolvedStyle, fontSize, 0, upright);
+        const neededWidth = layout.box.right - layout.box.left + 2 * margin;
+        const site = horizontalSites.find(site => site.span * sx >= neededWidth && fits(layout.box, margin, site));
+        if (site) return {layout, site, fontSize, candidateIndex: ++candidateIndex};
+      }
       const inside = (layout, site) => fits(emptyBox(), 0, site) && layout.glyphs.every(glyph => fits(glyph.box, margin, site));
       for (const lines of variants) {
         const layout = homelandLineLayout(lines, item.resolvedStyle, fontSize, rotation, upright);

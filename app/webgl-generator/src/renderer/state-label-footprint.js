@@ -75,12 +75,15 @@ function indexEdges(cells, rings, vertices, step) {
   return rows.size ? {rows, step, segments} : null;
 }
 
-// Sample inland spans along the country's long axis. Split at bays, holes
+// Sample inland spans along an axis. Split at bays, holes
 // and enclaves, using both the homeland and the visible grid shoreline.
 export function homelandLabelSites(outline, x, y, rotation) {
   if (!outline) return {sites: [], banks: []};
-  const cached = outline.labelSites;
-  if (cached && cached.x === x && cached.y === y && cached.rotation === rotation) return cached;
+  if (!outline.labelSites || outline.labelSites.x !== x || outline.labelSites.y !== y) {
+    outline.labelSites = {x, y, axes: new Map()};
+  }
+  const cached = outline.labelSites.axes.get(rotation);
+  if (cached) return cached;
   const angle = rotation * Math.PI / 180;
   const cos = Math.cos(angle), sin = Math.sin(angle);
   const project = ({a, b}) => [
@@ -116,7 +119,7 @@ export function homelandLabelSites(outline, x, y, rotation) {
         const room = inlandClearance(outline, px, py, halfSpan);
         const score = Math.min(halfSpan, room * 2.5) - 0.18 * Math.hypot(px - x, py - y);
         if (room > 0) {
-          if (sampleInterior) candidates.push({x: px, y: py, room, score});
+          if (sampleInterior) candidates.push({x: px, y: py, room, score, span: end - start});
           spans.push({start, end, room, along});
         }
       }
@@ -144,8 +147,34 @@ export function homelandLabelSites(outline, x, y, rotation) {
     if (sites.length === 5) break;
   }
   banks.sort((a, b) => b.score - a.score);
-  outline.labelSites = {x, y, rotation, sites, banks: banks.slice(0, 8)};
-  return outline.labelSites;
+  const result = {sites, banks: banks.slice(0, 8), corridors: candidates};
+  outline.labelSites.axes.set(rotation, result);
+  return result;
+}
+
+// Compare uninterrupted land through the same point in both directions.
+// A long peninsula can dominate the principal axis without extending through
+// the part of the mainland where the name can actually be printed.
+export function horizontalHomelandCorridors(outline, x, y, rotation, sx, sy) {
+  const {corridors} = homelandLabelSites(outline, x, y, 0);
+  const angle = rotation * Math.PI / 180, dx = Math.cos(angle), dy = Math.sin(angle);
+  const scale = Math.hypot(sx * dx, sy * dy);
+  const boundaries = outline.grid ? [outline, outline.grid] : [outline];
+  return corridors.filter(site => {
+    let low = -Infinity, high = Infinity;
+    for (const boundary of boundaries) {
+      for (const {a, b} of boundary.segments) {
+        const ax = a[0] - site.x, ay = a[1] - site.y, bx = b[0] - site.x, by = b[1] - site.y;
+        const u = dx * ay - dy * ax, v = dx * by - dy * bx;
+        if ((u > 0) === (v > 0)) continue;
+        const t = u / (u - v);
+        const along = (ax + t * (bx - ax)) * dx + (ay + t * (by - ay)) * dy;
+        if (along < 0) low = Math.max(low, along);
+        else high = Math.min(high, along);
+      }
+    }
+    return site.span * sx > (high - low) * scale;
+  });
 }
 
 function inlandClearance(outline, x, y, limit) {
