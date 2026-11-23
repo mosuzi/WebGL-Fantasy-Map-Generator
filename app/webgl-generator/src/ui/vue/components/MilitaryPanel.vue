@@ -82,6 +82,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :virtual-threshold="32"
     :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -110,9 +111,9 @@
     @export="handleMilitaryExport"
   />
 
-  <details class="panel-advanced-section military-advanced-section">
+  <details class="panel-advanced-section military-advanced-section" @toggle="advancedMounted ||= $event.currentTarget.open">
     <summary>高级战报档案与轻量结算</summary>
-    <div class="panel-advanced-section-body">
+    <div v-if="advancedMounted" class="panel-advanced-section-body">
   <section v-if="selected" class="military-event-list" aria-label="选中军团战报记录">
     <div class="military-event-list-heading">
       <strong>战报记录</strong>
@@ -468,6 +469,7 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const unitDefinitions = MILITARY_UNITS;
+const advancedMounted = ref(false);
 const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);

@@ -147,6 +147,7 @@ const props = defineProps({
     type: Array,
     required: true
   },
+  virtualThreshold: Number,
   selectedId: {
     type: [Number, String, null],
     default: null
@@ -281,7 +282,7 @@ const multiSelectionEnabled = computed(() => props.selectableRows || props.showR
 const debugEnabled = useDebugMode();
 const visibleColumns = computed(() => visibleListFields(props.columns, debugEnabled.value));
 const columnSpan = computed(() => visibleColumns.value.length + (props.showLocateAction ? 1 : 0) + (props.showRegenerationLock ? 1 : 0));
-const virtualEnabled = computed(() => props.rows.length > VIRTUAL_THRESHOLD);
+const virtualEnabled = computed(() => props.rows.length > (props.virtualThreshold ?? VIRTUAL_THRESHOLD));
 const virtualWindow = computed(() => {
   if (!virtualEnabled.value) return {start: 0, end: props.rows.length};
   const visibleCount = Math.max(1, Math.ceil(viewportHeight.value / rowHeight.value));

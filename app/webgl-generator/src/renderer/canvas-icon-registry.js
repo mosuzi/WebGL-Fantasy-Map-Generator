@@ -183,6 +183,14 @@ const spearhead = '<path class="military-glyph-fill" d="M10 1.2 13.4 10.2 10 13.
 const shield = '<path class="military-glyph-accent" d="M9.2 9.8 14.1 8.3 18.9 9.8V13.2Q18.5 16.8 14.1 19Q9.5 16.7 9.2 13.2Z"/><path d="M14.1 10.6v5.8" stroke="#f2dfaa" stroke-width="1.2"/>';
 const bow = '<path d="M4 2Q15 10 4 18" stroke-width="2"/><path d="m4 2-2 8 2 8" stroke-width="1"/>';
 const arrow = '<path d="M2 10h14.4"/><path fill="#241b12" stroke-width=".8" d="m14 7.7 4.9 2.3-4.9 2.3.9-2.3z"/>';
+const spearCenters = [4.2, 10, 15.8];
+const spearBlades = spearCenters.map(x => `M${x} 2l1.9 6.7-1.9 2-1.9-2Z`).join(" ");
+const spearShafts = spearCenters.map(x => `M${x} 7.5V18`).join(" ");
+const spearRank = `<path class="military-glyph-fill" stroke-width="1.2" d="${spearBlades}"/><path d="${spearShafts}"/>`;
+const arrowHeights = [5, 10, 15];
+const arrowShafts = arrowHeights.map(y => `M2 ${y}h14.4`).join(" ");
+const arrowheads = arrowHeights.map(y => `M18.9 ${y}l-4.9-1.7.9 1.7-.9 1.7Z`).join(" ");
+const arrowRank = `<path stroke-width="1.1" d="${arrowShafts}"/><path fill="#241b12" stroke-width=".7" d="${arrowheads}"/>`;
 const horse = '<path class="military-glyph-fill" d="M11 4 10 1.3 7.8 4.8 3.1 8.1 1.6 10.7 3.7 12.5 7.5 11.2Q6.4 14.6 4.9 18H18Q18.5 9 14 5.2L13.8 2.1Z"/><circle cx="7.5" cy="7.6" r=".8" fill="#241b12" stroke="none"/>';
 const horseBarding = '<path class="military-glyph-accent" d="M11.6 4.1Q16.5 5.8 18 13.5L15.5 17.8 10.8 16.4 12.6 13.9 9.4 12.8 11.4 10.2 8.4 9Z"/><path d="m12.4 8.3 3.9 1.9m-3.2 1.7 3.9 1.8" stroke="#f2dfaa" stroke-width="1"/>';
 const chamfron = '<path class="military-glyph-accent" d="m3.2 8.3 5.3-4 3 .6-3.7 4.8-3.5 1.9-2-.9Z"/><path d="m6.3 7.9 1.7-.8" stroke="#f2dfaa" stroke-width="1.15"/>';
@@ -190,10 +198,10 @@ const chamfron = '<path class="military-glyph-accent" d="m3.2 8.3 5.3-4 3 .6-3.7
 export const MILITARY_ICON_SVGS = Object.freeze({
   infantry: spearhead,
   "infantry-heavy": `<g transform="translate(-4 0)">${spearhead}</g>${shield}`,
-  "infantry-elite": `<g transform="translate(-3 3) rotate(-18 10 16) scale(.70 .84) translate(4.3 0)">${spearhead}</g><g transform="translate(3 3) rotate(18 10 16) scale(.70 .84) translate(4.3 0)">${spearhead}</g>${spearhead}`,
+  "infantry-elite": `<g transform="rotate(45 10 10) translate(.6 .6) scale(.94)">${spearRank}</g>`,
   archers: bow + arrow,
   "archers-heavy": `${bow}<g transform="rotate(-15 2 10)">${arrow}</g>${shield}`,
-  "archers-elite": `${bow}<g transform="rotate(-24 2 10)">${arrow}</g>${arrow}<g transform="rotate(24 2 10)">${arrow}</g>`,
+  "archers-elite": `<g transform="rotate(-45 10 10) translate(.8 .8) scale(.92)">${bow}${arrowRank}</g>`,
   cavalry: horse,
   "cavalry-heavy": horse + horseBarding,
   "cavalry-elite": `<g transform="translate(0 1.5) scale(.81)">${horse}${horseBarding}</g><g transform="translate(13 1) scale(.55 .96)">${bow}</g>`,

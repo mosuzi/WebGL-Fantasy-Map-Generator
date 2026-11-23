@@ -147,6 +147,19 @@ try {
     await management.locator(".current-row").getByText(label, {exact: true}).waitFor();
     await management.locator(".military-overview-stats").getByText(label, {exact: true}).waitFor();
     assert.equal(await management.locator(".military-overview-icon img").getAttribute("src"), src);
+    if (variant === "infantry") {
+      const rows = await management.locator(".object-table-row").count();
+      assert(rows > 0 && rows < realMap.summary.regiments, "军事列表首屏应只挂载可见行和缓冲行");
+      const advanced = management.locator(".military-advanced-section");
+      assert.equal(await advanced.locator(".military-advanced-editor").count(), 0, "收起战报时不应预建编辑器");
+      await advanced.locator("summary").click();
+      const draft = advanced.locator(".military-battle-event-note textarea");
+      await draft.fill("测试草稿");
+      await advanced.locator("summary").click();
+      await advanced.locator("summary").click();
+      assert.equal(await draft.inputValue(), "测试草稿");
+      await advanced.locator("summary").click();
+    }
     await management.locator(".floating-panel-close").click();
     if (await details.isVisible()) await details.locator(".floating-panel-close").click();
   }
@@ -363,6 +376,30 @@ try {
       };
     });
     const imageAudit = [...root.querySelectorAll("img")].map(image => ({src: image.src, width: image.naturalWidth, height: image.naturalHeight}));
+    // 将右上方向转为水平，比较枪尖或箭头前后两个截面的中心位置。
+    const eliteRanks = ["infantry-elite", "archers-elite"].map(key => {
+      const image = root.querySelector(`[data-icon-key="${key}"] img`);
+      const canvas = new OffscreenCanvas(120, 120);
+      const context = canvas.getContext("2d");
+      context.translate(60, 60);
+      context.rotate(Math.PI / 4);
+      context.drawImage(image, -40, -40, 80, 80);
+      function centersAt(x) {
+        const pixels = context.getImageData(x, 0, 1, 120).data;
+        const centers = [];
+        let start = null;
+        for (let y = 0; y < 120; y++) {
+          if (pixels[y * 4 + 3] >= 128) {
+            if (start === null) start = y;
+          } else if (start !== null) {
+            centers.push((start + y - 1) / 2);
+            start = null;
+          }
+        }
+        return centers;
+      }
+      return {key, middle: centersAt(72), tip: centersAt(84)};
+    });
     const iconCards = [...root.querySelectorAll("[data-icon-key]")].map(card => ({
       key: card.dataset.iconKey,
       width: card.getBoundingClientRect().width,
@@ -388,6 +425,7 @@ try {
       cityFingerprints: new Set(cityEntries.map(([, svg]) => normalizedFingerprint(svg))).size,
       svgAudit,
       imageAudit,
+      eliteRanks,
       iconCards,
       extraCards
     };
@@ -402,6 +440,11 @@ try {
   assert(atlas.svgAudit.every(icon => !icon.forbiddenContent), "SVG 图标包含文字、外部图像或远程资源");
   assert.equal(atlas.imageAudit.length, 14, "军事图标数量错误");
   assert(atlas.imageAudit.every(icon => icon.width > 0 && icon.height > 0), "存在无法加载的军事图标");
+  for (const {key, middle, tip} of atlas.eliteRanks) {
+    assert.equal(middle.length, 3, `${key} 中段必须能数清三支`);
+    assert.equal(tip.length, 3, `${key} 尖端必须能数清三支`);
+    assert(tip.every((center, i) => Math.abs(center - middle[i]) <= 1), `${key} 三支必须平行朝右上方`);
+  }
   assert(atlas.iconCards.every(card => card.scrollWidth <= card.clientWidth), "图鉴卡片存在横向裁切");
   assert.deepEqual(atlas.extraCards.map(card => card.key), [
     "roles:capital+provincial+port",
@@ -459,6 +502,7 @@ try {
     counts: atlas.counts,
     declaredCounts: atlas.declaredCounts,
     fingerprints: {city: atlas.cityFingerprints, markers: atlas.markerFingerprints},
+    eliteRanks: atlas.eliteRanks,
     entryViewports,
     atlasViewports,
     consoleErrors,
