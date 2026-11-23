@@ -1,5 +1,7 @@
 import {applyRegimentIconProfile, buildMilitary, MILITARY_STATUSES, MILITARY_UNITS, normalizeUnitRatios} from "../generator/military.js";
 import {stableHash} from "../generator/random.js";
+import {inspectManpower, manpowerContext, manpowerFitness, regimentManpower} from "../generator/military-manpower.js";
+import {regimentIconVariant} from "../generator/regiment-symbols.js";
 import {resolveWarzoneStatePair} from "../generator/war-consistency.js";
 import {
   assertLockedMilitaryRegiments,
@@ -427,6 +429,76 @@ export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整
       if (!state?.i) return true;
       return ratiosEqual(normalizeUnitRatios(state.militaryPolicy?.unitRatios), normalizedRatios);
     }
+  };
+}
+
+export function createSetMilitaryManpowerCommand(target, draft) {
+  const id = normalizeRegimentTarget(target);
+  const input = {...draft};
+  let changes;
+  function prepare(map) {
+    const {state, regiment} = findRegiment(map, id);
+    if (!regiment) throw new Error("找不到要调整的军团。");
+    const context = manpowerContext(map.pack, state, regiment);
+    const proposal = inspectManpower(context, input);
+    if (proposal.error) throw new Error(proposal.error);
+    if (!proposal.changed) return [];
+    const patches = [];
+    function change(path, values) {
+      const owner = path.reduce((node, key) => node?.[key], map);
+      if (!owner) return;
+      patches.push({path, values, before: Object.fromEntries(Object.keys(values).map(key => [key, snapshotOwnValue(owner, key)]))});
+    }
+    const mirrors = ["pack", "politics"].map(root => ({
+      root, indices: new Map((map[root]?.states?.[state.i]?.military || []).map((r, index) => [r.i, index]))
+    }));
+    for (const current of state.military) {
+      const editing = current.i === regiment.i;
+      const units = editing ? proposal.units : regimentManpower(current);
+      const fitness = manpowerFitness(map.pack, current, units, context.limits, proposal.national, proposal.nationalTotal);
+      const values = {suitability: {...current.suitability, ...fitness.suitability}, movementSpeed: fitness.movementSpeed};
+      if (editing) {
+        Object.assign(values, {u: units, a: proposal.total, dominantUnit: fitness.dominantUnit, dominantUnitLabel: fitness.dominantUnitLabel});
+        const symbol = applyRegimentIconProfile({...current, ...values});
+        if (fitness.dominantUnit !== current.dominantUnit || !["horse-archers", "cavalry-elite", "archers-elite", "infantry-elite"].includes(regimentIconVariant(current))) {
+          Object.assign(values, {icon: symbol.icon, iconVariant: symbol.iconVariant, iconLabel: symbol.iconLabel});
+        }
+      }
+      for (const {root, indices} of mirrors) {
+        if (indices.has(current.i)) change([root, "states", state.i, "military", indices.get(current.i)], values);
+      }
+    }
+    for (const root of ["pack", "politics"]) change([root, "states", state.i, "militaryPolicy"], {generatedTroops: proposal.nationalTotal});
+    const states = map.pack.states || map.politics.states;
+    const troops = states.reduce((total, item) => total + (item?.i === state.i ? proposal.nationalTotal : (item?.military || []).reduce((n, r) => n + Number(r.a || 0), 0)), 0);
+    for (const path of [["military", "metadata"], ["pack", "military", "metadata"]]) change(path, {troops});
+    return patches;
+  }
+  function install(map, reverting) {
+    for (const {path, values, before} of changes) {
+      const owner = path.reduce((node, key) => node[key], map);
+      for (const key of Object.keys(values)) {
+        if (reverting) restoreOwnValue(owner, key, before[key].present, before[key].value);
+        else owner[key] = cloneOptional(values[key]);
+      }
+    }
+  }
+  return {
+    label: "调整军团人数", domain: "military",
+    effects: {...MILITARY_EFFECTS, render: "none", pointsOnlyPicking: true, derived: ["object-index", "labels", "military-roster", "object-panels"],
+      affected: [...objectAffected("state", id.stateId), militaryTargetAffected(id)]},
+    getReplicaPaths() {
+      return (changes || []).flatMap(({path, values}) => Object.keys(values).map(key => [...path, key].join(".")));
+    },
+    isNoop({map}) {
+      changes = prepare(map);
+      return !changes.length;
+    },
+    apply({map}) {
+      changes ??= prepare(map);
+      install(map, false);
+    },
+    revert({map}) { install(map, true); }
   };
 }
 

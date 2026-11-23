@@ -8,7 +8,7 @@ export const MILITARY_REGENERATION_WORKER_WRITE_SET = Object.freeze([
 export const MILITARY_POLICY_WORKER_WRITE_SET = Object.freeze(["military", "pack.military", "pack.states", "politics.states"] as const);
 
 const VERIFY = "regress:economy-diplomacy-military-core-protocol";
-const commands = ["setRatios", "setStatus", "setStatusBatch", "moveStation", "setBase", "resolveBattle", "recordBattleEvent", "importBattleEvents", "clearBattleEvents", "rename"] as const;
+const commands = ["setRatios", "setManpower", "setStatus", "setStatusBatch", "moveStation", "setBase", "resolveBattle", "recordBattleEvent", "importBattleEvents", "clearBattleEvents", "rename"] as const;
 
 export const militaryManifest = {
   id: "military",

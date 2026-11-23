@@ -122,6 +122,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     onRegenerate: () => callbacks.onRegenerate?.(),
     onHover: row => callbacks.onHover?.(militaryObject(row)),
     onRatiosApply: (stateId, ratios) => callbacks.onRatiosApply?.(stateId, ratios),
+    onManpowerApply: (target, units) => callbacks.onManpowerApply?.(target, units),
     onStatusApply: (target, status) => callbacks.onStatusApply?.(target, status),
     onBatchStatusApply: (targets, status) => callbacks.onBatchStatusApply?.(targets, status),
     onStationApply: (target, destination) => callbacks.onStationApply?.(target, destination),

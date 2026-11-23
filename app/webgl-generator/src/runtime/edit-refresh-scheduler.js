@@ -326,6 +326,7 @@ function cityPointOptions(effects) {
 function labelRefreshOptions(effects) {
   return {
     ...cityPointOptions(effects),
+    militaryOnly: effects.derived.includes("military-roster"),
     cityRolesOnly: effects.derived.includes("city-role-labels"),
     stateIds: effects.derived.includes("state-capital")
       ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id))

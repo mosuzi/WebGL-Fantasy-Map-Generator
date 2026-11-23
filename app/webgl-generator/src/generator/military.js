@@ -752,7 +752,7 @@ function getCellType(cells, cell) {
   return "generic";
 }
 
-function getCellSuitability(pack, cell, unitName, troops = 0) {
+export function getCellSuitability(pack, cell, unitName, troops = 0) {
   const unit = unitByName(unitName);
   const cells = pack.cells;
   const terrain = getCellType(cells, cell);

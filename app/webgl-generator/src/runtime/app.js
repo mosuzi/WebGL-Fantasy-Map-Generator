@@ -189,6 +189,7 @@ import {
   createRenameMilitaryRegimentCommand,
   createResolveBattleCommand,
   createSetMilitaryBaseCommand,
+  createSetMilitaryManpowerCommand,
   createSetMilitaryRatiosCommand,
   createSetMilitaryStatusBatchCommand,
   createSetMilitaryStatusCommand,
@@ -1988,6 +1989,8 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("military", {confirm: true})),
     onHover: previewListObject,
     onRatiosApply: (stateId, ratios) => state.runtimeActions.edit.military.setRatios(stateId, ratios),
+    onManpowerApply: (target, units) => executeMilitaryCommandViaApi(state, documentRef,
+      createSetMilitaryManpowerCommand(target, units), `update military manpower: regiment=${target.id}`),
     onStatusApply: (target, status) => {
       const command = createSetMilitaryStatusCommand(target, status);
       const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});

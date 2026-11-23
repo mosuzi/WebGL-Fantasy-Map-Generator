@@ -60,6 +60,8 @@
         <i :style="{width: `${unit.percent}%`}"></i>
       </div>
     </div>
+    <MilitaryManpowerEditor :key="selected.id" :map="state.map" :version="state.version"
+      :target="militaryTarget(selected)" :apply="callbacks.onManpowerApply" />
   </section>
 
   <section v-if="selected" class="military-dossier" aria-label="军团静态档案">
@@ -420,6 +422,7 @@ import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import MilitaryManpowerEditor from "./MilitaryManpowerEditor.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
@@ -469,6 +472,7 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const unitDefinitions = MILITARY_UNITS;
+const baseCellsByRegiment = new WeakMap();
 const advancedMounted = ref(false);
 const detailGrid = ref(null);
 const activeAction = ref(null);
@@ -734,6 +738,7 @@ function buildMilitaryMetrics(map) {
     const policy = state.state.militaryPolicy || {};
     const stateCampaigns = campaignsForState(campaigns, state.id);
     const iconVariant = regimentIconVariant(regiment);
+    const baseCell = baseCellForRegiment(map, regiment);
     return {
       id,
       regimentId: regiment.i,
@@ -756,10 +761,10 @@ function buildMilitaryMetrics(map) {
       y: regiment.y,
       cell: regiment.cell,
       stationLabel: packCellLabel(map, regiment.cell),
-      baseCell: baseCellForRegiment(map, regiment),
+      baseCell,
       baseX: Number(regiment.bx),
       baseY: Number(regiment.by),
-      baseLabel: baseLabelForRegiment(map, regiment),
+      baseLabel: baseLabelForRegiment(map, regiment, baseCell),
       events: Array.isArray(regiment.events) ? regiment.events : [],
       eventCount: Array.isArray(regiment.events) ? regiment.events.length : 0,
       latestEvent: latestBattleEvent(regiment.events),
@@ -1155,12 +1160,17 @@ function packCellLabel(map, cell) {
 
 function baseCellForRegiment(map, regiment = {}) {
   const direct = Number(regiment.baseCell ?? regiment.bcell);
-  if (Number.isInteger(direct) && map?.pack?.cells?.p?.[direct]) return direct;
-  return nearestPackCell(map, regiment.bx, regiment.by);
+  const points = map?.pack?.cells?.p;
+  if (Number.isInteger(direct) && points?.[direct]) return direct;
+  const {bx, by} = regiment;
+  const previous = baseCellsByRegiment.get(regiment);
+  if (previous && previous.points === points && previous.bx === bx && previous.by === by) return previous.cell;
+  const cell = nearestPackCell(map, bx, by);
+  baseCellsByRegiment.set(regiment, {points, bx, by, cell});
+  return cell;
 }
 
-function baseLabelForRegiment(map, regiment = {}) {
-  const cell = baseCellForRegiment(map, regiment);
+function baseLabelForRegiment(map, regiment, cell) {
   if (Number.isInteger(cell)) return packCellLabel(map, cell);
   if (Number.isFinite(Number(regiment.bx)) && Number.isFinite(Number(regiment.by))) return `坐标 ${roundValue(regiment.bx, 1)}, ${roundValue(regiment.by, 1)}`;
   return "未知";

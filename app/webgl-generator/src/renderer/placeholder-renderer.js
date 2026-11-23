@@ -2417,6 +2417,11 @@ export class PlaceholderMapRenderer {
     if (!this.map) return;
     const startedAt = performance.now();
     const resourceBinding = binding || this.labelLayoutResourceOwner || this.activeRenderResourceBinding || this.surfaceResourceOwner;
+    if (options.militaryOnly && this.refreshMilitaryRoster()) {
+      if (resourceBinding) adoptOverlayLabelResourceBinding(this, resourceBinding);
+      this.refreshCityLayerOverlay();
+      return;
+    }
     if (!options.positionTarget || !this.refreshLabelPosition(options.positionTarget)) this.buildLabels(this.map, options);
     const builtAt = performance.now();
     if (resourceBinding) adoptOverlayLabelResourceBinding(this, resourceBinding);
@@ -2493,6 +2498,36 @@ export class PlaceholderMapRenderer {
     if (JSON.stringify(next) === JSON.stringify(this.unitPreferences)) return;
     this.unitPreferences = next;
     this.refreshMilitaryIconLabels();
+  }
+
+  refreshMilitaryRoster() {
+    const sources = getMilitaryIconItems(this.map, this.unitPreferences);
+    const items = new Map(this.militaryIconItems.map(item => [item.id, item]));
+    if (items.size !== sources.length || sources.some(source => !items.has(source.id))) return false;
+    const end = this.militaryIconItems.at(-1)?.node.nextSibling;
+    this.militaryIconItems = sources.map(source => {
+      const item = items.get(source.id);
+      if (item.iconVariant !== source.iconVariant) {
+        item.node.classList.replace(`military-map-icon--${item.iconVariant}`, `military-map-icon--${source.iconVariant}`);
+        const image = item.node.querySelector("img");
+        image.src = militaryIconDataUrl(source.iconVariant);
+        image.alt = source.iconLabel;
+      }
+      if (item.tooltip !== source.tooltip) {
+        item.node.title = source.tooltip;
+        item.node.setAttribute("aria-label", source.tooltip);
+        setDynamicCanvasTextContent(item.node.querySelector(".military-map-icon-count"), "military-count", formatMilitaryTroops(source.troops, this.unitPreferences));
+      }
+      return Object.assign(item, source);
+    });
+    // 兵力决定碰撞优先级和同位置标牌的拾取顺序。
+    let next = end;
+    for (let i = this.militaryIconItems.length - 1; i >= 0; i--) {
+      const node = this.militaryIconItems[i].node;
+      if (node.nextSibling !== next) node.parentNode.insertBefore(node, next);
+      next = node;
+    }
+    return true;
   }
 
   refreshMilitaryIconLabels({relayout = true} = {}) {
