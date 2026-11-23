@@ -598,6 +598,12 @@ function testPlaceholderDrawTailState() {
   assert.deepEqual(tail[4].args, [gl.BLEND]);
   assert.deepEqual(tail[5].args, [gl.DEPTH_TEST]);
   assert.deepEqual(tail[6].args, [false]);
+
+  gl.resetCalls();
+  renderer.updateLabels = () => gl.record("updateCityOverlayState");
+  renderer.draw({trackPerformance: false});
+  const cityFrame = gl.calls.map(call => call.name).filter(name => ["updateCityOverlayState", "drawArraysInstanced"].includes(name));
+  assert.deepEqual(cityFrame, ["updateCityOverlayState", "drawArraysInstanced"], "城市图标必须在当前帧使用标签同步的状态");
 }
 
 testStandaloneStateContract();

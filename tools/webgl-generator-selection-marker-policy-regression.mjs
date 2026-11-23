@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {
-  isSelectionForLabelItem,
+  isLabelTargetHighlighted,
   shouldShowDefaultSelectionMarker
 } from "../app/webgl-generator/src/renderer/selection-marker-policy.js";
 
@@ -28,7 +28,15 @@ assert.equal(shouldShowDefaultSelectionMarker({kind: "city", id: 7}, {
 
 const customLabel = {targetKind: "custom", targetId: 12};
 const labelSelection = {kind: "label", id: 12, targetKind: "custom", targetId: "12"};
-assert.equal(isSelectionForLabelItem(labelSelection, customLabel), true, "标签目标没有兼容字符串与数字 id");
+assert.equal(isLabelTargetHighlighted(labelSelection, [], customLabel.targetKind, customLabel.targetId), true, "标签目标没有兼容字符串与数字 id");
+const cityLabel = {kind: "label", id: "label-7", targetKind: "city", targetId: 7};
+for (const target of [{kind: "city", id: "7"}, cityLabel, {kind: "label", id: 7}]) {
+  assert.equal(isLabelTargetHighlighted(target, [], "city", 7), true);
+  assert.equal(isLabelTargetHighlighted(null, [target], "city", 7), true);
+  assert.equal(isLabelTargetHighlighted(target, [target], "city", 8), false);
+}
+assert.equal(isLabelTargetHighlighted(null, [{kind: "label", id: 7, targetKind: "custom"}], "city", 7), false);
+assert.equal(isLabelTargetHighlighted(null, [], "city", 7), false);
 assert.equal(shouldShowDefaultSelectionMarker(labelSelection, {labels: [visible(customLabel)]}), false, "可见标签已有高亮时仍显示默认圆点");
 assert.equal(shouldShowDefaultSelectionMarker(labelSelection, {labels: [hidden(customLabel)]}), true, "标签不可见时没有恢复默认圆点");
 

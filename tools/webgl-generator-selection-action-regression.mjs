@@ -48,7 +48,7 @@ assert.equal(events.at(-1).snapshot.editingObject, null, "进入不存在对象�
 const appSource = await readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 const statePanelSource = await readFile(new URL("../app/webgl-generator/src/ui/panels/state-panel.js", import.meta.url), "utf8");
 assert.match(appSource, /selectionStore\.startEditing\(object, \{select\}\)/, "进入编辑应原子设置选择与编辑态");
-assert.match(sourceBetween("const selectFromPanel", "const locateAndSelectObject"), /selectionStore\.setSelection\(\{object: nextObject\}, \{sourcePanelId: panelId\}\)/, "批次选择应把来源面板作为通知元数据保存");
+assert.match(sourceBetween("const selectFromPanel", "const locateAndSelectObject"), /selectionStore\.setSelection\(\{object\}, \{sourcePanelId: panelId\}\)/, "批次选择应传递原对象，并把来源面板作为通知元数据保存");
 assert.match(
   sourceBetween('performanceTrace, "selectionBatch"', "} else {"),
   /state\.selectionStore\.batch\(\(\) => \{[\s\S]*?preparePanelRefresh[\s\S]*?reconcilePersistentObjectHighlights[\s\S]*?refresh\(state, executedCommand\)/,

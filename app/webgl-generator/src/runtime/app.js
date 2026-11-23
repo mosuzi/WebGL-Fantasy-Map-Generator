@@ -814,10 +814,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   let measurementPanel = null;
   let suppressNextRiverPanelOpen = false;
   const selectFromPanel = (panelId, object) => {
-    const nextObject = panelId === "city-panel" && object?.kind === OBJECT_KIND.CITY
-      ? {...object, suppressLabelSelection: true}
-      : object;
-    selectionStore.setSelection({object: nextObject}, {sourcePanelId: panelId});
+    selectionStore.setSelection({object}, {sourcePanelId: panelId});
   };
   const locateAndSelectObject = (panelId, object, {afterSelect = null, locate = null, sourcePanelId = panelId} = {}) => {
     const located = object ? (locate ? locate(object) : state.renderer.locateObject(object)) : false;

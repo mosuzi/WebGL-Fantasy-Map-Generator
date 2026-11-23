@@ -52,6 +52,7 @@ import {
   summarizePoliticalVisualPaths
 } from "./political-layer.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
+import {resolveObject} from "../runtime/object-resolver.js";
 import {markDynamicCanvasTextNode, semanticLabelClassName, setDynamicCanvasTextContent} from "../runtime/canvas-text-contract.js";
 import {compositeConnectorPoints, pickCompositeConnector} from "./composite-connectors.js";
 import {
@@ -154,7 +155,7 @@ import {
 } from "./cell-attribute-store.js";
 import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelPlacement} from "./military-label-layout.js";
 import {cityLabelAnchorOffset} from "./city-label-icon-layout.js";
-import {isSelectionForLabelItem, shouldShowDefaultSelectionMarker} from "./selection-marker-policy.js";
+import {isLabelTargetHighlighted, matchesLabelTarget, shouldShowDefaultSelectionMarker} from "./selection-marker-policy.js";
 import {showListHoverOutline} from "./list-hover-outline.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
 import {DEFAULT_STATE_BORDER_BLEND, normalizeStateBorderBlendStyle} from "./state-border-blend-style.js";
@@ -3548,7 +3549,7 @@ export class PlaceholderMapRenderer {
   previewListObject(object) {
     return showListHoverOutline(this, object, (map, target) => {
       if (target.kind === OBJECT_KIND.LABEL) {
-        const item = this.labelItems.find(label => isSelectionForLabelItem(target, label));
+        const item = this.labelItems.find(label => matchesLabelTarget(target, label.targetKind, label.targetId));
         if (item?.visible && item.box) {
           const rect = this.canvas.getBoundingClientRect();
           return this.screenToWorld(rect.left + (item.box.left + item.box.right) / 2, rect.top + (item.box.top + item.box.bottom) / 2);
@@ -3591,6 +3592,13 @@ export class PlaceholderMapRenderer {
     if (updateDynamicBuffers && this.dynamicBuffersDirty.selection) this.updateSelectionBuffer();
     assertRenderCacheResourceBindings(this);
 
+    // Layout uploads city icon selection and visibility for this frame and has its own timing.
+    let overlayMs = 0;
+    if (updateOverlay) {
+      const overlayStartedAt = performance.now();
+      this.updateLabels();
+      overlayMs = performance.now() - overlayStartedAt;
+    }
     const gl = this.gl;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.clearColor(...(this.visualTheme?.canvas?.background || this.map.layers.background));
@@ -3809,7 +3817,7 @@ export class PlaceholderMapRenderer {
     const cityMoveGhostInstances = this.cityMovePreview ? 1 : 0;
 
     const oceanCurrentProjection = createLineWidthProjection({map: this.map, camera: this.camera, canvas: this.canvas, canvasSize: this.canvasSize});
-    const drawMs = roundMs(performance.now() - startedAt);
+    const drawMs = roundMs(performance.now() - startedAt - overlayMs);
     const glErrorChecked = checkGlError;
     const glError = glErrorChecked ? gl.getError() : Number(this.lastDraw?.glError || 0);
     this.lastDraw = {
@@ -3830,7 +3838,6 @@ export class PlaceholderMapRenderer {
       }
     };
     if (trackPerformance) this.completePerformanceEvent(event, {ms: drawMs, glError, layerOrder: [...layerOrder]}, performance.now());
-    if (updateOverlay) this.updateLabels();
     } catch (error) {
       if (trackPerformance) this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
       throw error;
@@ -4050,7 +4057,8 @@ export class PlaceholderMapRenderer {
     if (!this.map) return null;
     if (this.retainedResourcePublishSuspended > 0 || this.retainedResourceState === "invalid") return null;
     assertRendererRetainedResourceBindings(this, {picking: true, overlay: true});
-    const label = this.pickLabel(clientX, clientY);
+    const labelHit = this.pickLabel(clientX, clientY);
+    const label = labelHit?.kind === OBJECT_KIND.LABEL ? labelHit : null;
     const markerIcon = this.pickMarkerIcon(clientX, clientY);
     const militaryIcon = this.pickMilitaryIcon(clientX, clientY);
     const rect = this.canvas.getBoundingClientRect();
@@ -4073,9 +4081,10 @@ export class PlaceholderMapRenderer {
       }
     };
     const cityPickRadiusWorld = this.pickThresholdWorld(CITY_PICK_RADIUS_CSS_PX);
-    let cityObject = this.layerVisibility.cities || this.layerVisibility.population
-      ? pickCity(this.map, this.objectPickingIndex, world.x, world.y, cityPickRadiusWorld, cityPickOptions)
-      : null;
+    let cityObject = labelHit?.kind === OBJECT_KIND.CITY ? labelHit : null;
+    if (!cityObject && (this.layerVisibility.cities || this.layerVisibility.population)) {
+      cityObject = pickCity(this.map, this.objectPickingIndex, world.x, world.y, cityPickRadiusWorld, cityPickOptions);
+    }
     if (cycleCities && cityObject?.overlapCandidateIds?.length > 1) {
       const key = `${result.gridCell}:${cityObject.overlapCandidateIds.join(",")}`;
       const index = this.cityPickCycle.key === key
@@ -4100,8 +4109,8 @@ export class PlaceholderMapRenderer {
     const riverControlPoint = pickRiverControlPoint(this.riverWaypointPreview, world.x, world.y, this.pickThresholdWorld(13));
     const lake = hasGridCell ? pickLakeObject(this.map, result) : null;
     const politicalObject = hasGridCell ? pickPoliticalObject(this.map, result, this.colorMode) : null;
-    const object = militaryIcon || markerIcon || label || diplomacyRelation || tradeFlow || lake || cityObject || marker || military || riverControlPoint || river || route || politicalObject;
-    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (highlightedConnector?.candidateCount || tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (riverControlPoint ? 1 : 0) + (lake ? 1 : 0) + (politicalObject ? 1 : 0);
+    const object = militaryIcon || markerIcon || labelHit || diplomacyRelation || tradeFlow || lake || cityObject || marker || military || riverControlPoint || river || route || politicalObject;
+    this.lastObjectCandidateCount = (labelHit ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (highlightedConnector?.candidateCount || tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (riverControlPoint ? 1 : 0) + (lake ? 1 : 0) + (politicalObject ? 1 : 0);
     const gridPackCellCount = Number.isInteger(result.gridCell)
       ? Number(this.gridCellDiagnostics.packCounts?.[result.gridCell] || 0)
       : 0;
@@ -4405,7 +4414,9 @@ export class PlaceholderMapRenderer {
     if (this.overlayInteractionSuspended) {
       return true;
     }
-    this.draw();
+    // A city-to-city switch reuses the same pipeline. Let the next regular draw poll GL errors.
+    const switchingCities = previous?.kind === OBJECT_KIND.CITY && next?.kind === OBJECT_KIND.CITY;
+    this.draw({checkGlError: !switchingCities});
     return true;
   }
 
@@ -5306,7 +5317,7 @@ export class PlaceholderMapRenderer {
 
     const labelStartedAt = performance.now();
     for (const item of labelItems) {
-      const selected = isSelectionForLabelItem(this.selection, item) || this.objectHighlights.some(highlight => isSelectionForLabelItem(highlight, item));
+      const selected = isLabelTargetHighlighted(this.selection, this.objectHighlights, item.targetKind, item.targetId);
       const zoneLabel = item.targetKind === LABEL_TARGET_KIND.ZONE;
       const forceVisible = selected && (item.targetKind === LABEL_TARGET_KIND.CUSTOM || zoneLabel);
       item.node.classList.toggle("selected", selected);
@@ -5589,7 +5600,7 @@ export class PlaceholderMapRenderer {
     let visible = 0;
 
     for (const item of this.cityIconItems) {
-      const selected = isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.CITY, item.id);
+      const selected = isLabelTargetHighlighted(this.selection, this.objectHighlights, LABEL_TARGET_KIND.CITY, item.id);
       const screen = this.worldToScreen(item.x, item.y, rect);
       const sizeScale = cityIconScale(scale, item);
       const box = cityIconBoxForItem(item, screen, sizeScale);
@@ -5803,10 +5814,13 @@ export class PlaceholderMapRenderer {
     const x = clientX - rect.left;
     const y = clientY - rect.top;
     for (const item of this.labelItems) {
-      if (item.targetKind === LABEL_TARGET_KIND.CITY && !item.manualPath) continue;
       if (!item.visible || !item.box) continue;
       if (x < item.box.left || x > item.box.right || y < item.box.top || y > item.box.bottom) continue;
       if (item.box.parts && !item.box.parts.some(part => x >= part.left && x <= part.right && y >= part.top && y <= part.bottom)) continue;
+      if (item.targetKind === LABEL_TARGET_KIND.CITY && !item.manualPath) {
+        if (!this.layerVisibility.cities || !this.cityIconItemsById.get(String(item.targetId))?.visible) continue;
+        return resolveObject(this.map, {kind: OBJECT_KIND.CITY, id: item.targetId});
+      }
       return {
         kind: OBJECT_KIND.LABEL,
         id: item.targetId,
