@@ -8914,30 +8914,11 @@ input.ui-switch-native {
   gap: 8px;
 }
 
-.military-panel-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.military-panel-summary div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  border: 1px solid var(--panel-border);
-  border-radius: 7px;
-  padding: 8px;
-  background: var(--panel-surface-alt);
-}
-
-.military-panel-summary span,
 .military-panel-details .ui-key-value-label {
   color: var(--panel-text);
   font-size: 11px;
 }
 
-.military-panel-summary strong,
 .military-panel-details .ui-key-value-value {
   overflow: hidden;
   color: var(--panel-text);
@@ -10613,8 +10594,17 @@ input.ui-switch-native {
 .feature-panel-summary,
 .population-panel-summary,
 .zone-panel-summary {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-key-value-min)), 1fr));
-  margin-bottom: 6px;
+  gap: 2px 12px;
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+
+  & > .ui-key-value-item {
+    gap: 4px;
+  }
+
+  & .ui-key-value-label {
+    color: var(--panel-muted);
+  }
 }
 
 .state-panel-controls,
