@@ -6,6 +6,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
 import {
   SHORE_TOPOLOGY_ALGORITHM,
   SHORE_TOPOLOGY_GATES,
@@ -705,11 +706,11 @@ function runPureRegression() {
   });
   assert.equal(flippedBandFixture.oppositeWinding, true, "用户截图对应的法向急转固定反例必须检出实际四三角翻面");
   assert.deepEqual(flippedBandFixture.signedAreas.map(area => Math.sign(area)), [-1, 1, 1, 1], "固定反例必须保持一个反向、三个同向三角面");
-  assert.match(
-    rendererSource,
-    /const shoreLayers = smoothCellBorders && shouldDrawShoreVisualBands\(colorMode\) && shoreVisualPaths\s*\?\s*buildShoreSurfaceVertexLayers/,
-    "关闭平滑时不得保留海岸过渡面"
-  );
+  const counts = ["landCorrectionVertexCount", "waterCorrectionVertexCount", "landCoverVertexCount", "waterCoverVertexCount"];
+  const hardRenderer = {viewOptions: {smoothCellBorders: false}, colorMode: "height",
+    ...Object.fromEntries(counts.map(key => [key, 3]))};
+  PlaceholderMapRenderer.prototype.refreshGpuResidentShoreSurface.call(hardRenderer);
+  assert.ok(counts.every(key => hardRenderer[key] === 0), "关闭平滑时四组海岸过渡面均不得绘制");
   assert.match(rendererSource, /export function shouldDrawShoreVisualBands\(colorMode\) \{\s*return colorMode === "height" \|\| colorMode === "states" \|\| colorMode === "provinces";\s*\}/, "海岸窄带判定不得恒为 false");
   assert.match(shoreLayerSource, /if \(smoothCellBorders && paths\)[\s\S]*return;[\s\S]*sharedVoronoiEdge\(map, cell, neighbor\)/, "硬边模式必须完整回退共享 Voronoi 边");
 

@@ -12,15 +12,16 @@ import {queryBrushCellsInRadius} from "../app/webgl-generator/src/runtime/height
 import {createBrushCursorPreview, resolveBrushCursor} from "../app/webgl-generator/src/ui/brush-cursor-preview.js";
 
 const EXPECTED_CONTRACTS = Object.freeze({
-  height: [28, 6, 96, 2],
-  "height-selection": [48, 8, 160, 4],
-  state: [28, 1, 32, 1],
-  province: [28, 1, 32, 1],
-  culture: [28, 1, 32, 1],
-  religion: [28, 1, 32, 1],
-  biome: [28, 1, 32, 1],
-  suitability: [28, 1, 32, 1],
-  "economy-market": [18, 2, 120, 2]
+  "height-line": [8, 1, 32, 1],
+  height: [8, 1, 32, 1],
+  "height-selection": [8, 1, 32, 1],
+  state: [8, 1, 32, 1],
+  province: [8, 1, 32, 1],
+  culture: [8, 1, 32, 1],
+  religion: [8, 1, 32, 1],
+  biome: [8, 1, 32, 1],
+  suitability: [8, 1, 32, 1],
+  "economy-market": [8, 1, 32, 1]
 });
 
 function testContractsAndNormalization() {
@@ -92,12 +93,12 @@ function testResolverAllowlist() {
   assert.equal(resolveBrushCursor(state), null, "连通等高单点选区等待时不应显示普通高度画笔光标");
   state.heightEdit.terrainSelectionPoint = null;
   assert.equal(resolveBrushCursor(state)?.id, BRUSH_RADIUS_ID.HEIGHT, "无选区等待态的普通抬升没有恢复高度画笔光标");
-  state.heightEdit.terrainSelectionPaintPending = {request: {radius: 80}};
+  state.heightEdit.terrainSelectionPaintPending = {request: {radius: 30}};
   state.heightEdit.terrainSelectionBox = {request: {source: "rectangle"}, start: null};
-  assert.deepEqual(resolveBrushCursor(state), {id: BRUSH_RADIUS_ID.HEIGHT_SELECTION, radius: 80}, "待落笔高度选区没有优先使用 request.radius");
+  assert.deepEqual(resolveBrushCursor(state), {id: BRUSH_RADIUS_ID.HEIGHT_SELECTION, radius: 30}, "待落笔高度选区没有优先使用 request.radius");
   state.heightEdit.terrainSelectionPaintPending = null;
-  state.heightEdit.terrainSelectionPaint = {request: {radius: 76}};
-  assert.deepEqual(resolveBrushCursor(state), {id: BRUSH_RADIUS_ID.HEIGHT_SELECTION, radius: 76}, "活动高度选区没有优先使用 request.radius");
+  state.heightEdit.terrainSelectionPaint = {request: {radius: 26}};
+  assert.deepEqual(resolveBrushCursor(state), {id: BRUSH_RADIUS_ID.HEIGHT_SELECTION, radius: 26}, "活动高度选区没有优先使用 request.radius");
   state.heightEdit.terrainSelectionBox = null;
   state.heightEdit.terrainSelectionPaint = null;
 
@@ -294,4 +295,4 @@ testExactHeightPaintCenter();
 testCandidateMonotonicity();
 await testOverlayLifecycleAndIntegration();
 
-console.log("画笔光标回归通过：9 类半径契约、白名单、精确中心、1/2/4 倍投影、无事件 overlay 与生命周期清理均符合要求。");
+console.log("画笔光标回归通过：10 类大小设置、白名单、精确中心、1/2/4 倍投影、无事件 overlay 与生命周期清理均符合要求。");

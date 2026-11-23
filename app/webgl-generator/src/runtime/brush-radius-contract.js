@@ -1,5 +1,6 @@
 export const BRUSH_RADIUS_ID = Object.freeze({
   HEIGHT: "height",
+  HEIGHT_LINE: "height-line",
   HEIGHT_SELECTION: "height-selection",
   STATE: "state",
   PROVINCE: "province",
@@ -10,49 +11,51 @@ export const BRUSH_RADIUS_ID = Object.freeze({
   ECONOMY_MARKET: "economy-market"
 });
 
-const BRUSH_RADIUS_CONTRACTS = Object.freeze({
-  [BRUSH_RADIUS_ID.HEIGHT]: freezeContract(28, 6, 96, 2),
-  [BRUSH_RADIUS_ID.HEIGHT_SELECTION]: freezeContract(48, 8, 160, 4),
-  [BRUSH_RADIUS_ID.STATE]: freezeContract(28, 1, 32, 1),
-  [BRUSH_RADIUS_ID.PROVINCE]: freezeContract(28, 1, 32, 1),
-  [BRUSH_RADIUS_ID.CULTURE]: freezeContract(28, 1, 32, 1),
-  [BRUSH_RADIUS_ID.RELIGION]: freezeContract(28, 1, 32, 1),
-  [BRUSH_RADIUS_ID.BIOME]: freezeContract(28, 1, 32, 1),
-  [BRUSH_RADIUS_ID.SUITABILITY]: freezeContract(28, 1, 32, 1),
-  [BRUSH_RADIUS_ID.ECONOMY_MARKET]: freezeContract(18, 2, 120, 2)
+const RADIUS = Object.freeze({defaultValue: 8, min: 1, max: 32, step: 1});
+export const SAVED_BRUSH_RADIUS_IDS = Object.freeze(Object.values(BRUSH_RADIUS_ID));
+
+// 高度标尺为 0～100；连续落笔每次最多改变五级，等高扰动控制在三级内。
+export const HEIGHT_BRUSH_STRENGTH = Object.freeze({
+  strength: Object.freeze({min: 1, max: 5, defaultValue: 2}),
+  levelPerturbation: Object.freeze({min: 0, max: 3, defaultValue: 0}),
+  linePower: Object.freeze({min: -5, max: 5, defaultValue: 2})
 });
 
-export const SAVED_BRUSH_RADIUS_IDS = Object.freeze([
-  BRUSH_RADIUS_ID.STATE,
-  BRUSH_RADIUS_ID.PROVINCE,
-  BRUSH_RADIUS_ID.CULTURE,
-  BRUSH_RADIUS_ID.RELIGION,
-  BRUSH_RADIUS_ID.BIOME,
-  BRUSH_RADIUS_ID.SUITABILITY
-]);
+function normalizeSetting(contract, value) {
+  if (value == null || value === "" || !Number.isFinite(Number(value))) return contract.defaultValue;
+  return Math.max(contract.min, Math.min(contract.max, Math.round(Number(value))));
+}
+
+export function normalizeBrushStrength(key, value) {
+  return normalizeSetting(HEIGHT_BRUSH_STRENGTH[key], value);
+}
+
+export function normalizeSavedBrushStrengths(source) {
+  return Object.fromEntries(Object.keys(HEIGHT_BRUSH_STRENGTH).map(key => [key, normalizeBrushStrength(key, source?.[key])]));
+}
+
+export function hasCompleteSavedBrushStrengths(source) {
+  return Object.keys(HEIGHT_BRUSH_STRENGTH).every(key => Number.isInteger(source?.[key]) && source[key] === normalizeBrushStrength(key, source[key]));
+}
 
 export function normalizeSavedBrushRadii(source) {
   const values = source && typeof source === "object" ? source : {};
-  return Object.fromEntries(SAVED_BRUSH_RADIUS_IDS.map(id => [id, Math.round(normalizeBrushRadius(id, values[id]))]));
+  return Object.fromEntries(SAVED_BRUSH_RADIUS_IDS.map(id => [id, normalizeBrushRadius(id, values[id])]));
 }
 
 export function hasCompleteSavedBrushRadii(source) {
   return Boolean(source && typeof source === "object" && SAVED_BRUSH_RADIUS_IDS.every(id =>
-    Number.isInteger(source[id]) && source[id] >= BRUSH_RADIUS_CONTRACTS[id].min && source[id] <= BRUSH_RADIUS_CONTRACTS[id].max
+    Number.isInteger(source[id]) && source[id] >= RADIUS.min && source[id] <= RADIUS.max
   ));
 }
 
 export function readBrushRadiusContract(id) {
-  const contract = BRUSH_RADIUS_CONTRACTS[id];
-  if (!contract) throw new Error(`未知画笔半径契约：${id}`);
-  return contract;
+  if (!SAVED_BRUSH_RADIUS_IDS.includes(id)) throw new Error(`未知画笔半径契约：${id}`);
+  return RADIUS;
 }
 
 export function normalizeBrushRadius(id, value) {
-  const contract = readBrushRadiusContract(id);
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return contract.defaultValue;
-  return Math.max(contract.min, Math.min(contract.max, numeric));
+  return normalizeSetting(readBrushRadiusContract(id), value);
 }
 
 export function projectWorldRadiusToScreen(center, radius, projectWorldPoint) {
@@ -68,10 +71,6 @@ export function projectWorldRadiusToScreen(center, radius, projectWorldPoint) {
     radiusX: Math.hypot(projectedX.x - projectedCenter.x, projectedX.y - projectedCenter.y),
     radiusY: Math.hypot(projectedY.x - projectedCenter.x, projectedY.y - projectedCenter.y)
   };
-}
-
-function freezeContract(defaultValue, min, max, step) {
-  return Object.freeze({defaultValue, min, max, step});
 }
 
 function isFinitePoint(point) {

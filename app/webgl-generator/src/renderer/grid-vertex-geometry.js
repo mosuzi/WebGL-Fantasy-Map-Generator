@@ -1,4 +1,5 @@
 const resolvedVertexCache = new WeakMap();
+const resolvedOverrides = new WeakMap();
 const MAX_COLLAPSED_VERTEX_SPREAD = 0.25;
 
 export function resolvedGridVertexPoints(grid) {
@@ -39,6 +40,11 @@ export function resolvedGridVertexPoints(grid) {
 
   stabilizeResolvedGridVertexPoints(storedPoints, resolved, grid?.cells?.v, refinedGroupsByVertex);
 
+  const overrides = new Map();
+  for (const vertex of refinedGroupsByVertex.keys()) {
+    if (resolved[vertex] !== storedPoints[vertex]) overrides.set(vertex, resolved[vertex]);
+  }
+  resolvedOverrides.set(grid, overrides);
   resolvedVertexCache.set(grid, resolved);
   return resolved;
 }
@@ -62,7 +68,19 @@ export function stabilizeResolvedGridVertexPoints(storedPoints, resolvedPoints, 
   return resolvedPoints;
 }
 
+// 预制底图已经消解过重叠顶点。随底图传回少量修正坐标，首笔即可按 ID 局部读取。
+export function gridVertexOverrides(grid) {
+  resolvedGridVertexPoints(grid);
+  return resolvedOverrides.get(grid);
+}
+
+export function installGridVertexOverrides(grid, overrides) {
+  if (grid && overrides instanceof Map) resolvedOverrides.set(grid, overrides);
+}
+
 export function resolvedGridVertexPoint(grid, vertex) {
+  const overrides = resolvedOverrides.get(grid);
+  if (overrides) return overrides.get(vertex) || grid.vertices.p[vertex] || null;
   return resolvedGridVertexPoints(grid)[vertex] || grid?.vertices?.p?.[vertex] || null;
 }
 

@@ -67,6 +67,8 @@ async function verifyStroke(name) {
     assert.equal(applied.rebuilds, 0, "陆地等高不应重建整图");
     assert.equal(applied.syncReads, 0, "画笔预览同步读取了显卡状态");
     assert.ok(applied.firstFrameMs < 50 && applied.maxPreviewCpuMs < 50 && applied.commitMs < 50, JSON.stringify(applied));
+    await page.mouse.move(0, 0);
+    const committed = await pixels();
     await page.keyboard.press("Control+z");
     const undone = await page.evaluate(inspectStroke, "original");
     assert.equal(undone.mismatches, 0, "撤销未精确恢复高度或镜像");
@@ -74,7 +76,7 @@ async function verifyStroke(name) {
     assert.deepEqual(await pixels(), before, "撤销后的格子颜色没有恢复");
     assert.ok((await page.evaluate(() => window.webglGeneratorApi.history.redo())).ok);
     assert.equal((await page.evaluate(inspectStroke, "applied")).mismatches, 0);
-    assert.deepEqual(await pixels(), held, "重做后的格子颜色不一致");
+    assert.deepEqual(await pixels(), committed, "重做后的格子颜色不一致");
     assert.ok((await page.evaluate(() => window.webglGeneratorApi.history.undo())).ok);
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();

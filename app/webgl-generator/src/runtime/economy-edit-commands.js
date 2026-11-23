@@ -225,7 +225,7 @@ export function buildMarketAssignmentChanges(map, marketId, packCellIds) {
   }).filter(change => change.before !== change.after);
 }
 
-export function getMarketAssignmentBrushChanges(map, point, brush, originals) {
+export function getMarketAssignmentBrushChanges(map, point, brush, originals, anchorPackCell = null) {
   const target = Number(brush?.targetMarketId);
   if (!Number.isInteger(target) || target <= 0 || !map?.pack?.markets?.[target]) return [];
   const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, brush?.radius);
@@ -237,7 +237,7 @@ export function getMarketAssignmentBrushChanges(map, point, brush, originals) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     const dx = x - point.x;
     const dy = y - point.y;
-    if (dx * dx + dy * dy > radiusSq) continue;
+    if (packCell !== anchorPackCell && dx * dx + dy * dy > radiusSq) continue;
     const current = Number(map.pack.cells.market?.[packCell] || 0);
     if (!originals.has(packCell)) originals.set(packCell, current);
     const before = Number(originals.get(packCell) || 0);

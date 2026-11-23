@@ -1,4 +1,35 @@
-import {colorForCell, isLandCell} from "./color-modes.js";
+import {colorForCell} from "./color-modes.js";
+
+// 画笔立即改变高程，水体分类由玩家另行重算。岸线与底图共用海平面。
+function isLandCell(cell, map) {
+  return map.grid.cells.h[cell] >= 20;
+}
+
+// 原水体保留其类别。新淹没的连通区域按接入的水体区分海岸和湖岸。
+function createShoreWaterClassifier(map) {
+  const cells = map.grid.cells;
+  const classified = new Map();
+  const feature = cell => map.features.features[cells.f?.[cell]];
+  function classify(start) {
+    const original = feature(start);
+    if (!original?.land) return original?.type === "ocean";
+    if (classified.has(start)) return classified.get(start);
+    const flooded = new Set([start]);
+    let ocean = false;
+    for (const cell of flooded) {
+      if (cells.b?.[cell]) ocean = true;
+      for (const neighbor of cells.c[cell] || []) {
+        if (isLandCell(neighbor, map)) continue;
+        const adjacent = feature(neighbor);
+        if (adjacent?.land) flooded.add(neighbor);
+        else if (adjacent?.type === "ocean") ocean = true;
+      }
+    }
+    for (const cell of flooded) classified.set(cell, ocean);
+    return ocean;
+  }
+  return {classify, classified};
+}
 import {
   interpolateWorldPoint,
   isWorldPoint,
@@ -68,13 +99,73 @@ export function pushShoreLineLayers(vertices, context, visibility = {}, cellVisu
 }
 
 export function buildShoreLinePathVertices(map, path, featureType, viewOptions = {}) {
-  const vertices = [];
+  const points = buildShoreRenderPoints(path, map);
+  // 每段两个三角形，每个圆接头十个三角形。大环直接写入最终精度的数组。
+  const writer = shoreVertexWriter(points.length * 36 * 6);
   const color = featureType === "coastline"
     ? viewOptions.visualTheme?.lines?.coastline || SHORE_VISUAL_STYLE.coastlineStroke
     : viewOptions.visualTheme?.lines?.lakeShore || SHORE_VISUAL_STYLE.lakeShoreStroke;
   const widthWorld = featureType === "coastline" ? SHORE_VISUAL_STYLE.coastlineWidthWorld : SHORE_VISUAL_STYLE.lakeShoreWidthWorld;
-  pushSnapshotShoreLines(vertices, [path], createRenderContext(map), color, widthWorld);
-  return new Float32Array(vertices);
+  pushSnapshotShorePath(writer, path, points, createRenderContext(map), color, widthWorld);
+  return writer.vertices.subarray(0, writer.offset);
+}
+
+function shoreVertexWriter(length) {
+  return {vertices: new Float32Array(length), offset: 0, push(x, y, r, g, b, a) {
+    this.vertices[this.offset++] = x;
+    this.vertices[this.offset++] = y;
+    this.vertices[this.offset++] = r;
+    this.vertices[this.offset++] = g;
+    this.vertices[this.offset++] = b;
+    this.vertices[this.offset++] = a;
+  }};
+}
+
+export function patchHardShoreLines(map, before, after, previousVertices, visibility, viewOptions) {
+  // 直岸的每条有效边包含一段线身和两个十边形端帽，边与边之间没有共享顶点。
+  const words = (6 + 2 * 3 * 10) * 6;
+  const groups = ["coastline", "lakeShore"].filter(kind => visibility[kind] !== false);
+  const spans = new Map(), previousEdges = new Map();
+  const edgeKey = (kind, edge) => `${kind}:${edge.landCell}:${edge.waterCell}`;
+  let cursor = 0, required = 0;
+  for (const kind of groups) {
+    const retained = new Set(after[kind]);
+    for (const path of before[kind]) {
+      const start = cursor;
+      for (const edge of path.sourceEdges) {
+        if (pointsNear(edge.a, edge.b)) continue;
+        if (!retained.has(path)) previousEdges.set(edgeKey(kind, edge), cursor);
+        cursor += words;
+      }
+      spans.set(path, {start, end: cursor});
+    }
+    for (const path of after[kind]) {
+      const span = spans.get(path);
+      if (span) required += span.end - span.start;
+      else for (const edge of path.sourceEdges) if (!pointsNear(edge.a, edge.b)) required += words;
+    }
+  }
+  if (cursor !== previousVertices.length) return null;
+  const writer = shoreVertexWriter(required);
+  const copy = (start, end) => {
+    writer.vertices.set(previousVertices.subarray(start, end), writer.offset);
+    writer.offset += end - start;
+  };
+  const context = createRenderContext(map);
+  for (const kind of groups) {
+    const color = viewOptions.visualTheme?.lines?.[kind] || SHORE_VISUAL_STYLE[kind + "Stroke"];
+    for (const path of after[kind]) {
+      const span = spans.get(path);
+      if (span) { copy(span.start, span.end); continue; }
+      for (const edge of path.sourceEdges) {
+        if (pointsNear(edge.a, edge.b)) continue;
+        const offset = previousEdges.get(edgeKey(kind, edge));
+        if (offset !== undefined) copy(offset, offset + words);
+        else pushWorldPolylineMesh(writer, context, [edge.a, edge.b], color, SHORE_VISUAL_STYLE[kind + "WidthWorld"], {joinMode: "caps"});
+      }
+    }
+  }
+  return writer.vertices;
 }
 
 function pushShoreLines(vertices, context, options) {
@@ -92,6 +183,7 @@ function pushShoreLines(vertices, context, options) {
 
   if (pushSourceEdgeShoreLines(vertices, context, paths, {drawCoastline, drawLakeShore, visualTheme})) return;
 
+  const water = createShoreWaterClassifier(map);
   for (const cell of cells.i || []) {
     for (const neighbor of cells.c[cell] || []) {
       if (neighbor <= cell) continue;
@@ -99,8 +191,7 @@ function pushShoreLines(vertices, context, options) {
       const neighborLand = isLandCell(neighbor, map);
       if (cellLand === neighborLand) continue;
       const waterCell = cellLand ? neighbor : cell;
-      const waterFeature = map.features.features[cells.f?.[waterCell]];
-      const isOcean = waterFeature?.type === "ocean";
+      const isOcean = water.classify(waterCell);
       if (isOcean && !drawCoastline) continue;
       if (!isOcean && !drawLakeShore) continue;
       const color = isOcean
@@ -131,13 +222,17 @@ function pushSourceEdgeShoreLines(vertices, context, paths, {drawCoastline, draw
 function pushSnapshotShoreLines(vertices, paths, context, color, widthWorld) {
   for (const path of paths || []) {
     const points = buildShoreSurfaceModel(path, context.map).renderPoints;
-    if (points.length < 2) continue;
-    pushWorldPolylineMesh(vertices, context, points, color, widthWorld, {
-      closed: path.closed && pointsNear(points[0], points.at(-1)),
-      joinMode: "round",
-      maxSegmentWorld: SHORE_VISUAL_STYLE.maxRenderSegmentWorld
-    });
+    pushSnapshotShorePath(vertices, path, points, context, color, widthWorld);
   }
+}
+
+function pushSnapshotShorePath(vertices, path, points, context, color, widthWorld) {
+  if (points.length < 2) return;
+  pushWorldPolylineMesh(vertices, context, points, color, widthWorld, {
+    closed: path.closed && pointsNear(points[0], points.at(-1)),
+    joinMode: "round",
+    maxSegmentWorld: SHORE_VISUAL_STYLE.maxRenderSegmentWorld
+  });
 }
 
 export function sharedVoronoiEdge(map, cell, neighbor) {
@@ -176,13 +271,107 @@ export function buildShoreSurfaceVertexLayers(context, colorMode, viewOptions, p
     landCovers: new Map(),
     waterCovers: new Map()
   };
+  const shorePathEnds = Object.fromEntries(Object.keys(layers).map(key => [key, []]));
   for (const path of [...paths.coastline, ...paths.lakeShore]) {
     pushShoreSurfaceCorrections(layers, cellRanges, path, context, colorMode, viewOptions);
+    for (const key of Object.keys(layers)) shorePathEnds[key].push(layers[key].length);
   }
   return {
     ...Object.fromEntries(Object.entries(layers).map(([key, values]) => [key, new Float32Array(values)])),
+    shorePathEnds,
     cellRanges
   };
+}
+
+export function updateShoreSurfaceVertexLayers(context, colorMode, options, before, after, current) {
+  const oldPaths = new Set([...before.coastline, ...before.lakeShore]);
+  const newPaths = new Set([...after.coastline, ...after.lakeShore]);
+  if (current.shorePathEnds?.landCorrections?.length === oldPaths.size) {
+    const added = [...newPaths].filter(path => !oldPaths.has(path));
+    const local = buildShoreSurfaceVertexLayers(context, colorMode, options, {coastline: added, lakeShore: []});
+    return spliceShoreSurfacePaths([...oldPaths], current, added, local, [...newPaths]);
+  }
+  const dirty = new Set();
+  for (const path of [...oldPaths, ...newPaths]) {
+    if (oldPaths.has(path) && newPaths.has(path)) continue;
+    for (const edge of path.sourceEdges) {
+      dirty.add(edge.landCell);
+      dirty.add(edge.waterCell);
+    }
+  }
+  const localPaths = [...newPaths].filter(path => path.sourceEdges.some(edge => dirty.has(edge.landCell) || dirty.has(edge.waterCell)));
+  const local = buildShoreSurfaceVertexLayers(context, colorMode, options, {coastline: localPaths, lakeShore: []});
+  const result = {cellRanges: {}};
+  for (const key of Object.keys(current.cellRanges)) {
+    const spans = [];
+    for (const [bundle, includeDirty] of [[current, false], [local, true]]) {
+      const selected = [];
+      for (const [cell, ranges] of bundle.cellRanges[key]) {
+        if (dirty.has(cell) !== includeDirty) continue;
+        for (const range of ranges) selected.push({cell, ...range});
+      }
+      selected.sort((a, b) => a.start - b.start);
+      for (const range of selected) spans.push({...range, source: bundle[key]});
+    }
+    const vertices = new Float32Array(spans.reduce((n, span) => n + span.end - span.start, 0));
+    const cellRanges = new Map();
+    let offset = 0;
+    for (const {source, cell, start, end} of spans) {
+      vertices.set(source.subarray(start, end), offset);
+      if (!cellRanges.has(cell)) cellRanges.set(cell, []);
+      cellRanges.get(cell).push({start: offset, end: offset + end - start});
+      offset += end - start;
+    }
+    result[key] = vertices;
+    result.cellRanges[key] = cellRanges;
+  }
+  return result;
+}
+
+function spliceShoreSurfacePaths(oldPaths, previous, added, local, ordered) {
+  const origin = new Map();
+  for (const [paths, bundle] of [[oldPaths, previous], [added, local]]) {
+    paths.forEach((path, index) => origin.set(path, {bundle, index}));
+  }
+  const result = {cellRanges: {}, shorePathEnds: {}};
+  for (const key of Object.keys(previous.cellRanges)) {
+    const parts = [];
+    const ends = [];
+    const moves = new Map([[previous, []], [local, []]]);
+    let offset = 0;
+    for (const path of ordered) {
+      const {bundle, index} = origin.get(path);
+      const sourceEnds = bundle.shorePathEnds[key];
+      const start = sourceEnds[index - 1] || 0, end = sourceEnds[index];
+      moves.get(bundle)[index] = offset - start;
+      parts.push(bundle[key].subarray(start, end));
+      offset += end - start;
+      ends.push(offset);
+    }
+    const vertices = new Float32Array(offset);
+    let cursor = 0;
+    for (const part of parts) { vertices.set(part, cursor); cursor += part.length; }
+    const ranges = new Map();
+    for (const [bundle, shifts] of moves) {
+      const sourceEnds = bundle.shorePathEnds[key];
+      for (const [cell, spans] of bundle.cellRanges[key]) for (const span of spans) {
+        let low = 0, high = sourceEnds.length;
+        while (low < high) {
+          const mid = (low + high) >>> 1;
+          if (sourceEnds[mid] <= span.start) low = mid + 1;
+          else high = mid;
+        }
+        const shift = shifts[low];
+        if (shift === undefined) continue;
+        if (!ranges.has(cell)) ranges.set(cell, []);
+        ranges.get(cell).push({start: span.start + shift, end: span.end + shift});
+      }
+    }
+    result[key] = vertices;
+    result.cellRanges[key] = ranges;
+    result.shorePathEnds[key] = ends;
+  }
+  return result;
 }
 
 export async function recolorShoreSurfaceVertexLayers(bundle, map, colorMode, viewOptions, {yieldToMain, budgetMs = 6} = {}) {
@@ -204,7 +393,7 @@ export async function recolorShoreSurfaceVertexLayers(bundle, map, colorMode, vi
     }
     if (covered !== vertices.length) return null;
   }
-  const recolored = {cellRanges: bundle.cellRanges};
+  const recolored = {cellRanges: bundle.cellRanges, shorePathEnds: bundle.shorePathEnds};
   let sliceStartedAt = performance.now();
   let processedVertices = 0;
   for (const [key, side] of entries) {
@@ -659,19 +848,27 @@ export function buildShoreRenderPoints(path, map) {
 function buildShoreSurfaceModel(path, map) {
   const cached = shoreSurfaceCorrectionCache.get(path);
   if (cached?.map === map) return cached.model;
+  if (!path?.closed) {
+    const model = {renderPoints: [...(path?.points || [])], triangles: [], fallbackReason: "open-arc-shared-source", fallbackDetail: null};
+    if (path) shoreSurfaceCorrectionCache.set(path, {map, model});
+    return model;
+  }
   const sourcePoints = normalizeClosedShoreRing(path?.points || []);
-  const candidateRenderPoints = clampedShoreRenderPoints(path).map(entry => entry.point);
+  const raw = path.renderPoints || path.points;
+  const followsSource = raw.length === path.points.length
+    && raw.every((point, index) => point[0] === path.points[index][0] && point[1] === path.points[index][1]);
+  const candidateRenderPoints = (followsSource ? filterShoreRenderSpikes(raw.map(point => ({point}))) : clampedShoreRenderPoints(path)).map(entry => entry.point);
   const renderPoints = normalizeClosedShoreRing(candidateRenderPoints);
   let model = {
-    renderPoints: path?.closed ? renderPoints : [...(path?.points || [])],
+    renderPoints,
     triangles: [],
-    fallbackReason: path?.closed ? null : "open-arc-shared-source",
+    fallbackReason: null,
     fallbackDetail: null
   };
-  if (path?.closed && sourcePoints.length >= 4 && renderPoints.length >= 4) {
+  if (sourcePoints.length >= 4 && renderPoints.length >= 4) {
     try {
       const landInside = resolveShoreLandInside(path, sourcePoints);
-      const difference = shoreRingDifference(sourcePoints, renderPoints);
+      const difference = followsSource && sourcePoints.length === renderPoints.length ? [] : shoreRingDifference(sourcePoints, renderPoints);
       const triangles = triangulateShoreDifference(difference, sourcePoints, renderPoints, path, landInside);
       if (!validateShoreDifferenceArea(difference, triangles)) throw new Error("shore-difference-area-mismatch");
       model = {renderPoints, triangles, landInside, fallbackReason: null, fallbackDetail: null};
@@ -1674,11 +1871,25 @@ export function buildShoreVisualPaths(map, algorithmOptions = {}) {
   return prepareShoreVisualPaths(map, algorithmOptions)();
 }
 
+const lastShoreEdit = new WeakMap();
+
 export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGridCells, algorithmOptions = {}) {
   if (!map || !previousPaths?.coastline || !previousPaths?.lakeShore) return null;
   if ([...(previousPaths.coastline || []), ...(previousPaths.lakeShore || [])].some(path => !Array.isArray(path.sourceEdges))) return null;
   const changed = new Set((changedGridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0));
-  if (!changed.size || changed.size > 2048) return null;
+  if (!changed.size) return previousPaths;
+  // 同一批格子跨越阈值两次就恢复原岸线，包括旧档保存的平滑形状。
+  const editKey = [...changed].sort((a, b) => a - b).join(",");
+  const last = lastShoreEdit.get(map);
+  if (last?.key === editKey) {
+    if (previousPaths === last.after) return last.before;
+    if (previousPaths === last.before) return last.after;
+  }
+  const water = createShoreWaterClassifier(map);
+  for (const cell of changed) for (const id of [cell, ...(map.grid.cells.c[cell] || [])]) {
+    if (!isLandCell(id, map)) water.classify(id);
+  }
+  for (const cell of water.classified.keys()) changed.add(cell);
   const affected = new Set(changed);
   for (const cell of changed) for (const neighbor of map.grid?.cells?.c?.[cell] || []) {
     if (Number.isInteger(neighbor) && neighbor >= 0) affected.add(neighbor);
@@ -1687,34 +1898,26 @@ export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGrid
   const startedAt = performance.now();
   const protectedObjects = shoreProtectedObjectsCache.get(map) || collectProtectedShoreObjects(map);
   shoreProtectedObjectsCache.set(map, protectedObjects);
-  const safetyBounds = buildIncrementalShoreSafetyBounds(map, affected);
-  const options = {
-    ...createShoreVisualBuildOptions(map, algorithmOptions),
-    protectedObjects,
-    measureChanges: false
-  };
-  const coastOptions = {
-    ...options,
-    protectedObjects: filterIncrementalProtectedObjects(protectedObjects, safetyBounds),
-    isSideSampleSafe: (point, side) => pointOutsideBounds(point, safetyBounds) || incrementalSideSampleSafe(map, point, side)
-  };
-  const edges = collectShoreVisualEdges(map);
-  const coastline = rebuildIncrementalShoreType(map, previousPaths.coastline, coastOptions, edges.coastline);
-  const lakeShore = rebuildIncrementalShoreType(map, previousPaths.lakeShore, lakeShoreBuildOptions(map, options), edges.lakeShore);
-  if (!coastline || !lakeShore) return null;
+  const options = {...createShoreVisualBuildOptions(map, algorithmOptions), protectedObjects, measureChanges: false};
+  const edges = collectShoreVisualEdges(map, affected, changed, water);
+  const coastline = rebuildIncrementalShoreType(map, "coastline", previousPaths.coastline, options, edges.coastline, changed);
+  const lakeShore = rebuildIncrementalShoreType(map, "lakeShore", previousPaths.lakeShore, lakeShoreBuildOptions(map, options), edges.lakeShore, changed);
+  const paths = [...coastline.paths, ...lakeShore.paths];
   const topology = {
     ...(previousPaths.topology || {}),
     arcCount: coastline.paths.length + lakeShore.paths.length,
-    sourcePointCount: countPathPoints(coastline.paths),
-    renderPointCount: countPathPoints(coastline.paths) + countPathPoints(lakeShore.paths),
+    sourcePointCount: paths.reduce((sum, path) => sum + path.points.length, 0),
+    renderPointCount: paths.reduce((sum, path) => sum + path.renderPoints.length, 0),
     buildMs: roundMs(performance.now() - startedAt),
     incremental: true
   };
-  return Object.freeze({
-    coastline: Object.freeze([...coastline.paths]),
-    lakeShore: Object.freeze([...lakeShore.paths]),
+  const after = Object.freeze({
+    coastline: Object.freeze(coastline.paths),
+    lakeShore: Object.freeze(lakeShore.paths),
     topology: Object.freeze(topology)
   });
+  lastShoreEdit.set(map, {key: editKey, before: previousPaths, after});
+  return after;
 }
 
 function lakeShoreBuildOptions(map, options) {
@@ -1745,87 +1948,78 @@ function createShoreVisualBuildOptions(map, algorithmOptions = {}) {
   };
 }
 
-function buildIncrementalShoreSafetyBounds(map, cells, margin = 0) {
-  const points = [];
-  for (const cell of cells || []) points.push(cellCenterPoint(map.grid, cell));
-  const valid = points.filter(isWorldPoint);
-  if (!valid.length) return null;
-  return {
-    minX: Math.min(...valid.map(point => point[0])) - margin,
-    minY: Math.min(...valid.map(point => point[1])) - margin,
-    maxX: Math.max(...valid.map(point => point[0])) + margin,
-    maxY: Math.max(...valid.map(point => point[1])) + margin
-  };
-}
 
-function pointOutsideBounds(point, bounds) {
-  return !bounds || !isWorldPoint(point) || point[0] < bounds.minX || point[0] > bounds.maxX || point[1] < bounds.minY || point[1] > bounds.maxY;
-}
+const shorePathIndexes = new WeakMap();
 
-function incrementalSideSampleSafe(map, point, side) {
-  if (!isWorldPoint(point) || !side) return false;
-  const halfWidth = SHORE_VISUAL_STYLE.sidePreflightHalfWidthWorld;
-  const landCell = shoreGridCell(map, point[0] + side.x * halfWidth, point[1] + side.y * halfWidth);
-  const waterCell = shoreGridCell(map, point[0] - side.x * halfWidth, point[1] - side.y * halfWidth);
-  return landCell !== null && landCell !== undefined && waterCell !== null && waterCell !== undefined && isLandCell(landCell, map) && !isLandCell(waterCell, map);
-}
-
-function filterIncrementalProtectedObjects(objects, bounds) {
-  if (!objects || !bounds) return {towns: [], roads: [], rivers: []};
-  const near = points => (points || []).some(point => !pointOutsideBounds(point, bounds));
-  const clip = points => {
-    const result = [];
-    for (let index = 0; index < (points || []).length - 1; index++) {
-      const first = points[index];
-      const second = points[index + 1];
-      if (!isWorldPoint(first) || !isWorldPoint(second)) continue;
-      const minX = Math.min(first[0], second[0]);
-      const maxX = Math.max(first[0], second[0]);
-      const minY = Math.min(first[1], second[1]);
-      const maxY = Math.max(first[1], second[1]);
-      if (maxX < bounds.minX || minX > bounds.maxX || maxY < bounds.minY || minY > bounds.maxY) continue;
-      if (!result.length) result.push([first[0], first[1]]);
-      result.push([second[0], second[1]]);
+function shorePathIndex(map, kind, paths) {
+  if (!shorePathIndexes.has(map)) shorePathIndexes.set(map, {});
+  const groups = shorePathIndexes.get(map);
+  const index = groups[kind] ||= {paths: [], byCell: new Map(), byVertex: new Map()};
+  if (index.paths === paths) return index;
+  const update = (table, key, path, add) => {
+    let members = table.get(key);
+    if (add) {
+      if (!members) table.set(key, members = new Set());
+      members.add(path);
+    } else if (members) {
+      members.delete(path);
+      if (!members.size) table.delete(key);
     }
-    return result;
   };
-  return {
-    towns: (objects.towns || []).filter(point => near([point])),
-    roads: (objects.roads || []).map(clip).filter(points => points.length >= 2),
-    rivers: (objects.rivers || []).map(clip).filter(points => points.length >= 2)
-  };
-}
-
-function rebuildIncrementalShoreType(map, previousPaths, options, currentEdges) {
-  const currentPaths = buildShorePathsFromEdges(currentEdges);
-  const previousBySource = new Map((previousPaths || []).map(path => [sourceShorePathKey(path), path]));
-  const paths = [];
-  let rebuilt = 0;
-  for (const sourcePath of currentPaths) {
-    const previous = previousBySource.get(sourceShorePathKey(sourcePath));
-    if (previous) {
-      paths.push(previous);
-      continue;
+  const previous = new Set(index.paths), next = new Set(paths);
+  for (const [candidates, retained, add] of [[previous, next, false], [next, previous, true]]) {
+    for (const path of candidates) {
+      if (retained.has(path)) continue;
+      for (const edge of path.sourceEdges) {
+        update(index.byCell, edge.landCell, path, add);
+        update(index.byCell, edge.waterCell, path, add);
+      }
+      for (const point of path.points) update(index.byVertex, shorePointKey(point), path, add);
     }
-    rebuilt++;
-    if (rebuilt > 512) return null;
-    paths.push(...buildShoreTopologySnapshot([sourcePath], map, options).paths);
   }
-  return {paths, rebuilt};
+  index.paths = paths;
+  return index;
 }
 
-function sourceShorePathKey(path) {
-  return (path?.sourceEdges || []).map(edge => {
-    const a = shorePointKey(edge.a);
-    const b = shorePointKey(edge.b);
-    return `${edge.landCell}:${edge.waterCell}:${a < b ? `${a}:${b}` : `${b}:${a}`}`;
-  }).sort().join("|");
-}
-
-function shoreEdgeKey(edge) {
-  const first = shorePointKey(edge.a);
-  const second = shorePointKey(edge.b);
-  return first < second ? `${first}|${second}` : `${second}|${first}`;
+function rebuildIncrementalShoreType(map, kind, previousPaths, options, changedEdges, changed) {
+  const dirtyEdge = edge => changed.has(edge.landCell) || changed.has(edge.waterCell);
+  const index = shorePathIndex(map, kind, previousPaths);
+  const affected = new Set();
+  for (const cell of changed) for (const path of index.byCell.get(cell) || []) affected.add(path);
+  for (const edge of changedEdges) for (const point of [edge.a, edge.b]) {
+    for (const path of index.byVertex.get(shorePointKey(point)) || []) affected.add(path);
+  }
+  if (!affected.size && !changedEdges.length) return {paths: previousPaths};
+  const edges = [...changedEdges];
+  const original = new Map();
+  const edgeKey = edge => `${edge.landCell}:${edge.waterCell}`;
+  for (const path of affected) for (const edge of path.sourceEdges) {
+    original.set(edgeKey(edge), path);
+    if (!dirtyEdge(edge)) edges.push(edge);
+  }
+  // 与完整构建保持相同的遍历起点和方向，连通分量可在笔触处合并或断开。
+  const cells = map.grid.cells;
+  const firstCell = edge => Math.min(edge.landCell, edge.waterCell);
+  const neighborOrder = edge => cells.c[firstCell(edge)].indexOf(Math.max(edge.landCell, edge.waterCell));
+  edges.sort((left, right) => firstCell(left) - firstCell(right) || neighborOrder(left) - neighborOrder(right));
+  const paths = previousPaths.filter(path => !affected.has(path));
+  const replaced = buildShorePathsFromEdges(edges).map(source => {
+    const owners = new Set(source.sourceEdges.map(edge => original.get(edgeKey(edge))).filter(Boolean));
+    const [previous] = owners;
+    if (owners.size === 1 && previous.sourceEdges.length === source.sourceEdges.length
+      && source.sourceEdges.every(edge => original.get(edgeKey(edge)) === previous)) return previous;
+    // 已经按原始格边显示的岸段沿用原形，在变动处接合；分裂出的新环单独评估。
+    const retainsRing = previous?.closed && previous.topologyFallbackReason && owners.size === 1
+      && source.sourceEdges.filter(edge => original.get(edgeKey(edge)) === previous).length > previous.sourceEdges.length / 2;
+    const preparedArcs = retainsRing ? new Map([[source, {
+      sourcePoints: source.points, renderPoints: source.points, closed: pointsNear(source.points[0], source.points.at(-1)),
+      fallbackReason: previous.topologyFallbackReason
+    }]]) : undefined;
+    return buildShoreTopologySnapshot([source], map, {...options, preparedArcs}).paths[0];
+  });
+  const first = previousPaths.findIndex(path => affected.has(path));
+  paths.splice(first < 0 ? paths.length : first, 0, ...replaced);
+  return {paths};
 }
 
 function attachOriginalCoastlinePoints(paths, map, featureType) {
@@ -2210,15 +2404,16 @@ export function buildSmoothedShoreBoundaryPoints(path, map) {
   return smoothWorldPath(points, SHORE_VISUAL_STYLE.smoothing);
 }
 
-function collectShoreVisualEdges(map) {
+function collectShoreVisualEdges(map, candidates = map?.grid?.cells?.i, changed = null, classifier = null) {
   const coastline = [];
   const lakeShore = [];
   const cells = map?.grid?.cells;
   if (!cells?.c || !cells?.v || !cells?.h) return {coastline, lakeShore};
 
-  for (const cell of cells.i || []) {
+  const water = classifier || createShoreWaterClassifier(map);
+  for (const cell of candidates || []) {
     for (const neighbor of cells.c[cell] || []) {
-      if (neighbor <= cell) continue;
+      if (neighbor <= cell || (changed && !changed.has(cell) && !changed.has(neighbor))) continue;
       const cellLand = isLandCell(cell, map);
       const neighborLand = isLandCell(neighbor, map);
       if (cellLand === neighborLand) continue;
@@ -2226,8 +2421,7 @@ function collectShoreVisualEdges(map) {
       const waterCell = cellLand ? neighbor : cell;
       const edge = sharedVoronoiEdge(map, cell, neighbor);
       if (!edge) continue;
-      const waterFeature = map.features.features[cells.f?.[waterCell]];
-      const target = waterFeature?.type === "ocean" ? coastline : lakeShore;
+      const target = water.classify(waterCell) ? coastline : lakeShore;
       const landCenter = cellCenterPoint(map.grid, landCell);
       const waterCenter = cellCenterPoint(map.grid, waterCell);
       const side = normalizeWorldVector(landCenter[0] - waterCenter[0], landCenter[1] - waterCenter[1]);

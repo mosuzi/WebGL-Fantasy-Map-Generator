@@ -116,11 +116,11 @@
   <UiSwitchField v-if="!debugEnabled" label="影响海底" field-class="height-check-row" compact-hit-area :checked="state.affectSeafloor" @change="setAffectSeafloor" />
   <p v-if="!debugEnabled && state.affectSeafloor" class="height-action-help">画笔会同时作用于陆地和海底，并允许高度跨越海平面改变海陆分界。</p>
 
-  <UiSliderField v-if="!debugEnabled || (state.action !== 'fill' && state.action !== 'line')" label="画笔大小" :model-value="state.radius" :min="heightRadius.min" :max="heightRadius.max" :step="heightRadius.step" @input="setRadius" />
-  <UiSliderField v-if="!debugEnabled || state.action !== 'line'" :label="brushValueLabel" :model-value="brushValue" :min="brushValueMin" :max="18" :step="1" @input="setBrushValue" />
+  <UiSliderField v-if="!debugEnabled || (state.action !== 'fill' && state.action !== 'line')" :label="isPlayerSmoothingSelection ? '选区画笔大小' : '画笔大小'" :model-value="isPlayerSmoothingSelection ? state.terrainSelectionRadius : state.radius" :min="heightRadius.min" :max="heightRadius.max" :step="heightRadius.step" @input="setRadius" />
+  <UiSliderField v-if="!debugEnabled || state.action !== 'line'" :label="brushValueLabel" :model-value="brushValue" :min="brushValueRange.min" :max="brushValueRange.max" :step="1" @input="setBrushValue" />
   <UiSliderField v-if="debugEnabled && state.action === 'fill'" label="高度容差" :model-value="state.fillTolerance" :min="0" :max="12" :step="1" @input="setFillTolerance" />
-  <UiSliderField v-if="debugEnabled && state.action === 'line'" label="线宽" :model-value="state.lineWidth" :min="2" :max="48" :step="1" @input="setLineWidth" />
-  <UiSliderField v-if="debugEnabled && state.action === 'line'" label="线段增量" :model-value="state.linePower" :min="-30" :max="30" :step="1" @input="setLinePower" />
+  <UiSliderField v-if="debugEnabled && state.action === 'line'" label="线宽" :model-value="state.lineWidth" :min="heightRadius.min" :max="heightRadius.max" :step="heightRadius.step" @input="setLineWidth" />
+  <UiSliderField v-if="debugEnabled && state.action === 'line'" label="线段增量" :model-value="state.linePower" :min="HEIGHT_BRUSH_STRENGTH.linePower.min" :max="HEIGHT_BRUSH_STRENGTH.linePower.max" :step="1" @input="setLinePower" />
 
   <UiSwitchField v-if="debugEnabled && state.action !== 'fill'" label="中心衰减" field-class="height-check-row" :checked="state.falloff" @change="setFalloff" />
 
@@ -807,7 +807,7 @@ import {formatHeight, formatNumber} from "../../display-units.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
-import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+import {BRUSH_RADIUS_ID, HEIGHT_BRUSH_STRENGTH, normalizeBrushRadius, normalizeBrushStrength, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
 import {beginDirectManipulationSession} from "../../../runtime/direct-manipulation-session.js";
 
 const heightRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
@@ -942,10 +942,10 @@ if (debugEnabled.value) props.state.preserveSurface = false;
 else normalizePlayerHeightState();
 const visibleActions = computed(() => debugEnabled.value ? actions : playerActions);
 const isPlayerSmoothingSelection = computed(() => !debugEnabled.value && Boolean(props.state.terrainSelectionPaintState));
-const isPlayerLevelAction = computed(() => !debugEnabled.value && props.state.action === "level");
+const isPlayerLevelAction = computed(() => props.state.action === "level");
 const brushValueLabel = computed(() => isPlayerLevelAction.value ? "扰动" : "强度");
 const brushValue = computed(() => isPlayerLevelAction.value ? props.state.levelPerturbation : props.state.strength);
-const brushValueMin = computed(() => isPlayerLevelAction.value ? 0 : 1);
+const brushValueRange = computed(() => isPlayerLevelAction.value ? HEIGHT_BRUSH_STRENGTH.levelPerturbation : HEIGHT_BRUSH_STRENGTH.strength);
 const currentPlayerToolLabel = computed(() => {
   if (props.state.terrainSelectionPaintState === "painting") return "正在涂选平滑范围";
   if (props.state.terrainSelectionPaintState === "pending") return "平滑范围：等待落笔";
@@ -1242,8 +1242,9 @@ function setScope(scope) {
 }
 
 function setRadius(radius) {
+  if (isPlayerSmoothingSelection.value) return setTerrainSelectionRadius(radius);
   props.state.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, radius);
-  props.callbacks.onBrushRadiusChange?.(props.state.radius);
+  props.callbacks.onBrushRadiusChange?.(BRUSH_RADIUS_ID.HEIGHT, props.state.radius);
 }
 
 function setAffectSeafloor(affectSeafloor) {
@@ -1258,7 +1259,7 @@ function setTerrainSelectionSource(source) {
 
 function setTerrainSelectionRadius(radius) {
   props.state.terrainSelectionRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, radius);
-  props.callbacks.onBrushRadiusChange?.();
+  props.callbacks.onBrushRadiusChange?.(BRUSH_RADIUS_ID.HEIGHT_SELECTION, props.state.terrainSelectionRadius);
 }
 
 function setTerrainSelectionTolerance(tolerance) {
@@ -1343,16 +1344,13 @@ function terrainSelectionRequest(operation) {
   };
 }
 
-function setStrength(strength) {
-  props.state.strength = strength;
+function setHeightStrength(key, value) {
+  props.state[key] = normalizeBrushStrength(key, value);
+  props.callbacks.onBrushStrengthChange?.(key, props.state[key]);
 }
 
 function setBrushValue(value) {
-  if (isPlayerLevelAction.value) {
-    props.state.levelPerturbation = Math.max(0, Math.min(18, Math.round(Number(value) || 0)));
-    return;
-  }
-  setStrength(value);
+  setHeightStrength(isPlayerLevelAction.value ? "levelPerturbation" : "strength", value);
 }
 
 function setSelectionSmoothness(value) {
@@ -1362,7 +1360,6 @@ function setSelectionSmoothness(value) {
 function startPlayerSmoothingSelection() {
   normalizePlayerHeightState();
   props.state.terrainSelectionSource = "paint";
-  props.state.terrainSelectionRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, props.state.radius);
   props.callbacks.onTerrainSelectionLock?.({
     operation: "replace",
     source: "paint",
@@ -1384,7 +1381,7 @@ function togglePlayerSmoothingSelection() {
 
 function normalizePlayerHeightState() {
   props.state.affectSeafloor = Boolean(props.state.affectSeafloor);
-  props.state.levelPerturbation = Math.max(0, Math.min(18, Math.round(Number(props.state.levelPerturbation) || 0)));
+  props.state.levelPerturbation = normalizeBrushStrength("levelPerturbation", props.state.levelPerturbation);
   syncPlayerTerrainScope();
   props.state.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, props.state.radius);
   if (props.state.action !== "raise" && props.state.action !== "lower" && props.state.action !== "level") setAction("raise");
@@ -1400,11 +1397,12 @@ function setFillTolerance(tolerance) {
 }
 
 function setLineWidth(width) {
-  props.state.lineWidth = width;
+  props.state.lineWidth = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_LINE, width);
+  props.callbacks.onBrushRadiusChange?.(BRUSH_RADIUS_ID.HEIGHT_LINE, props.state.lineWidth);
 }
 
 function setLinePower(power) {
-  props.state.linePower = power;
+  setHeightStrength("linePower", power);
 }
 
 function setFalloff(falloff) {

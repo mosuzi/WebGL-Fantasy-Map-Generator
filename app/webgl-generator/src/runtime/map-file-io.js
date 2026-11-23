@@ -14,7 +14,7 @@ import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {backfillProvinceNames} from "../generator/province-naming.js";
 import {normalizeDiplomacyMap} from "./diplomacy-map-compatibility.js";
 import {DEFAULT_UNIT_PREFERENCES, normalizeUnitPreferences} from "../ui/display-units.js";
-import {hasCompleteSavedBrushRadii, normalizeSavedBrushRadii} from "./brush-radius-contract.js";
+import {hasCompleteSavedBrushRadii, hasCompleteSavedBrushStrengths, normalizeSavedBrushRadii, normalizeSavedBrushStrengths} from "./brush-radius-contract.js";
 import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../generator/ocean-currents.js";
 import {normalizeRiverNetwork} from "../generator/river-network.js";
 import {normalizeRiverControlPoints} from "./river-control-points.js";
@@ -54,8 +54,8 @@ import {
 import {migrateLandlessStates} from "./landless-states.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
-export const MAP_DOCUMENT_VERSION = 5;
-export const MAP_SCHEMA_VERSION = 5;
+export const MAP_DOCUMENT_VERSION = 6;
+export const MAP_SCHEMA_VERSION = 6;
 export const PNG_OVERLAY_KEYS = Object.freeze(["labels", "cityIcons", "markers", "military", "measurements", "legend", "scaleBar"]);
 export const GEOJSON_RANGE_MODES = Object.freeze(["full", "viewport", "bbox"]);
 
@@ -404,6 +404,7 @@ function needsMapDocumentCompatibilityBackfill(document) {
     || hasIncompleteVisualThemeStore(map?.visualTheme)
     || hasIncompleteUnitPreferences(map?.display ?? document?.display)
     || !hasCompleteSavedBrushRadii(map?.display?.brushRadii)
+    || !hasCompleteSavedBrushStrengths(map?.display?.brushStrengths)
     || (document?.display !== undefined && map?.display === undefined)
     || hasIncompleteEconomyDisplay(map)
     || hasIncompleteDiplomacy(map)
@@ -574,7 +575,7 @@ export function migrateMapDocumentWithRegistry(document, options = {}) {
   if (sourceVersion > targetVersion) throw new Error(`暂不支持的地图格式版本：${document.version}`);
   let migrated = document;
   for (let version = sourceVersion; version < targetVersion; version += 1) {
-    migrated = migrateMapDocumentStep(migrated, version, registry);
+    migrated = migrateMapDocumentStep(migrated, version, registry, document);
   }
   if (typeof options.validate === "function") options.validate(migrated);
   return migrated;
@@ -1134,10 +1135,10 @@ function typedArrayReviver(_key, value) {
   return new Constructor(value.data || []);
 }
 
-function migrateMapDocumentStep(document, version, registry) {
+function migrateMapDocumentStep(document, version, registry, original) {
   const migrator = registry instanceof Map ? registry.get(version) : registry?.[version];
   if (typeof migrator !== "function") throw new Error(`缺少地图格式 v${version} 迁移器`);
-  const migrated = migrator(document);
+  const migrated = migrator(document, original);
   if (Number(migrated?.version) !== version + 1) throw new Error(`地图格式 v${version} 迁移器没有产出 v${version + 1}`);
   return migrated;
 }
@@ -1146,7 +1147,8 @@ const MAP_DOCUMENT_MIGRATORS = createMapDocumentMigrationRegistry({
   1: migrateMapDocumentV1ToV2,
   2: migrateMapDocumentV2ToV3,
   3: migrateMapDocumentV3ToV4,
-  4: migrateMapDocumentV4ToV5
+  4: migrateMapDocumentV4ToV5,
+  5: migrateMapDocumentV5ToV6
 });
 
 function migrateMapDocumentV1ToV2(document) {
@@ -1164,6 +1166,12 @@ function migrateMapDocumentV1ToV2(document) {
 }
 
 function migrateMapDocumentV2ToV3(document) {
+  const display = document.map.display ?? document.display ?? {};
+  const legacyRadii = {};
+  for (const key of ["state", "province", "culture", "religion", "biome", "suitability"]) {
+    const value = Number(display.brushRadii?.[key]);
+    legacyRadii[key] = Number.isFinite(value) ? Math.max(1, Math.min(32, Math.round(value))) : 28;
+  }
   return {
     ...document,
     version: 3,
@@ -1171,7 +1179,7 @@ function migrateMapDocumentV2ToV3(document) {
     map: {
       ...document.map,
       metadata: {...(document.map.metadata || {}), schemaVersion: 3},
-      display: normalizeMapDisplayConfig(document.map.display ?? document.display)
+      display: {...display, units: normalizeUnitPreferences(display.units), brushRadii: legacyRadii}
     }
   };
 }
@@ -1186,6 +1194,15 @@ function migrateMapDocumentV4ToV5(document) {
   const map = repairSettlementLandPoints(document.map);
   return {...document, version: 5, metadata: {...document.metadata, mapSchemaVersion: 5},
     map: {...map, metadata: {...map.metadata, schemaVersion: 5}}};
+}
+
+function migrateMapDocumentV5ToV6(document, original) {
+  const map = document.map;
+  // 更早的迁移会给未设置的画笔补 28；当前版本仅继承玩家存档中实际存在的值。
+  const savedDisplay = original.map.display ?? original.display;
+  const display = normalizeMapDisplayConfig({...map.display, brushRadii: savedDisplay?.brushRadii, brushStrengths: savedDisplay?.brushStrengths});
+  return {...document, version: 6, metadata: {...document.metadata, mapSchemaVersion: 6},
+    map: {...map, metadata: {...map.metadata, schemaVersion: 6}, display}};
 }
 
 function validateCurrentMapDocument(document) {
@@ -1217,6 +1234,7 @@ function validateCurrentMapDocument(document) {
   }
   if (document.map.display?.units && !Array.isArray(document.map.display.units.customUnits)) throw new Error("地图数据的自定义单位列表无效");
   if (!hasCompleteSavedBrushRadii(document.map.display?.brushRadii)) throw new Error("地图数据的画笔大小存储不完整");
+  if (!hasCompleteSavedBrushStrengths(document.map.display?.brushStrengths)) throw new Error("地图数据的画笔强度存储不完整");
   if (Number(document.map.oceanCurrents?.version) !== OCEAN_CURRENT_MODEL_VERSION || !Array.isArray(document.map.oceanCurrents?.currents)) {
     throw new Error("地图数据缺少 oceanCurrents 存储");
   }
@@ -1391,7 +1409,7 @@ function normalizeMapDisplayConfig(input = {}, {withBrushRadii = true} = {}) {
   return {
     ...source,
     units: normalizeUnitPreferences(source.units),
-    ...(withBrushRadii ? {brushRadii: normalizeSavedBrushRadii(source.brushRadii)} : {})
+    ...(withBrushRadii ? {brushRadii: normalizeSavedBrushRadii(source.brushRadii), brushStrengths: normalizeSavedBrushStrengths(source.brushStrengths)} : {})
   };
 }
 

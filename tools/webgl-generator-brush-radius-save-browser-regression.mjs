@@ -20,22 +20,26 @@ async function openPanel(name) {
     document.querySelectorAll(".ui-secondary-action-close").forEach(button => button.click());
     document.querySelectorAll(".floating-panel:not(.hidden) .floating-panel-close").forEach(button => button.click());
     const panel = app.panels[name];
-    if (["state", "biome"].includes(name)) panel.open(app.map, app.editHistory.getStats());
+    if (name === "height") panel.open(app.editHistory.getStats());
+    else if (["state", "biome"].includes(name)) panel.open(app.map, app.editHistory.getStats());
     else panel.open(app.map, app.selection, app.editHistory.getStats());
   }, name);
   const panel = page.locator(`.floating-panel[data-panel-id="${name}-panel"]:not(.hidden)`);
   await panel.waitFor({state: "visible"});
-  if (name !== "biome") await panel.locator(".ui-slider-field").first().waitFor({state: "visible"});
   return panel;
 }
 
-async function setRadius(panel, value, id = "state") {
-  const field = panel.locator("label.ui-slider-field").filter({hasText: "画笔大小"}).first();
+async function setSlider(panel, label, value, min, max) {
+  const field = panel.locator("label.ui-slider-field:visible").filter({hasText: label}).first();
   const native = field.locator('input[type="range"]');
-  assert.deepEqual(await native.evaluate(input => [input.min, input.max, input.step]), ["1", "32", "1"]);
+  assert.deepEqual(await native.evaluate(input => [input.min, input.max, input.step]), [String(min), String(max), "1"]);
   const input = field.locator(".ui-slider-number input");
   await input.fill(String(value));
   await input.press("Enter");
+}
+
+async function setRadius(panel, value, id = "state", label = "画笔大小") {
+  await setSlider(panel, label, value, 1, 32);
   await page.waitForFunction(({id, value}) => window.__webglGeneratorApp.brushRadii[id] === value, {id, value});
 }
 
@@ -62,11 +66,33 @@ try {
   await page.getByRole("button", {name: "关闭二级编辑面板"}).click();
   await biomePanel.getByRole("button", {name: "数值适居度"}).click();
   await setRadius(page.getByRole("dialog", {name: "数值适居度"}), 31, "suitability");
-  const sixRadii = {state: 1, province: 2, culture: 7, religion: 13, biome: 16, suitability: 31};
-  assert.deepEqual(await page.evaluate(() => window.__webglGeneratorApp.brushRadii), sixRadii);
+  const marketPanel = await openPanel("economy");
+  await marketPanel.getByRole("group", {name: "经济范围"}).locator(".el-segmented__item").filter({hasText: "市场"}).click();
+  await setRadius(marketPanel, 24, "economy-market");
+  const heightPanel = await openPanel("height");
+  await setRadius(heightPanel, 17, "height");
+  await setSlider(heightPanel, "强度", 4, 1, 5);
+  await heightPanel.getByRole("button", {name: "等高地形", exact: true}).click();
+  await setSlider(heightPanel, "扰动", 3, 0, 3);
+  await heightPanel.getByRole("button", {name: "启用高度编辑"}).click();
+  await heightPanel.getByRole("button", {name: "涂选平滑范围"}).click();
+  await setRadius(heightPanel, 11, "height-selection", "选区画笔大小");
+  assert.equal(await page.evaluate(() => window.__webglGeneratorApp.heightEdit.terrainSelectionPaintPending.request.radius), 11);
+  await heightPanel.getByRole("button", {name: "涂选平滑范围"}).click();
+  await page.evaluate(() => {window.__webglGeneratorDebug.enabled = true; window.__webglGeneratorDebug.collapse();});
+  await openPanel("height");
+  await heightPanel.locator('.height-action-group button[data-mode="line"]').click();
+  await setRadius(heightPanel, 9, "height-line", "线宽");
+  await setSlider(heightPanel, "线段增量", -4, -5, 5);
+  await page.evaluate(() => {window.__webglGeneratorDebug.enabled = false;});
+  const radii = {state: 1, province: 2, culture: 7, religion: 13, biome: 16, suitability: 31,
+    height: 17, "height-selection": 11, "height-line": 9, "economy-market": 24};
+  const strengths = {strength: 4, levelPerturbation: 3, linePower: -4};
+  assert.deepEqual(await page.evaluate(() => window.__webglGeneratorApp.brushRadii), radii);
   const json = await page.evaluate(() => window.webglGeneratorApi.data.exportAll({includeText: true}));
   assert.equal(json.ok, true, json.error?.message);
-  assert.deepEqual(JSON.parse(json.data.text).map.display.brushRadii, sixRadii);
+  assert.deepEqual(JSON.parse(json.data.text).map.display.brushRadii, radii);
+  assert.deepEqual(JSON.parse(json.data.text).map.display.brushStrengths, strengths);
   const browserSaved = await page.evaluate(async () => window.webglGeneratorApi.data.saveBrowserMap());
   assert.equal(browserSaved.ok, true, browserSaved.error?.message);
   assert.equal(await page.evaluate(() => window.__webglGeneratorApp.saveState.getStatus().dirty), false);
@@ -76,7 +102,8 @@ try {
   assert.equal(restored.ok, true, restored.error?.message);
   assert.equal(await page.evaluate(() => window.__webglGeneratorApp.panels.state.getBrush().radius), 1);
   assert.equal(await page.evaluate(() => window.__webglGeneratorApp.brushRadii.state), 1);
-  assert.deepEqual(await page.evaluate(() => window.__webglGeneratorApp.brushRadii), sixRadii);
+  assert.deepEqual(await page.evaluate(() => window.__webglGeneratorApp.brushRadii), radii);
+  assert.deepEqual(await page.evaluate(() => window.__webglGeneratorApp.brushStrengths), strengths);
 
   const currentPanel = await openPanel("state");
   await setRadius(currentPanel, 7);
@@ -91,6 +118,11 @@ try {
   await setRadius(currentPanel, 13);
   const archiveRestored = await page.evaluate(async () => window.webglGeneratorApi.data.importMap(window.__brushRadiusArchive, {confirm: true}));
   assert.equal(archiveRestored.ok, true, archiveRestored.error?.message);
+  assert.deepEqual(await page.evaluate(() => {
+    const {height, economy} = window.__webglGeneratorApp.panels;
+    const brush = height.getBrush();
+    return [brush.radius, height.getTerrainSelectionRequest().radius, brush.lineWidth, brush.linePower, economy.getMarketBrush().radius];
+  }), [17, 11, 9, -4, 24]);
   assert.equal(await page.evaluate(() => window.__webglGeneratorApp.panels.state.getBrush().radius), 7);
   assert.deepEqual(await page.evaluate(() => {
     const app = window.__webglGeneratorApp;
@@ -105,7 +137,13 @@ try {
   });
   const largePanel = await openPanel("state");
   assert.deepEqual(await page.evaluate(() => window.__webglGeneratorApp.brushRadii),
-    {state: 28, province: 28, culture: 28, religion: 28, biome: 28, suitability: 28});
+    Object.fromEntries(Object.keys(radii).map(id => [id, 8])));
+  assert.deepEqual(await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const height = app.panels.height.getBrush();
+    return [height.radius, height.lineWidth, app.panels.height.getTerrainSelectionRequest().radius,
+      app.panels.economy.getMarketBrush().radius, app.brushStrengths];
+  }), [8, 8, 8, 8, {strength: 2, levelPerturbation: 0, linePower: 2}]);
   await setRadius(largePanel, 1);
   const target = await page.evaluate(() => {
     const app = window.__webglGeneratorApp;
@@ -153,6 +191,10 @@ try {
   assert.ok(result.affected >= 1, "细画笔没有修改目标 cell");
   assert.ok(result.longestTask <= 200, `大图涂抹 LongTask ${result.longestTask}ms`);
   assert.equal(result.healthErrors, 0);
+  const reopened = await page.evaluate(() => window.webglGeneratorApi.data.importMap(window.__brushRadiusArchive, {confirm: true}));
+  assert.ok(reopened.ok, reopened.error?.message);
+  assert.deepEqual(await page.evaluate(() => window.__webglGeneratorApp.brushRadii), {...radii, state: 7});
+  assert.deepEqual(await page.evaluate(() => window.__webglGeneratorApp.brushStrengths), strengths);
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ok: true, archive, target, result, errors}, null, 2));
 } finally {

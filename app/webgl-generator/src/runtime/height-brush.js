@@ -1,4 +1,5 @@
-import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, normalizeBrushStrength} from "./brush-radius-contract.js";
+import {locateGridPoint} from "../geometry/grid-point.js";
 import {queryHeightCellsInRadius} from "./height-cell-spatial-index.js";
 
 export function getHeightBrushChanges(map, point, brush, stroke) {
@@ -17,7 +18,12 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
   const affected = [];
   let nearest = null;
 
-  for (const candidate of queryHeightCellsInRadius(map, point, radius)) {
+  const candidates = queryHeightCellsInRadius(map, point, radius);
+  if (!candidates.length && map.grid.metadata && point.x >= 0 && point.y >= 0 && point.x <= map.metadata?.graphWidth && point.y <= map.metadata?.graphHeight) {
+    const {cell} = locateGridPoint(map.grid, point.x, point.y, map.metadata);
+    if (cell !== null) candidates.push({gridCell: cell, distanceSq: 0});
+  }
+  for (const candidate of candidates) {
     const {gridCell, distanceSq} = candidate;
     const scopeHeight = originals.has(gridCell) ? originals.get(gridCell) : cells.h[gridCell];
     if (!matchesBrushScope(scopeHeight, scope)) continue;
@@ -28,14 +34,18 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
   }
 
   if (!affected.length) return [];
+  const strength = normalizeBrushStrength("strength", brush.strength);
   if (brush.action === "smooth") {
     const average = affected.reduce((sum, item) => sum + cells.h[item.gridCell], 0) / affected.length;
-    return affected.map(({gridCell}) => heightChange(cells, originals, gridCell, cells.h[gridCell] * 0.62 + average * 0.38)).filter(Boolean);
+    return affected.map(({gridCell}) => {
+      const current = cells.h[gridCell];
+      const delta = Math.max(-strength, Math.min(strength, (average - current) * 0.38));
+      return heightChange(cells, originals, gridCell, current + delta);
+    }).filter(Boolean);
   }
   if (brush.action === "flatten") {
     if (!Number.isFinite(stroke.targetHeight)) stroke.targetHeight = cells.h[nearest.gridCell];
     const targetHeight = clampHeight(stroke.targetHeight);
-    const strength = Math.max(1, Number(brush.strength) || 1);
     return affected.map(({gridCell, factor}) => {
       const current = cells.h[gridCell];
       const difference = targetHeight - current;
@@ -47,7 +57,7 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
     if (!Number.isFinite(stroke.targetHeight)) stroke.targetHeight = cells.h[nearest.gridCell];
     if (!(stroke.levelFactors instanceof Map)) stroke.levelFactors = new Map();
     const targetHeight = stroke.targetHeight;
-    const perturbation = Math.max(0, Number(brush.strength) || 0);
+    const perturbation = normalizeBrushStrength("levelPerturbation", brush.strength);
     const seed = Number.isFinite(stroke.seed) ? Math.trunc(stroke.seed) : 0;
     return affected.map(({gridCell, factor}) => {
       if (!stroke.levelFactors.has(gridCell)) stroke.levelFactors.set(gridCell, factor);
@@ -59,7 +69,6 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
     }).filter(Boolean);
   }
   if (brush.action === "disrupt") {
-    const strength = Math.max(1, Number(brush.strength) || 1);
     const seed = Number.isFinite(stroke.seed) ? Math.trunc(stroke.seed) : 0;
     const iteration = Math.max(0, Math.trunc(Number(stroke.iteration) || 0));
     stroke.iteration = iteration + 1;
@@ -69,10 +78,12 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
     }).filter(Boolean);
   }
 
-  const strength = Math.max(1, Number(brush.strength) || 1);
   const delta = brush.action === "lower" ? -strength : strength;
   return affected.map(({gridCell, factor}) => {
-    const next = cells.h[gridCell] + delta * factor;
+    // 一笔内相邻笔印重叠时，只增加覆盖程度，避免细笔拖过同一地块时反复叠加强度。
+    const original = originals.get(gridCell) ?? cells.h[gridCell];
+    const target = original + delta * factor;
+    const next = delta > 0 ? Math.max(cells.h[gridCell], target) : Math.min(cells.h[gridCell], target);
     return heightChange(cells, originals, gridCell, brush?.preserveSurface ? clampHeightToScope(next, scope) : next);
   }).filter(Boolean);
 }
@@ -93,12 +104,12 @@ export function getHeightLineChanges(map, fromPoint, toPoint, brush, stroke) {
     return [];
   }
 
-  const power = normalizeLinePower(brush?.linePower);
+  const power = normalizeBrushStrength("linePower", brush?.linePower);
   if (!power) {
     stroke.notice = "线段增量不能为 0。";
     return [];
   }
-  const width = normalizeLineWidth(brush?.lineWidth);
+  const width = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_LINE, brush?.lineWidth);
   const scope = normalizeBrushScope(brush?.scope);
   const maxCells = heightEditMaxCells(cells);
   const selection = [];
@@ -401,16 +412,6 @@ function normalizeFillTolerance(value) {
   return Number.isFinite(numeric) ? Math.max(0, Math.min(12, Math.round(numeric))) : 6;
 }
 
-function normalizeLinePower(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? Math.max(-30, Math.min(30, Math.round(numeric))) : 12;
-}
-
-function normalizeLineWidth(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? Math.max(0.5, Math.min(96, numeric)) : 12;
-}
-
 function heightEditMaxCells(cells) {
   return Math.max(64, Math.min(5000, Math.floor(cells.h.length * 0.2)));
 }
@@ -448,7 +449,7 @@ function applyConeToSelection(cells, selection, water, targetHeight, strengthVal
 
   let maxDistance = 0;
   for (const cell of selection) maxDistance = Math.max(maxDistance, edgeDistance[cell]);
-  const peakRise = Math.max(1, Number(strengthValue) || 1) * 3;
+  const peakRise = normalizeBrushStrength("strength", strengthValue);
   const baseHeight = water ? 20 : targetHeight;
   return selection.map(cell => {
     const ratio = maxDistance ? edgeDistance[cell] / maxDistance : 1;

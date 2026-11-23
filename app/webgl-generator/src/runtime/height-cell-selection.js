@@ -1,5 +1,5 @@
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
-import {queryHeightCellsInRadius} from "./height-cell-spatial-index.js";
+import {queryBrushCellsInRadius} from "./height-cell-spatial-index.js";
 
 export function createHeightCellSelection(map, options = {}) {
   const heights = map?.grid?.cells?.h;
@@ -58,7 +58,7 @@ export function createHeightCursorRadiusSelection(map, centerCell, options = {})
   const cellIds = [];
   let minHeight = Infinity;
   let maxHeight = -Infinity;
-  for (const {gridCell} of queryHeightCellsInRadius(map, centerPoint, radius)) {
+  for (const {gridCell} of queryBrushCellsInRadius(map, centerPoint, radius, normalizedCenter)) {
     const height = Number(cells.h[gridCell]) || 0;
     if (!matchesScope(height, scope)) continue;
     cellIds.push(gridCell);

@@ -1,5 +1,5 @@
 import {colorForCell, isLandCell} from "./color-modes.js";
-import {resolvedGridVertexPoints} from "./grid-vertex-geometry.js";
+import {gridVertexOverrides, resolvedGridVertexPoints} from "./grid-vertex-geometry.js";
 import {pushWorldVertex} from "./mesh-writer.js";
 import {buildCanonicalOrderedCellVisualBoundary, buildVoronoiRecoveredCellVisualBoundary, triangulateCellVisualBoundarySafely} from "./cell-visual-layer.js";
 import {SURFACE_BASE_INVALID_CELL_ID} from "./surface-base-buffer-set.js";
@@ -81,6 +81,7 @@ export function buildCompactGridCellSurfaceGeometry(context) {
   const compactGeometry = wordOffset === geometry.length ? geometry : geometry.slice(0, wordOffset);
   return {
     geometry: compactGeometry,
+    gridVertexOverrides: gridVertexOverrides(grid),
     sourceFloatLength: wordOffset * 2,
     surfaceCellRanges
   };

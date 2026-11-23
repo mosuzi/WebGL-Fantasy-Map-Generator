@@ -1,6 +1,6 @@
 import {createRenderContext, worldToNdcPoint} from "./render-context.js";
 import {SURFACE_BASE_INVALID_CELL_ID} from "./surface-base-buffer-set.js";
-import {visitCellVisualCorrectionEdges} from "./cell-visual-layer.js";
+import {createCellVisualEdgeCurve, visitCellVisualCorrectionEdges} from "./cell-visual-layer.js";
 
 export const CELL_VISUAL_CORRECTION_WORDS_PER_VERTEX = 3;
 export const CELL_VISUAL_CORRECTION_WORDS_PER_TRIANGLE = 9;
@@ -52,6 +52,66 @@ export function buildCellVisualSurfaceCorrectionFromMap(map) {
     }
   });
   return new Float32Array(triangles);
+}
+
+// 在已上传的平滑边上覆盖变动部分；撤销回原始海陆时，直接移除相应覆盖。
+export function updateEditedCellVisualEdges(map, state, crossings, gl, buffer) {
+  const cells = map.grid.cells;
+  const center = cell => map.grid.points[cells.p[cell]];
+  const context = createRenderContext(map);
+  for (const cell of crossings) {
+    if (state.flipped.has(cell)) state.flipped.delete(cell);
+    else state.flipped.add(cell);
+  }
+  const visited = new Set();
+  const patches = new Map();
+  for (const cell of crossings) for (const neighbor of cells.c[cell] || []) {
+    const pair = cell < neighbor ? [cell, neighbor] : [neighbor, cell];
+    const key = pair.join(":");
+    if (visited.has(key)) continue;
+    visited.add(key);
+    if (!state.flipped.has(cell) && !state.flipped.has(neighbor)) {
+      const slot = state.slots.get(key);
+      if (slot !== undefined) {
+        state.slots.delete(key);
+        state.free.push(slot);
+        patches.set(slot, null);
+      }
+      continue;
+    }
+    const vertices = cells.v[cell].filter(vertex => cells.v[neighbor].includes(vertex));
+    if (vertices.length !== 2) continue;
+    const first = Math.min(...vertices), last = Math.max(...vertices);
+    const curve = createCellVisualEdgeCurve(map, first, last, `${first}:${last}`, false);
+    if (curve.length < 3) continue;
+    let owner = correctionTargetCell(curve, pair, center);
+    if (owner === null) continue;
+    // 跨海陆时恢复直边，修正区域重新使用直边原本所在格的颜色和深度。
+    if ((cells.h[cell] < 20) !== (cells.h[neighbor] < 20)) owner = owner === cell ? neighbor : cell;
+    const identity = packCellVisualCorrectionIdentity(owner, cells.h[owner] < 20);
+    const points = curve.map(point => worldToNdcPoint(context, point));
+    const triangles = [];
+    for (let i = 1; i + 1 < points.length; i++) pushPackedTriangle(triangles, points[0], points[i], points[i + 1], identity);
+    state.wordsPerEdge ||= triangles.length;
+    if (!state.slots.has(key)) state.slots.set(key, state.free.pop() ?? state.nextSlot++);
+    patches.set(state.slots.get(key), triangles);
+  }
+  const required = state.nextSlot * state.wordsPerEdge;
+  const grow = required > state.geometry.length;
+  if (grow) {
+    const geometry = new Float32Array(Math.max(required, state.geometry.length * 2));
+    geometry.set(state.geometry);
+    state.geometry = geometry;
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  for (const [slot, triangles] of patches) {
+    const start = slot * state.wordsPerEdge, end = start + state.wordsPerEdge;
+    if (triangles) state.geometry.set(triangles, start);
+    else state.geometry.fill(0, start, end);
+    if (!grow) gl.bufferSubData(gl.ARRAY_BUFFER, start * 4, state.geometry.subarray(start, end));
+  }
+  if (grow) gl.bufferData(gl.ARRAY_BUFFER, state.geometry, gl.DYNAMIC_DRAW);
+  state.vertexCount = state.slots.size ? required / 3 : 0;
 }
 
 export function createCellVisualCorrectionBufferSet(gl, geometry, usageOrOptions = gl?.STATIC_DRAW) {

@@ -29,7 +29,7 @@ const circularChanges = getHeightBrushChanges(
   {originals: new Map()}
 );
 assert.deepEqual(circularChanges.map(change => change.gridCell), [0, 2], "高度画笔仍读取投影补偿轴，实际命中不是世界坐标正圆");
-assert.ok(circularChanges.every(change => change.after - change.before === 6), "受控落笔步长没有保持单次明确反馈");
+assert.ok(circularChanges.every(change => change.after - change.before === 5), "输入超过上限时单次落笔必须限制在五级以内");
 
 console.log(JSON.stringify({
   ok: true,

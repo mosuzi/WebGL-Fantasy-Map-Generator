@@ -30,8 +30,10 @@ import {
   buildShoreLinePathVertices,
   buildIncrementalShoreVisualPaths,
   buildShoreSurfaceVertexLayers,
+  updateShoreSurfaceVertexLayers,
   buildShoreVisualPaths,
   emptyShoreVisualPaths,
+  patchHardShoreLines,
   pushShoreLineLayers,
   recolorShoreSurfaceVertexLayers,
   summarizeShoreVisualPaths
@@ -108,6 +110,7 @@ import {
   rebindSurfaceBaseBufferSetOwner,
   replaceSurfaceBaseBufferSet,
   summarizeSurfaceBaseBufferSet,
+  updateSurfaceWaterSides,
   uploadSurfaceBaseBufferSetRanges
 } from "./surface-base-buffer-set.js";
 import {
@@ -132,6 +135,7 @@ import {
 import {
   buildCellVisualSurfaceCorrection,
   buildCellVisualSurfaceCorrectionFromMap,
+  updateEditedCellVisualEdges,
   shouldDrawCellVisualCorrection,
   createCellVisualCorrectionBufferSet,
   createCellVisualCorrectionBufferSetAsync,
@@ -392,7 +396,7 @@ const MARKER_ICON_PALETTES = Object.freeze({
 });
 
 const WEBGL_DIRECT_BUFFER_KEYS = Object.freeze([
-  "surfacePatchBuffer", "landCorrectionBuffer", "waterCorrectionBuffer", "landCoverBuffer", "waterCoverBuffer",
+  "editedCellEdgesBuffer", "surfacePatchBuffer", "landCorrectionBuffer", "waterCorrectionBuffer", "landCoverBuffer", "waterCoverBuffer",
   "routeBuffer", "tradeFlowBuffer", "riverBuffer", "selectionBuffer", "heightTransformPreviewBuffer",
   "heightCellSelectionBuffer", "oceanCurrentBuffer", "lineBuffer", "shoreLineBuffer", "pointBuffer",
   "politicalMeshDebugBuffer", "gridCellDiagnosticsBuffer", "gridCellDiagnosticFillBuffer", "gridCellDiagnosticLineBuffer"
@@ -605,6 +609,8 @@ export class PlaceholderMapRenderer {
       ? canvas.parentElement?.insertBefore(this.cityMovePreviewFallbackElement, this.overlay || canvas.nextSibling)
       : canvas.parentElement?.append(this.cityMovePreviewFallbackElement);
     this.cellVisualCorrectionGeometry = new Float32Array();
+    this.editedCellEdges = null;
+    this.editedHardShore = null;
     this.surfaceResourceOwner = null;
     this.surfaceResourceBinding = null;
     this.activeRenderResourceBinding = null;
@@ -1141,6 +1147,9 @@ export class PlaceholderMapRenderer {
         assertRestoreCurrent();
         staged.cellAttributeStore = createCellAttributeStore(this.gl, map, this.viewOptions);
         await upload(staged.surfacePatchBuffer, this.surfacePatchVertices, this.gl.DYNAMIC_DRAW);
+        if (this.editedCellEdges?.base === this.cellVisualCorrectionGeometry) {
+          await upload(staged.editedCellEdgesBuffer, this.editedCellEdges.geometry, this.gl.DYNAMIC_DRAW);
+        }
         for (const [buffer, values] of [[staged.landCorrectionBuffer, this.landCorrectionVertices], [staged.waterCorrectionBuffer, this.waterCorrectionVertices], [staged.landCoverBuffer, this.landCoverVertices], [staged.waterCoverBuffer, this.waterCoverVertices], [staged.oceanCurrentBuffer, this.oceanCurrentVertices], [staged.lineBuffer, this.lineVertices], [staged.shoreLineBuffer, this.shoreLineVertices]]) await upload(buffer, values, this.gl.STATIC_DRAW);
         const pointLayer = buildPointLayer(map);
         staged.pointDrawRanges = pointLayer.drawRanges;
@@ -1318,6 +1327,8 @@ export class PlaceholderMapRenderer {
     const pointVertices = pointLayer.vertices;
     this.surfaceVertices = vertices;
     this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
+    this.editedCellEdges = null;
+    this.editedHardShore = null;
     this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
     this.surfacePatchVertices = new Float32Array();
     this.surfacePatchCellRanges = new Map();
@@ -1329,6 +1340,7 @@ export class PlaceholderMapRenderer {
     this.waterCoverVertices = surfaceBundle.waterCovers;
     this.surfaceCellRanges = surfaceBundle.surfaceCellRanges;
     this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
+    this.shorePathEnds = surfaceBundle.shorePathEnds;
     this.vertexCount = vertices.length / 6;
     this.landCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.landCorrections.length / 6 : 0;
     this.waterCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.waterCorrections.length / 6 : 0;
@@ -1464,6 +1476,8 @@ export class PlaceholderMapRenderer {
     const pointVertices = pointLayer.vertices;
     this.surfaceVertices = vertices;
     this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
+    this.editedCellEdges = null;
+    this.editedHardShore = null;
     this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
     this.surfacePatchVertices = new Float32Array();
     this.surfacePatchCellRanges = new Map();
@@ -1475,6 +1489,7 @@ export class PlaceholderMapRenderer {
     this.waterCoverVertices = surfaceBundle.waterCovers;
     this.surfaceCellRanges = surfaceBundle.surfaceCellRanges;
     this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
+    this.shorePathEnds = surfaceBundle.shorePathEnds;
     this.vertexCount = vertices.length / 6;
     this.landCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.landCorrections.length / 6 : 0;
     this.waterCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.waterCorrections.length / 6 : 0;
@@ -1862,11 +1877,17 @@ export class PlaceholderMapRenderer {
       ? this.gpuResidentShoreSurfaceCache.get(key)
       : null;
     const surfaceBundle = cached || buildShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode, this.viewOptions, this.shoreVisualPaths);
+    this.installGpuResidentShoreSurface(surfaceBundle, key);
+    return surfaceBundle;
+  }
+
+  installGpuResidentShoreSurface(surfaceBundle, key) {
     this.landCorrectionVertices = surfaceBundle.landCorrections;
     this.waterCorrectionVertices = surfaceBundle.waterCorrections;
     this.landCoverVertices = surfaceBundle.landCovers;
     this.waterCoverVertices = surfaceBundle.waterCovers;
     this.shoreSurfaceCellRanges = surfaceBundle.cellRanges;
+    this.shorePathEnds = surfaceBundle.shorePathEnds;
     this.gpuResidentSmoothShoreSurfaceKey = key;
     this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
     this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
@@ -2066,6 +2087,8 @@ export class PlaceholderMapRenderer {
       const surfaceOwner = createRendererSurfaceResourceOwner(this, this.map, surfaceBundle, surfaceBinding);
       this.surfaceVertices = vertices;
       this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
+      this.editedCellEdges = null;
+      this.editedHardShore = null;
       this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
       this.surfacePatchVertices = new Float32Array();
       this.surfacePatchCellRanges = new Map();
@@ -2077,6 +2100,7 @@ export class PlaceholderMapRenderer {
       this.waterCoverVertices = surfaceBundle.waterCovers;
       this.surfaceCellRanges = surfaceBundle.surfaceCellRanges;
       this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
+      this.shorePathEnds = surfaceBundle.shorePathEnds;
       this.vertexCount = vertices.length / 6;
       this.landCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.landCorrections.length / 6 : 0;
       this.waterCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.waterCorrections.length / 6 : 0;
@@ -2148,6 +2172,7 @@ export class PlaceholderMapRenderer {
         this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
         this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
         this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
+        this.shorePathEnds = surfaceBundle.shorePathEnds;
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
       }, {bufferGroup: "surface"});
       if (draw) this.draw();
@@ -2297,6 +2322,49 @@ export class PlaceholderMapRenderer {
     }
   }
 
+
+  refreshResidentHeightTopology(crossings, normalizedCells, draw, binding) {
+    const before = this.shoreVisualPaths;
+    const started = performance.now();
+    const after = buildIncrementalShoreVisualPaths(this.map, before, crossings);
+    const shoreBuilt = performance.now();
+    if (!after) return null;
+    updateSurfaceWaterSides(this.gl, this.surfaceBaseBufferSet, this.surfaceVertices, this.surfaceCompactGeometry, this.surfaceCellRanges, this.map.grid.cells.h, crossings);
+    if (this.editedCellEdges?.base !== this.cellVisualCorrectionGeometry) {
+      this.editedCellEdges = {base: this.cellVisualCorrectionGeometry, flipped: new Set(), slots: new Map(),
+        free: [], nextSlot: 0, wordsPerEdge: 0, vertexCount: 0, geometry: new Float32Array()};
+    }
+    updateEditedCellVisualEdges(this.map, this.editedCellEdges, crossings, this.gl, this.editedCellEdgesBuffer);
+    if (this.gpuResidentHardShoreLineVertices.length) {
+      this.editedHardShore = {paths: before, vertices: this.gpuResidentHardShoreLineVertices, grid: this.map.grid,
+        theme: this.viewOptions.visualTheme, coast: this.layerVisibility.coastline, lake: this.layerVisibility.lakeShore};
+    }
+    this.shoreVisualPaths = after;
+    this.gpuResidentHardShoreLineVertices = new Float32Array();
+    this.gpuResidentSmoothShoreLineVertices = new Float32Array();
+    this.gpuResidentShoreSurfaceCache.clear();
+    const key = gpuResidentShoreSurfaceKey(this.colorMode, this.viewOptions);
+    const edgesBuilt = performance.now();
+    if (shouldDrawShoreVisualBands(this.colorMode) && this.gpuResidentSmoothShoreSurfaceKey === key) {
+      const bundle = updateShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode, this.viewOptions, before, after, {
+        landCorrections: this.landCorrectionVertices, waterCorrections: this.waterCorrectionVertices,
+        landCovers: this.landCoverVertices, waterCovers: this.waterCoverVertices, cellRanges: this.shoreSurfaceCellRanges, shorePathEnds: this.shorePathEnds
+      });
+      this.installGpuResidentShoreSurface(bundle, key);
+      if (this.viewOptions.smoothCellBorders === false) this.refreshGpuResidentShoreSurface();
+    } else {
+      this.gpuResidentSmoothShoreSurfaceKey = "";
+      this.refreshGpuResidentShoreSurface();
+    }
+    const surfaceBuilt = performance.now();
+    if (shouldDrawShoreVisualBands(this.colorMode)) refreshShoreSurfaceCellColors(this, normalizedCells);
+    this.refreshShoreLineLayer({draw: false});
+    if (binding) rebindEditedRendererResources(this, binding, null, this.surfaceResourceOwner);
+    if (draw) this.draw();
+    return {incremental: true, topology: "local", cells: normalizedCells.length, crossings: crossings.length, spans: crossings.length,
+      localShoreMs: roundMs(shoreBuilt - started), localMeshMs: roundMs(edgesBuilt - shoreBuilt), localSurfaceMs: roundMs(surfaceBuilt - edgesBuilt)};
+  }
+
   refreshHeightCells(gridCells, {draw = true, deferTopology = false, binding = null} = {}) {
     const normalizedCells = [...new Set((gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))].sort((a, b) => a - b);
     if (!this.map || !normalizedCells.length) return {incremental: false, cells: 0, spans: 0};
@@ -2307,6 +2375,18 @@ export class PlaceholderMapRenderer {
       terrain[cell * 4] !== encodeHeight(heights[cell]) || terrain[cell * 4 + 1] !== (biome?.[cell] ?? 0)
     ) : [];
     if (textureChanges.length) this.refreshCellAttributeCells(textureChanges);
+    const resident = terrain && this.canPresentGpuResidentColorMode(this.colorMode);
+    const crossings = !deferTopology && this.surfaceCellRanges.size
+      ? heightSurfaceCrossings(this, normalizedCells, heights) : [];
+    if (resident && crossings.length) {
+      const topology = this.refreshResidentHeightTopology(crossings, normalizedCells, draw, binding);
+      if (topology) return topology;
+    } else if (resident) {
+      const shoreSpans = shouldDrawShoreVisualBands(this.colorMode) ? refreshShoreSurfaceCellColors(this, textureChanges) : 0;
+      if (binding) rebindEditedRendererResources(this, binding, null, this.surfaceResourceOwner);
+      if (draw) this.draw();
+      return {incremental: true, cells: normalizedCells.length, spans: 0, shoreSpans};
+    }
     if (this.colorMode !== "height" || !(this.surfaceVertices instanceof Float32Array)) {
       this.refreshCellSurface({draw, binding});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
@@ -2332,19 +2412,9 @@ export class PlaceholderMapRenderer {
       this.refreshCellSurface({draw, binding});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
     }
-    // 旧档的常驻底图只保留紧凑顶点：第三个字的最低位记录水陆。
-    const compact = this.surfaceCompactGeometry;
-    const compactWords = !this.surfaceVertices.length && compact?.length
-      ? new Uint32Array(compact.buffer, compact.byteOffset, compact.length) : null;
-    const requiresShoreRebuild = !deferTopology && normalizedCells.some(gridCell => {
-      const range = this.surfaceCellRanges.get(gridCell);
-      if (!range) return true;
-      const wasWater = compactWords ? Boolean(compactWords[range.start / 2 + 2] & 1) : this.surfaceVertices[range.start + 5] >= 0.5;
-      return wasWater !== (heights[gridCell] < 20);
-    });
-    if (requiresShoreRebuild) {
+    if (crossings.length) {
       const localMesh = refreshCellVisualMeshCells(this.map, this.cellVisualMesh, normalizedCells);
-      const localShore = buildIncrementalShoreVisualPaths(this.map, this.shoreVisualPaths, normalizedCells);
+      const localShore = buildIncrementalShoreVisualPaths(this.map, this.shoreVisualPaths, crossings);
       if (localMesh && localShore) {
         this.cellVisualMesh = localMesh.mesh;
         this.shoreVisualPaths = localShore;
@@ -2375,13 +2445,6 @@ export class PlaceholderMapRenderer {
       this.rebuildShoreVisualCache();
       this.refreshCellSurface({draw, binding});
       return {incremental: false, cells: normalizedCells.length, spans: 1, reason: "shore-or-land-water-change"};
-    }
-
-    if (terrain && this.canPresentGpuResidentColorMode("height")) {
-      const shoreSpans = refreshShoreSurfaceCellColors(this, textureChanges);
-      if (binding) rebindEditedRendererResources(this, binding, null, this.surfaceResourceOwner);
-      if (draw) this.draw();
-      return {incremental: true, cells: normalizedCells.length, spans: 0, shoreSpans};
     }
 
     const spans = [];
@@ -2651,7 +2714,12 @@ export class PlaceholderMapRenderer {
         this.completePerformanceEvent(event, {uploadMs: upload.ms, shoreLineVertexCount: this.shoreLineVertexCount, rebuiltPaths: 0, gpuResidentCache: true}, performance.now());
         return;
       }
-      const shoreLineLayer = buildShoreLineVerticesCached(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.cellVisualMesh, this.viewOptions, this.shoreLinePathVertices, this.shoreLinePathObjectVertices);
+      const source = this.editedHardShore;
+      const hard = this.viewOptions.smoothCellBorders === false && source?.grid === this.map.grid
+        && source.theme === this.viewOptions.visualTheme && source.coast === this.layerVisibility.coastline && source.lake === this.layerVisibility.lakeShore
+        ? patchHardShoreLines(this.map, source.paths, this.shoreVisualPaths, source.vertices, this.layerVisibility, this.viewOptions) : null;
+      const shoreLineLayer = hard ? {vertices: hard, pathVertices: this.shoreLinePathVertices, pathObjectVertices: this.shoreLinePathObjectVertices, rebuiltPaths: 0}
+        : buildShoreLineVerticesCached(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.cellVisualMesh, this.viewOptions, this.shoreLinePathVertices, this.shoreLinePathObjectVertices);
       const shoreLineVertices = shoreLineLayer.vertices;
       this.shoreLineVertices = shoreLineVertices;
       this.shoreLinePathVertices = shoreLineLayer.pathVertices;
@@ -5961,6 +6029,19 @@ function emptyShoreSurfaceCellRanges() {
   };
 }
 
+function heightSurfaceCrossings(renderer, normalizedCells, heights) {
+  // 旧档的常驻底图只保留紧凑顶点：第三个字的最低位记录水陆。
+  const compact = renderer.surfaceCompactGeometry;
+  const compactWords = !renderer.surfaceVertices?.length && compact?.length
+    ? new Uint32Array(compact.buffer, compact.byteOffset, compact.length) : null;
+  return normalizedCells.filter(gridCell => {
+    const range = renderer.surfaceCellRanges.get(gridCell);
+    if (!range) return true;
+    const wasWater = compactWords ? Boolean(compactWords[range.start / 2 + 2] & 1) : renderer.surfaceVertices?.[range.start + 5] >= 0.5;
+    return wasWater !== (heights[gridCell] < 20);
+  });
+}
+
 function refreshShoreSurfaceCellColors(renderer, gridCells) {
   const ranges = renderer.shoreSurfaceCellRanges;
   if (!ranges || !renderer.map) return 0;
@@ -7723,7 +7804,8 @@ function drawSurfaceBase(gl, renderer, depthFunction, iceOverlay = false) {
 function drawCellVisualCorrection(gl, renderer) {
   if (!shouldDrawCellVisualCorrection(renderer.colorMode, renderer.viewOptions) || !GPU_RESIDENT_COLOR_MODES[renderer.colorMode]) return;
   const bufferSet = currentCellVisualCorrectionBufferSet(renderer);
-  if (!bufferSet?.vertexCount) return;
+  const editedCount = renderer.editedCellEdges?.base === renderer.cellVisualCorrectionGeometry ? renderer.editedCellEdges.vertexCount : 0;
+  if (!bufferSet?.vertexCount && !editedCount) return;
   gl.useProgram(renderer.surfaceProgram);
   gl.uniform1i(renderer.surfaceLocations.pointMode, 0);
   gl.uniform1i(renderer.surfaceLocations.surfaceSideMode, 1);
@@ -7733,7 +7815,8 @@ function drawCellVisualCorrection(gl, renderer) {
   gl.depthFunc(gl.ALWAYS);
   gl.disableVertexAttribArray(renderer.surfaceLocations.color);
   gl.vertexAttrib3f(renderer.surfaceLocations.color, 0, 0, 0);
-  for (const segment of bufferSet.segments) {
+  const segments = editedCount ? [...bufferSet.segments, {buffer: renderer.editedCellEdgesBuffer, vertexCount: editedCount}] : bufferSet.segments;
+  for (const segment of segments) {
     if (!segment.vertexCount) continue;
     gl.bindBuffer(gl.ARRAY_BUFFER, segment.buffer);
     gl.enableVertexAttribArray(renderer.surfaceLocations.position);

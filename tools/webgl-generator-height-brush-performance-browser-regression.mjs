@@ -59,20 +59,29 @@ async function profileMap(browserInstance, requestedCells) {
     const box = await canvas.boundingBox();
     assert.ok(box?.width > 0 && box?.height > 0, "地图 canvas 没有可用尺寸");
     const center = {x: box.x + box.width * 0.68, y: box.y + box.height * 0.52};
-    const shoreCenter = await page.evaluate(findVisibleShoreCellPoint);
+    const shoreCenter = await page.evaluate(findVisibleShoreCellPoint, false);
+    const crossingCenter = await page.evaluate(findVisibleShoreCellPoint, true);
     const shortSamples = [];
     const longSamples = [];
     const shoreSamples = [];
     for (let index = 0; index < 3; index += 1) shortSamples.push(await runStroke(page, center, [center], "短笔刷"));
     for (let index = 0; index < 3; index += 1) longSamples.push(await runStroke(page, center, Array.from({length: 18}, (_, pointIndex) => ({x: center.x + pointIndex * box.width * 0.012, y: center.y + Math.sin(pointIndex / 3) * box.height * 0.02})), "连续长拖"));
+    const panel = page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)');
+    await panel.locator('button[data-mode="land"]').click();
     for (let index = 0; index < 2; index += 1) shoreSamples.push(await runStroke(page, shoreCenter, [shoreCenter], "岸线短笔刷"));
-    await page.evaluate(() => {
-      const app = window.__webglGeneratorApp;
-      const originalGetBrush = app.panels.height.getBrush;
-      app.panels.height.getBrush = () => ({...originalGetBrush(), action: "lower", scope: "all", preserveSurface: false, strength: 100});
+    await panel.locator('button[data-mode="lower"]').click();
+    await panel.locator('button[data-mode="all"]').click();
+    const strength = panel.locator("label.ui-slider-field").filter({has: page.getByText("强度", {exact: true})}).locator(".ui-slider-number input");
+    await strength.fill("5");
+    await strength.press("Enter");
+    const falloff = panel.getByRole("switch", {name: "中心衰减"});
+    if (await falloff.getAttribute("aria-checked") === "true") await panel.getByText("中心衰减", {exact: true}).click();
+    await page.waitForFunction(() => {
+      const brush = window.__webglGeneratorApp.panels.height.getBrush();
+      return brush.active && brush.action === "lower" && !brush.preserveSurface && !brush.falloff && brush.strength === 5;
     });
     const topologySamples = [];
-    for (let index = 0; index < 2; index += 1) topologySamples.push(await runStroke(page, shoreCenter, [shoreCenter], "跨水陆岸线笔刷"));
+    for (let index = 0; index < 2; index += 1) topologySamples.push(await runStroke(page, crossingCenter, [crossingCenter], "跨水陆岸线笔刷"));
     const map = await page.evaluate(() => ({
       gridCells: window.__webglGeneratorApp.map.grid.cells.i.length,
       checksum: window.__webglGeneratorApp.map.metadata.checksum,
@@ -94,16 +103,36 @@ async function profileMap(browserInstance, requestedCells) {
       console.error(JSON.stringify({requestedCells, topologySamples}, null, 2));
       assert.fail("跨水陆高度笔刷必须走局部拓扑刷新");
     }
+    assert.ok(topologySamples.every(sample => sample.surfaceRefreshDelta === 0), "跨海陆时不得重建整图地表");
+    const blocked = topologySamples.flatMap(sample => sample.commitLongTasks).filter(ms => ms > 200);
+    assert.deepEqual(blocked, [], "岸线落笔的主线程任务超过 200ms");
     const maxTopologyRefreshMs = Math.max(...topologySamples.map(sample => sample.commitPerformance?.stages?.refreshHeightCells?.ms || Infinity));
     assert.ok(maxTopologyRefreshMs < 500, `跨水陆高度笔刷核心刷新仍超过 500ms：${topologySamples.map(sample => sample.commitPerformance?.stages?.refreshHeightCells?.ms).join(", ")}`);
     assert.ok(Math.max(...topologySamples.map(sample => sample.wallMs)) < 650, `跨水陆高度笔刷 pointerup 仍超过 650ms：${topologySamples.map(sample => sample.wallMs).join(", ")}`);
+    let hardShore;
+    if (requestedCells === 100000) {
+      await page.evaluate(() => window.webglGeneratorApi.layers.setSmoothCellBorders(false));
+      hardShore = await runStroke(page, crossingCenter, [crossingCenter], "跨水陆岸线笔刷");
+      assert.equal(hardShore.surfaceRefreshDelta, 0);
+      assert.equal(hardShore.commitPerformance.stages.refreshHeightCells.topology, "local");
+      assert.ok(hardShore.commitLongTasks.every(ms => ms <= 200), "直岸落笔的主线程任务超过 200ms");
+      await page.evaluate(() => window.webglGeneratorApi.layers.setSmoothCellBorders(true));
+    }
+    await page.evaluate(() => window.webglGeneratorApi.history.redo());
+    const savedShore = await readShoreFrame(page, crossingCenter);
+    const saved = await page.evaluate(() => window.webglGeneratorApi.data.saveBrowserMap());
+    assert.ok(saved.ok, saved.error?.message);
     await page.reload({waitUntil: "domcontentloaded"});
     await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2);
     await page.waitForFunction(() => window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy === false && document.getElementById("generation-loading")?.hidden !== false);
     await page.evaluate(() => window.__webglGeneratorApp.panels.height.open(window.__webglGeneratorApp.editHistory.getStats()));
     await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').waitFor({state: "visible"});
     const refreshRadius = await page.evaluate(() => window.__webglGeneratorApp.panels.height.getBrush().radius);
-    assert.equal(refreshRadius, 42, "刷新页面后高度画笔大小没有从用户偏好恢复");
+    assert.equal(refreshRadius, 27, "刷新页面后高度画笔大小没有从地图存档恢复");
+    const reopened = await readShoreFrame(page, crossingCenter);
+    assert.equal(reopened.height, savedShore.height, "回读必须保留新水面");
+    assert.deepEqual(reopened.edges, savedShore.edges, "回读必须保留新岸线");
+    assert.equal(reopened.errors, 0, "回读后的岸线与实际海陆不符");
     return {
       requestedCells,
       actualGridCells: map.gridCells,
@@ -117,6 +146,7 @@ async function profileMap(browserInstance, requestedCells) {
       long: summarizeStrokes(longSamples),
       shore: summarizeStrokes(shoreSamples),
       topology: summarizeStrokes(topologySamples),
+      hardShore,
       historyBeforeUndo: map.history,
       drawEvents: summarizeEvent(map.renderer.performanceEvents?.draw),
       surfaceRefreshEvents: summarizeEvent(map.renderer.performanceEvents?.surfaceRefresh),
@@ -138,9 +168,9 @@ async function exerciseHeightEditorUi(page) {
   const modeSync = await page.evaluate(() => window.webglGeneratorApi.layers.setViewMode("height"));
   assert.equal(modeSync?.ok, true, modeSync?.error?.message || "视图模式同步失败");
   const brushRadius = panel.locator("label").filter({hasText: "画笔大小"}).locator(".ui-slider-number input");
-  await brushRadius.fill("42");
+  await brushRadius.fill("27");
   await brushRadius.press("Enter");
-  await page.waitForFunction(() => window.__webglGeneratorApp?.panels?.height?.getBrush?.().radius === 42);
+  await page.waitForFunction(() => window.__webglGeneratorApp?.panels?.height?.getBrush?.().radius === 27);
   const beforeLock = await page.evaluate(() => {
     const readHeightButtonState = selector => {
       const button = document.querySelector(selector);
@@ -157,7 +187,7 @@ async function exerciseHeightEditorUi(page) {
       scope: readHeightButtonState('.height-scope-group button[data-mode="all"]'),
       activeViewModes: [...document.querySelectorAll('.ui-segmented-mode-bridge[data-mode].active')].map(button => button.dataset.mode),
       radius: window.__webglGeneratorApp.panels.height.getBrush().radius,
-      storedRadius: window.localStorage.getItem("webgl-generator-height-editor-preferences-v1")
+      storedRadius: window.__webglGeneratorApp.brushRadii.height
     };
   });
   assert.equal(beforeLock.action.pressed, "true", "高度动作按钮缺少真实选中语义");
@@ -167,8 +197,8 @@ async function exerciseHeightEditorUi(page) {
   assert.equal(beforeLock.action.color, "rgb(50, 106, 118)", "高度动作按钮没有高亮计算样式");
   assert.equal(beforeLock.scope.color, "rgb(50, 106, 118)", "高度作用范围按钮没有高亮计算样式");
   assert.deepEqual(beforeLock.activeViewModes, ["height"], "视图模式同步不应清除或污染高度按钮选中态");
-  assert.equal(beforeLock.radius, 42, "高度画笔大小没有响应真实面板输入");
-  assert.match(beforeLock.storedRadius || "", /42/, "高度画笔大小没有写入用户偏好");
+  assert.equal(beforeLock.radius, 27, "高度画笔大小没有响应真实面板输入");
+  assert.equal(beforeLock.storedRadius, 27, "高度画笔大小没有同步到地图");
 
   await panel.getByRole("button", {name: "覆盖锁定"}).click();
   await page.waitForFunction(() => window.__webglGeneratorApp?.heightEdit?.terrainSelection?.cellIds?.length > 0);
@@ -208,7 +238,7 @@ async function exerciseHeightEditorUi(page) {
   assert.equal(afterReenter.scope.activeClass, true, "重新进入高度编辑后作用范围 active class 丢失");
   assert.equal(afterReenter.action.color, "rgb(50, 106, 118)", "重新进入高度编辑后动作高亮丢失");
   assert.equal(afterReenter.scope.color, "rgb(50, 106, 118)", "重新进入高度编辑后作用范围高亮丢失");
-  assert.equal(afterReenter.radius, 42, "重新进入高度编辑后画笔大小没有保持");
+  assert.equal(afterReenter.radius, 27, "重新进入高度编辑后画笔大小没有保持");
   assert.equal(afterReenter.selectionCells, selectionCells, "真实高度选区 GPU 高亮没有恢复");
   await panel.getByRole("button", {name: "关闭面板"}).click();
   const hiddenPanel = page.locator('.floating-panel[data-panel-id="height-panel"]');
@@ -216,11 +246,11 @@ async function exerciseHeightEditorUi(page) {
   await page.evaluate(() => window.__webglGeneratorApp.panels.height.open(window.__webglGeneratorApp.editHistory.getStats()));
   await panel.waitFor({state: "visible"});
   await panel.getByRole("button", {name: "启用高度编辑"}).click();
-  await page.waitForFunction(expected => window.__webglGeneratorApp?.panels?.height?.getBrush?.().radius === 42 && window.__webglGeneratorApp.renderer.getStats().heightCellSelection.cells === expected, selectionCells);
-  return {selectionCells, beforeLock, afterReenter, panelReopen: {radius: 42, selectionCells}};
+  await page.waitForFunction(expected => window.__webglGeneratorApp?.panels?.height?.getBrush?.().radius === 27 && window.__webglGeneratorApp.renderer.getStats().heightCellSelection.cells === expected, selectionCells);
+  return {selectionCells, beforeLock, afterReenter, panelReopen: {radius: 27, selectionCells}};
 }
 
-function findVisibleShoreCellPoint() {
+function findVisibleShoreCellPoint(crossing) {
   const app = window.__webglGeneratorApp;
   const paths = [...(app.renderer.shoreVisualPaths?.coastline || []), ...(app.renderer.shoreVisualPaths?.lakeShore || [])];
   const cells = app.map.grid.cells;
@@ -229,19 +259,62 @@ function findVisibleShoreCellPoint() {
   const shoreSurfaceCells = new Set(Object.values(app.renderer.shoreSurfaceCellRanges || {}).flatMap(byCell => byCell instanceof Map ? [...byCell.keys()] : []));
   const candidates = shoreSurfaceCells.size ? shoreSurfaceCells : new Set(paths.flatMap(path => [...(path.landCells || [])]));
   for (const gridCell of candidates) {
-    if (Number(cells.h[gridCell]) < 20) continue;
+    if (cells.h[gridCell] < (crossing ? 20 : 25) || (crossing && cells.h[gridCell] > 24)) continue;
     const point = points[cells.p[gridCell]];
     if (!point) continue;
     const screen = app.renderer.worldToScreen(point[0], point[1], rect);
-    if (screen.x > rect.width * 0.3 && screen.x < rect.width * 0.8 && screen.y > rect.height * 0.3 && screen.y < rect.height * 0.75) {
+    if (screen.x > rect.width * 0.3 && screen.x < rect.width * 0.8 && screen.y > rect.height * 0.3 && screen.y < rect.height * 0.75
+      && document.elementFromPoint(rect.x + screen.x, rect.y + screen.y) === app.renderer.canvas) {
       return {x: rect.x + screen.x, y: rect.y + screen.y, gridCell};
     }
   }
   throw new Error("未找到可视岸线 cell");
 }
 
+async function readShoreFrame(page, start) {
+  await page.mouse.move(0, 0);
+  return page.evaluate(({x, y, gridCell}) => {
+    const {renderer, map} = window.__webglGeneratorApp;
+    const {gl, canvas} = renderer;
+    renderer.draw({updateOverlay: false});
+    const rect = canvas.getBoundingClientRect();
+    const px = Math.round((x - rect.left) * canvas.width / rect.width);
+    const py = Math.round((rect.bottom - y) * canvas.height / rect.height);
+    const size = Math.min(160, 2 * Math.min(px, py, canvas.width - px, canvas.height - py));
+    const pixels = new Uint8Array(size * size * 4);
+    gl.readPixels(px - (size >> 1), py - (size >> 1), size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    let hash = 2166136261;
+    for (const byte of pixels) hash = Math.imul(hash ^ byte, 16777619);
+    const edges = [];
+    let errors = 0;
+    for (const path of [...renderer.shoreVisualPaths.coastline, ...renderer.shoreVisualPaths.lakeShore]) {
+      for (const {landCell, waterCell} of path.sourceEdges) {
+        if (map.grid.cells.h[landCell] < 20 || map.grid.cells.h[waterCell] >= 20) errors++;
+        if (landCell === gridCell || waterCell === gridCell) edges.push([landCell, waterCell].join("/"));
+      }
+    }
+    const cells = map.grid.cells;
+    const land = cells.h[gridCell] >= 20;
+    const expected = cells.c[gridCell].filter(neighbor => land !== (cells.h[neighbor] >= 20)
+      && cells.v[gridCell].filter(vertex => cells.v[neighbor].includes(vertex)).length >= 2)
+      .map(neighbor => (land ? [gridCell, neighbor] : [neighbor, gridCell]).join("/")).sort();
+    edges.sort();
+    if (edges.join(",") !== expected.join(",")) errors++;
+    return {pixels: hash >>> 0, edges, height: cells.h[gridCell], errors};
+  }, start);
+}
+
 async function runStroke(page, start, points, label) {
+  const checkShore = label === "跨水陆岸线笔刷";
+  const originalShore = checkShore ? await readShoreFrame(page, start) : null;
   const before = await page.evaluate(readBrushSnapshot);
+  if (checkShore) await page.evaluate(() => {
+    window.brushLongTasks = [];
+    window.brushObserver = new PerformanceObserver(list => {
+      for (const entry of list.getEntries()) window.brushLongTasks.push(entry.duration);
+    });
+    window.brushObserver.observe({type: "longtask"});
+  });
   const frameStartedAt = await page.evaluate(() => {
     const startedAt = performance.now();
     window.__heightBrushPerfFrame = null;
@@ -258,16 +331,29 @@ async function runStroke(page, start, points, label) {
   const wallMs = round(performance.now() - startedAt);
   const feedbackMs = await page.evaluate(frameStarted => window.__heightBrushPerfFrame === null ? null : Math.round((window.__heightBrushPerfFrame - frameStarted) * 10) / 10, frameStartedAt);
   await page.waitForTimeout(80);
+  const commitLongTasks = checkShore ? await page.evaluate(() => {
+    window.brushObserver.disconnect();
+    return window.brushLongTasks;
+  }) : [];
   const after = await page.evaluate(readBrushSnapshot);
+  const changedShore = checkShore ? await readShoreFrame(page, start) : null;
+  if (checkShore) {
+    assert.equal(changedShore.errors, 0, "岸线与实际海陆不符");
+    assert.ok(originalShore.height >= 20 && changedShore.height < 20, "目标格必须从陆地变成水面");
+    assert.notEqual(changedShore.pixels, originalShore.pixels, "海陆变化必须可见");
+  }
   const undoResult = await page.evaluate(() => window.webglGeneratorApi.history.undo());
+  if (checkShore) assert.deepEqual(await readShoreFrame(page, start), originalShore, "撤销须还原原岸线和像素");
   const undo = undoResult?.data || undoResult || {};
   const redoResult = await page.evaluate(() => window.webglGeneratorApi.history.redo());
   const redo = redoResult?.data || redoResult || {};
+  if (checkShore) assert.deepEqual(await readShoreFrame(page, start), changedShore, "重做须还原已提交岸线和像素");
   const undoAgainResult = await page.evaluate(() => window.webglGeneratorApi.history.undo());
   const undoAgain = undoAgainResult?.data || undoAgainResult || {};
   assert.equal(after.activeStrokeCells > 0 || after.lastAffected > 0 || during.activeStrokeCells > 0, true, `${label} 没有形成高度笔刷变化`);
   return {
     label,
+    commitLongTasks,
     pointerDownMs,
     wallMs,
     feedbackMs,

@@ -346,7 +346,7 @@ import {installMapContentSearch} from "./map-content-search.js";
 import {installPngPresets} from "./png-export-presets.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "./direct-manipulation-session.js";
-import {BRUSH_RADIUS_ID, normalizeBrushRadius, normalizeSavedBrushRadii} from "./brush-radius-contract.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, normalizeSavedBrushRadii, normalizeSavedBrushStrengths, normalizeBrushStrength} from "./brush-radius-contract.js";
 import {restoreCanvasToolStrokePreview} from "./canvas-tool-preview-rollback.js";
 import {
   exportAllMapData,
@@ -578,7 +578,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     getIdentity: () => state?.map ? mapRevision.getSnapshot().mapIdentity : null,
     getPresentation: () => {
       const theme = currentVisualThemeId(documentRef);
-      return {options: state?.options || {}, units: normalizeUnitPreferences(readControlPreferences(documentRef).units), brushRadii: state?.brushRadii || {}, theme,
+      return {options: state?.options || {}, units: normalizeUnitPreferences(readControlPreferences(documentRef).units), brushRadii: state?.brushRadii || {}, brushStrengths: state?.brushStrengths || {}, theme,
         themeDocument: isUserVisualTheme(theme) ? exportVisualThemeDocument(theme) : null};
     }
   });
@@ -597,6 +597,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   state = {
     options: {...DEFAULT_OPTIONS},
     brushRadii: normalizeSavedBrushRadii(),
+    brushStrengths: normalizeSavedBrushStrengths(),
     map: null,
     mapReplicaPatchQueue: Promise.resolve(),
     workerSessionMutationGuard: false,
@@ -746,11 +747,16 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     updateHighlights: (references, {active}) => updateRegenerationLockSelectionHighlights(state, references, active)
   });
   const refreshBrushCursor = () => state.brushCursorPreview?.refresh();
+  const saveBrushSetting = (group, id, value) => {
+    if (state[group][id] === value) return;
+    state[group] = {...state[group], [id]: value};
+    if (state.map) state.map.display = {...state.map.display, [group]: state[group]};
+    state.saveStatusUi?.refresh();
+  };
   const saveBrushRadius = (id, radius) => {
-    const next = normalizeSavedBrushRadii({...state.brushRadii, [id]: radius});
-    if (state.brushRadii[id] !== next[id]) {
-      state.brushRadii = next;
-      state.saveStatusUi?.refresh();
+    saveBrushSetting("brushRadii", id, normalizeBrushRadius(id, radius));
+    if (id === BRUSH_RADIUS_ID.HEIGHT_SELECTION && state.heightEdit.terrainSelectionPaintPending) {
+      state.heightEdit.terrainSelectionPaintPending.request.radius = state.brushRadii[id];
     }
     refreshBrushCursor();
   };
@@ -906,10 +912,8 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   state.panels.objectDetails = objectDetailsPanel;
   heightPanel = createHeightPanel(documentRef, panelManager, HeightPanelComponent, {
-    onBrushRadiusChange: radius => {
-      heightPanel?.persistBrushRadius?.(radius);
-      refreshBrushCursor();
-    },
+    onBrushRadiusChange: saveBrushRadius,
+    onBrushStrengthChange: (key, value) => saveBrushSetting("brushStrengths", key, normalizeBrushStrength(key, value)),
     onActiveChange: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH, "panel-toggle");
@@ -1964,7 +1968,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   state.panels.diplomacy = diplomacyPanel;
   economyPanel = createEconomyPanel(documentRef, panelManager, {
-    onBrushRadiusChange: refreshBrushCursor,
+    onBrushRadiusChange: radius => saveBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, radius),
     onLocate: object => {
       locateAndSelectObject("economy-panel", object);
     },
@@ -5334,7 +5338,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   state.brushCursorPreview?.reset();
   if (!workerAdoption?.session?.id) invalidateMapReplicaCoordinators(state, true, "map-replaced");
   state.map = map;
-  restoreSavedBrushRadii(state, map.display?.brushRadii);
+  restoreSavedBrushSettings(state, map.display);
   state.regenerationLockUiSession?.clear({keepContext: false});
   state.pick = null;
   state.editHistory.clear();
@@ -5585,6 +5589,7 @@ function captureMapReplaceSnapshot(state, documentRef) {
   return {
     map: state.map,
     brushRadii: {...state.brushRadii},
+    brushStrengths: {...state.brushStrengths},
     options: cloneGenerationOptions(state.options),
     pendingGenerateId: state.pendingGenerateId,
     mapRevision: state.mapRevision.createSnapshot(),
@@ -5703,7 +5708,7 @@ async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, o
     await yieldToBrowser(documentRef);
     const mapChanged = state.map !== snapshot.map;
     state.map = snapshot.map;
-    restoreSavedBrushRadii(state, snapshot.brushRadii);
+    restoreSavedBrushSettings(state, snapshot);
     state.options = cloneGenerationOptions(snapshot.options);
     state.pendingGenerateId = snapshot.pendingGenerateId;
     state.lastEditRefresh = snapshot.lastEditRefresh;
@@ -6237,7 +6242,7 @@ async function exportMapArchiveViaWorker(state, documentRef, {operation = null, 
     options: {
       ...(state.options || {}),
       visualTheme: currentVisualThemeId(documentRef),
-      display: {units, brushRadii: state.brushRadii}
+      display: {units, brushRadii: state.brushRadii, brushStrengths: state.brushStrengths}
     },
     presentation: {
       visualThemeDocument: isUserVisualTheme(currentVisualThemeId(documentRef))
@@ -6512,6 +6517,7 @@ function mergeParallelMapImportPreparedRender(primary, secondary) {
     waterCorrections: shoreSurface.waterCorrections,
     landCovers: shoreSurface.landCovers,
     waterCovers: shoreSurface.waterCovers,
+    shorePathEnds: shoreSurface.shorePathEnds,
     shoreSurfaceCellRanges: shoreSurface.cellRanges,
     smoothShoreSurfaceKey: primary.presentation.display.shoreSurfaceKey,
     shoreSurfaceEnabled: primary.presentation.display.smoothCellBorders
@@ -19658,7 +19664,8 @@ function applyMarketAssignmentAtEvent(state, event) {
   const brush = state.panels.economy?.getMarketBrush?.();
   if (!brush?.active || !state.economyEdit.activeStroke) return;
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
-  const changes = getMarketAssignmentBrushChanges(state.map, point, brush, state.economyEdit.originals);
+  const anchor = state.renderer.pickClientPoint(event.clientX, event.clientY)?.packCell;
+  const changes = getMarketAssignmentBrushChanges(state.map, point, brush, state.economyEdit.originals, anchor);
   if (!changes.length) return;
   applyMarketAssignmentPreview(state.map, changes);
   state.editRefreshScheduler.run(MARKET_ASSIGNMENT_PREVIEW_EFFECTS);
@@ -20053,9 +20060,12 @@ function updateHeightPanel(state, {includeMapSummary = true} = {}) {
   }
 }
 
-function restoreSavedBrushRadii(state, source) {
-  const radii = normalizeSavedBrushRadii(source);
+function restoreSavedBrushSettings(state, display) {
+  const radii = normalizeSavedBrushRadii(display?.brushRadii);
   state.brushRadii = radii;
+  state.brushStrengths = normalizeSavedBrushStrengths(display?.brushStrengths);
+  state.panels.height?.setBrushSettings?.(radii, state.brushStrengths);
+  state.panels.economy?.setBrushRadius?.(radii[BRUSH_RADIUS_ID.ECONOMY_MARKET]);
   state.panels.state?.setBrushRadius?.(radii.state);
   state.panels.province?.setBrushRadius?.(radii.province);
   state.panels.culture?.setBrushRadius?.(radii.culture);

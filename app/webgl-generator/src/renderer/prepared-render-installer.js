@@ -1,3 +1,4 @@
+import {installGridVertexOverrides} from "./grid-vertex-geometry.js";
 import {unpackLabelLayoutDescriptorsInChunks} from "./label-layout-descriptor.js";
 import {rebindObjectPickingDtoInChunks, rebuildObjectPickingIndexFromDto} from "./picking-dto.js";
 import {
@@ -393,6 +394,9 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("surfaceSourceFloatLength", surfaceValues.mode === "gpu-resident-compact" ? surfaceValues.sourceFloatLength : 0);
       assign("surfaceCompactGeometry", surfaceValues.mode === "gpu-resident-compact" ? surfaceValues.geometry : new Float32Array());
       assign("cellVisualCorrectionGeometry", surfaceValues.cellVisualCorrection || new Float32Array());
+      assign("editedCellEdges", null);
+      assign("editedHardShore", null);
+      installGridVertexOverrides(map.grid, surfaceValues.gridVertexOverrides);
       assign("gpuResidentSmoothShoreSurfaceKey", surfaceValues.smoothShoreSurfaceKey || "");
       } else {
         assignReboundSurfaceBaseBufferSet(surfaceColorPatch.targetBufferSet);
@@ -404,6 +408,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("waterCoverVertices", surfaceValues.waterCovers);
       if (!surfaceColorPatch) assign("surfaceCellRanges", decoded.surfaceCellRanges);
       assign("shoreSurfaceCellRanges", decoded.shoreSurfaceCellRanges);
+      assign("shorePathEnds", surfaceValues.shorePathEnds);
       assign("surfacePatchVertices", new Float32Array());
       assign("surfacePatchCellRanges", new Map());
       assign("surfacePatchCells", new Set());
@@ -1004,6 +1009,7 @@ async function materializePreparedSurfaceColorPatch(renderer, map, patch, gate) 
     waterCorrections: patch.waterCorrections,
     landCovers: patch.landCovers,
     waterCovers: patch.waterCovers,
+    shorePathEnds: patch.shorePathEnds,
     shoreSurfaceCellRanges: patch.shoreSurfaceCellRanges
   };
 }

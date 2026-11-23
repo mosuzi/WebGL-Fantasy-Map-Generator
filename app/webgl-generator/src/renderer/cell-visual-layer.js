@@ -842,7 +842,7 @@ function cellVisualEdgeCurve(map, a, b, edgeCurves, shoreEdges) {
   return curve;
 }
 
-function createCellVisualEdgeCurve(map, first, second, key, shore) {
+export function createCellVisualEdgeCurve(map, first, second, key, shore) {
   const start = resolvedGridVertexPoint(map?.grid, first);
   const end = resolvedGridVertexPoint(map?.grid, second);
   if (!isWorldPoint(start) || !isWorldPoint(end)) {

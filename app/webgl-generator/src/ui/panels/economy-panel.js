@@ -137,7 +137,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     onAssignmentRadius: value => {
       panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, value);
       callbacks.onAssignmentRadius?.(panelState.assignmentRadius);
-      callbacks.onBrushRadiusChange?.();
+      callbacks.onBrushRadiusChange?.(panelState.assignmentRadius);
     },
     onApplyMarketAssignment: () => callbacks.onApplyMarketAssignment?.(),
     onCancelMarketAssignment: () => callbacks.onCancelMarketAssignment?.(),
@@ -238,6 +238,9 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
         targetMarketId: panelState.targetMarketId,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, panelState.assignmentRadius)
       };
+    },
+    setBrushRadius(radius) {
+      panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, radius);
     },
     setMarketAssignmentActive(active) {
       panelState.marketAssignmentActive = Boolean(active);

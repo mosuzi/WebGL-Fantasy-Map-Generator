@@ -237,6 +237,30 @@ export function uploadSurfaceBaseBufferSetRanges(gl, bufferSet, vertices, ranges
   return {ranges: normalized.length, uploads, floats: sourceFloats, bytes};
 }
 
+// 单元的三角形位置和索引在海陆切换时保持稳定，只回写受影响的顶点段。
+export function updateSurfaceWaterSides(gl, bufferSet, expanded, compact, ranges, heights, crossings) {
+  for (const cell of crossings) {
+    const {start, end} = ranges.get(cell);
+    const water = heights[cell] < 20;
+    const geometry = compact?.length ? compact.subarray(start / 2, end / 2) : new Float32Array((end - start) / 2);
+    const words = new Uint32Array(geometry.buffer, geometry.byteOffset, geometry.length);
+    for (let i = start, j = 0; i < end; i += 6, j += 3) {
+      if (expanded.length) {
+        expanded[i + 5] = water ? 0.75 : 0.25;
+        geometry[j] = expanded[i];
+        geometry[j + 1] = expanded[i + 1];
+      }
+      words[j + 2] = (cell << 1) | Number(water);
+    }
+    for (const segment of bufferSet.segments) {
+      const left = Math.max(start, segment.floatStart), right = Math.min(end, segment.floatEnd);
+      if (right <= left) continue;
+      gl.bindBuffer(gl.ARRAY_BUFFER, segment.geometryBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, (left - segment.floatStart) * 2, geometry.subarray((left - start) / 2, (right - start) / 2));
+    }
+  }
+}
+
 export function flattenSurfaceBaseBufferSet(bufferSet) {
   if (!bufferSet?.segments) return [];
   const seen = new Set();
