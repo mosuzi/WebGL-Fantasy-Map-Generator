@@ -135,9 +135,12 @@ try {
         assert.ok(checked > 0);
         initial.checkedPixels = checked;
       }
-      if (focus === "奄帝国" && initial.capital === "兰景") {
+      const krikar = focus === "克里卡国" && initial.capital === "银宁";
+      if ((focus === "奄帝国" && initial.capital === "兰景") || krikar) {
         initial.viewports = [];
-        for (const [w, h] of [[1754, 831], [1440, 900], [1280, 720], [800, 600], [877, 416], [390, 844], [width, height]]) {
+        const viewports = krikar ? [[1754, 831], [1440, 900], [1280, 720], [2560, 1440]]
+          : [[1754, 831], [1440, 900], [1280, 720], [800, 600], [877, 416], [390, 844]];
+        for (const [w, h] of [...viewports, [width, height]]) {
           await page.setViewportSize({width: w, height: h});
           await page.waitForFunction(({w, h, id}) => {
             const {renderer, map} = window.__webglGeneratorApp;
@@ -147,8 +150,20 @@ try {
               Number(key?.[0]) === w / map.metadata.graphWidth && Number(key?.[1]) === h / map.metadata.graphHeight;
           }, {w, h, id: initial.id});
           const row = await sample();
-          assert.ok(row.visible && row.inkInside && row.hitGlyphs === 3 && row.text === focus && row.centers.every((p, i, glyphs) =>
-            Math.abs(p.y - glyphs[0].y) * row.sy < 0.5 && p.y < 330 && (!i || p.x > glyphs[i - 1].x)), JSON.stringify({w, h, row}));
+          assert.ok(row.visible && row.inkInside && row.hitGlyphs === Array.from(focus).length && row.text === focus, JSON.stringify({w, h, row}));
+          if (krikar) {
+            const [ke, li, ka, guo] = row.centers.map(p => ({x:p.x * row.sx, y:p.y * row.sy}));
+            assert.ok(ke.x < li.x && li.x < ka.x && Math.abs(ke.y - li.y) < 0.5 && Math.abs(ke.y - ka.y) < 0.5,
+              "克里卡须在同一行从左向右读");
+            const sameRow = Math.abs(guo.y - ka.y) < 0.5 && guo.x > ka.x;
+            const below = guo.y > ka.y && Math.abs(guo.x - li.x) < 0.5;
+            if (w === 1754 && h === 831) assert.ok(below, "截图中的国字应单独居下");
+            else if (w === 2560 && h === 1440) assert.ok(sameRow, "空间足够时全称应横排一行");
+            else assert.ok(below || sameRow, JSON.stringify({w, h, row}));
+          } else {
+            assert.ok(row.centers.every((p, i, glyphs) => Math.abs(p.y - glyphs[0].y) * row.sy < 0.5 &&
+              p.y < 330 && (!i || p.x > glyphs[i - 1].x)), JSON.stringify({w, h, row}));
+          }
           initial.viewports.push({w, h, font: row.font, centers: row.centers});
         }
       }
@@ -266,15 +281,14 @@ try {
             const box = glyph.getBoundingClientRect();
             return {x: box.left + box.width / 2, y: box.top + box.height / 2};
           });
-          const proportions = points => {
-            const steps = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
-            const total = steps.reduce((sum, step) => sum + step, 0);
-            return steps.map(step => step / total);
+          const relativeSteps = points => {
+            const steps = points.slice(1).map((p, i) => ({x:p.x - points[i].x, y:p.y - points[i].y}));
+            const total = steps.reduce((sum, step) => sum + Math.hypot(step.x, step.y), 0);
+            return steps.map(step => ({x:step.x / total, y:step.y / total}));
           };
           const points = calls.slice(start, start + chars.length);
-          if (name === "奄帝国" && !points.every((p, i) => Math.abs(p.y - points[0].y) < 1 && (!i || p.x > points[i-1].x))) return false;
-          const exported = proportions(points);
-          return proportions(dom).every((step, i) => Math.abs(exported[i] - step) < 0.01);
+          const exported = relativeSteps(points);
+          return relativeSteps(dom).every((step, i) => Math.hypot(exported[i].x - step.x, exported[i].y - step.y) < 0.01);
         } finally { CanvasRenderingContext2D.prototype.fillText = original; }
       }, initial.text);
       assert.ok(checkExport, "PNG 中的国名与屏幕排字位置不一致");

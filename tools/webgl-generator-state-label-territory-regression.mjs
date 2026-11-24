@@ -313,6 +313,21 @@ assert.equal(short.glyphs.map(g=>g.character).join(""),"燕");
 assert.ok(short.fontSize < linear.fontSize);
 const wrap = (text, shortName) => place({item:{...label, text, state:{name:shortName}, rotation:0},
   fits:within(49)});
+const krikar = {...label, text:"克里卡国", state:{name:"克里卡"}};
+const rectangle = (halfWidth, halfHeight) => (box, margin) =>
+  within(halfWidth)(box, margin) && box.top - margin >= -halfHeight && box.bottom + margin <= halfHeight;
+for (const rotation of [0, 45, -62, 90, 118]) {
+  const wrapped = place({item:{...krikar, rotation}, fits:rectangle(36, 30)});
+  assert.equal(wrapped.lines, 2);
+  assert.equal(wrapped.fontSize, 20);
+  const [ke, li, ka, guo] = wrapped.glyphs;
+  assert.equal([ke, li, ka, guo].map(g => g.character).join(""), krikar.text);
+  assert.ok(ke.x < li.x && li.x < ka.x && ke.y === li.y && li.y === ka.y);
+  assert.ok(guo.y > ka.y && guo.x === li.x, "国字独占下一行，位于国名正下方");
+}
+const onlyStem = place({item:{...krikar, rotation:0}, fits:rectangle(17, 23)});
+assert.equal(onlyStem.glyphs.map(g => g.character).join(""), "克里卡");
+assert.equal(onlyStem.lines, 1, "简称也须保持完整");
 for (const [name, stem, second] of [["滕联邦共和国","滕","共和国"], ["North Realm","North","Realm"]]) {
   const wrapped = wrap(name, stem);
   assert.equal(wrapped.lines, 2);

@@ -136,20 +136,27 @@ function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
     // naturally reads as a single line unless that line will crowd its ends.
     const preferRows = rows && length >= 4 && (length * size > span * 0.54
       || (frame && Math.max(width, height) < 1.8 * Math.min(width, height)));
+    const tryHorizontalBeforeWrap = preferRows && upright && rows.some(line => Array.from(line.trim()).length === 1);
     const variants = !rows ? [[name]] : preferRows ? [rows, [name]] : [[name], rows];
     const factors = name === short ? [1, 0.82, 0.66, 0.51, 0.38] : [1, 0.82, 0.66];
     for (const factor of factors) {
       const fontSize = size * factor;
       const margin = Math.max(2, fontSize * 0.12);
       const inside = (layout, site, gap = margin) => fitsGlyphs(layout, site, gap);
-      if (horizontalSites.length && length > 1) {
+      if ((horizontalSites.length && length > 1) || tryHorizontalBeforeWrap) {
         const layout = homelandLineLayout([name], item.resolvedStyle, fontSize, 0, upright);
-        const site = horizontalSites.find(site => inside(layout, site));
+        let site = horizontalSites.find(site => inside(layout, site));
+        if (!site && tryHorizontalBeforeWrap) {
+          site = sites.find(site => inside(layout, site)) ?? inlandSite(outline, layout, fontSize, sx, sy, inside);
+        }
         if (site) return {layout, site, fontSize, candidateIndex: ++candidateIndex};
       }
       let compact = null;
       for (const lines of variants) {
-        const layout = homelandLineLayout(lines, item.resolvedStyle, fontSize, rotation, upright);
+        // A wrapped Chinese name reads across each row, then down to the next.
+        // Rotating the whole block with a steep coast can put its ending above its beginning.
+        const rowAngle = upright && lines.length > 1 ? 0 : rotation;
+        const layout = homelandLineLayout(lines, item.resolvedStyle, fontSize, rowAngle, upright);
         candidateIndex++;
         const site = sites.find(site => inside(layout, site)) ?? inlandSite(outline, layout, fontSize, sx, sy, inside);
         if (site) {
@@ -223,18 +230,18 @@ function fitHorizontalCore({name, style, size, upright, core, outline, sx, sy, f
 function splitHomelandName(name, short) {
   const chars = Array.from(name);
   const han = /\p{Script=Han}/u.test(name);
-  if (chars.length < (han ? 3 : 6)) return null;
+  if (chars.length < (han ? 3 : 6) || (han && name === short)) return null;
+  const stemStart = han ? name.indexOf(short) : -1;
   const breaks = [];
   for (let i = 1; i < chars.length; i++) {
     const left = chars.slice(0, i).join(""), right = chars.slice(i).join("");
+    if (stemStart >= 0 && left.length > stemStart && left.length < stemStart + short.length) continue;
     if (!left.trim() || !right.trim()) continue;
     const wordBreak = /[\s-]$/u.test(left);
     if (!wordBreak && !(han && /\p{Script=Han}/u.test(chars[i - 1]) && /\p{Script=Han}/u.test(chars[i]))) continue;
-    const shorter = Math.min(i, chars.length - i);
-    const polity = /^(联邦共和国|共和国|联合王国|王国|帝国|部盟|邦联|联邦|公国|汗国)$/.test(right);
-    if (han && shorter < 2 && !(left === short && polity)) continue;
-    const semantic = wordBreak || left === short || right === short || polity;
-    breaks.push({lines: [left, right], score: Math.abs(2 * i - chars.length) + (semantic ? 0 : chars.length)});
+    const polity = /^(联邦共和国|共和国|联合王国|王国|帝国|部盟|邦联|联邦|公国|汗国|国)$/.test(right);
+    if (!wordBreak && left !== short && right !== short && !polity) continue;
+    breaks.push({lines: [left, right], score: Math.abs(2 * i - chars.length)});
   }
   return breaks.sort((a, b) => a.score - b.score)[0]?.lines;
 }
