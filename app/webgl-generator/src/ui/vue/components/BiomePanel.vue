@@ -171,8 +171,8 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedBiomeId));
 const biomeActions = Object.freeze([
-  {key: "assign", resultClass: "open-secondary", label: "归属笔刷", icon: Brush},
-  {key: "suitability", resultClass: "open-secondary", label: "数值适居度", icon: TrendCharts}
+  {key: "assign", resultClass: "open-secondary", canvasInteraction: true, label: "归属笔刷", icon: Brush},
+  {key: "suitability", resultClass: "open-secondary", canvasInteraction: true, label: "数值适居度", icon: TrendCharts}
 ]);
 const biomeOptions = computed(() => metrics.value.rows.map(row => ({value: row.id, label: objectLabel(row.name, row.id)})));
 const scopeOptions = Object.freeze([
@@ -250,6 +250,28 @@ const detailRows = computed(() => selected.value ? [
 function buildBiomeMetrics(map) {
   const biomes = map?.climate?.biomes || [];
   const rows = biomes.map(biome => createBiomeRow(map, biome));
+  const byId = new Map(rows.map(row => [row.id, row]));
+  const cells = map?.pack?.cells;
+  for (const id of cells?.i || []) {
+    const row = byId.get(cells.biome?.[id]);
+    if (!row) continue;
+    const suitability = Number(cells.s?.[id]) || 0;
+    const population = Number(cells.pop?.[id]) || 0;
+    row.cells++;
+    row.area += Number(cells.area?.[id]) || 0;
+    row.suitabilityAvg += suitability;
+    row.suitabilityMax = Math.max(row.suitabilityMax, suitability);
+    row.population += population;
+    row.populationMax = Math.max(row.populationMax, population);
+    if (cells.h?.[id] >= 20) row.landCells++;
+    if (suitability > 0) row.positiveSuitabilityCells++;
+    if (population > 0) row.positivePopulationCells++;
+  }
+  for (const row of rows) if (row.cells) row.suitabilityAvg = Math.round(row.suitabilityAvg / row.cells * 10) / 10;
+  for (const city of map?.settlements?.cities || []) {
+    const row = byId.get(cells?.biome?.[city?.cell]);
+    if (row) row.cities++;
+  }
   const metadata = map?.climate?.metadata || {};
   return {
     rows,
@@ -265,33 +287,6 @@ function buildBiomeMetrics(map) {
 function createBiomeRow(map, biome) {
   const id = biome.id;
   const descriptor = resolveBiomeDescriptor(biome, map?.climate?.biomes);
-  const packCells = map?.pack?.cells;
-  const cellIds = packCells?.i || [];
-  let cells = 0;
-  let landCells = 0;
-  let area = 0;
-  let suitability = 0;
-  let suitabilityMax = 0;
-  let positiveSuitabilityCells = 0;
-  let population = 0;
-  let populationMax = 0;
-  let positivePopulationCells = 0;
-
-  for (const cell of cellIds) {
-    if (packCells.biome?.[cell] !== id) continue;
-    const cellSuitability = Number(packCells.s?.[cell] || 0);
-    const cellPopulation = Number(packCells.pop?.[cell] || 0);
-    cells++;
-    area += Number(packCells.area?.[cell] || 0);
-    suitability += cellSuitability;
-    suitabilityMax = Math.max(suitabilityMax, cellSuitability);
-    population += cellPopulation;
-    populationMax = Math.max(populationMax, cellPopulation);
-    if ((packCells.h?.[cell] || 0) >= 20) landCells++;
-    if (cellSuitability > 0) positiveSuitabilityCells++;
-    if (cellPopulation > 0) positivePopulationCells++;
-  }
-
   return {
     id,
     name: descriptor.name,
@@ -299,23 +294,9 @@ function createBiomeRow(map, biome) {
     description: descriptor.description,
     colorText: formatBiomeColor(biome.color),
     habitability: Number(biome.habitability || 0),
-    cells,
-    landCells,
-    area,
-    suitabilityAvg: cells ? Math.round((suitability / cells) * 10) / 10 : 0,
-    suitabilityMax,
-    positiveSuitabilityCells,
-    population,
-    populationMax,
-    positivePopulationCells,
-    cities: countCitiesInBiome(map, id)
+    cells: 0, landCells: 0, area: 0, suitabilityAvg: 0, suitabilityMax: 0, positiveSuitabilityCells: 0,
+    population: 0, populationMax: 0, positivePopulationCells: 0, cities: 0
   };
-}
-
-function countCitiesInBiome(map, biomeId) {
-  const packCells = map?.pack?.cells;
-  if (!packCells?.biome) return 0;
-  return (map?.settlements?.cities || []).filter(city => packCells.biome?.[city.cell] === biomeId).length;
 }
 
 function filterRows(sourceRows, filter) {

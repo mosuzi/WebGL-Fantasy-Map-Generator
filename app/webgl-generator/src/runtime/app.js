@@ -121,8 +121,9 @@ import {createMoveCityCommand, importCityMovePreflight, inspectCityMoveFast} fro
 import {bindCityRelocationDrag, resolveCityRelocationPointerCityId} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createApplySocialExpansionCommand, inspectSocialExpansion} from "./social-expansion-edit-commands.js";
-import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment} from "./biome-edit-commands.js";
+import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment, inspectClimateWarnings} from "./biome-edit-commands.js";
 import {applySuitabilityPreview, buildSuitabilityChanges, buildSuitabilityStrokeChanges, createApplySuitabilityCommand, getSuitabilityBrushChanges, inspectSuitabilityEdit, restoreSuitabilityPreview, SUITABILITY_PREVIEW_EFFECTS} from "./suitability-edit-commands.js";
+import {invalidateSuitabilityStats} from "./suitability-stat-index.js";
 import {
   buildPopulationAdjustmentPlan,
   buildPopulationTransferPlan,
@@ -144,7 +145,7 @@ import {applyHeightBrushPreview, createApplyHeightBrushCommand, prewarmHeightEdi
 import {createHeightBrushCommitTrace, finishHeightBrushCommitTrace, measureHeightBrushCommitStage, recordHeightBrushCommitStage} from "./height-brush-performance.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {sampleHeightBrushSegment} from "./height-brush-cadence.js";
-import {prewarmHeightCellSpatialIndex, queryBrushCellsInRadius} from "./height-cell-spatial-index.js";
+import {prewarmHeightCellSpatialIndex, prewarmPackBrushIndex, queryBrushCellsInRadius} from "./height-cell-spatial-index.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
 import {captureClimatePopulation, restoreClimatePopulation} from "./climate-population-preservation.js";
@@ -207,7 +208,7 @@ import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, 
 import {describeObjectDetailsActions, OBJECT_DETAILS_EDIT_MODE} from "./object-details-actions.js";
 import {createApplyFeaturePatchCommand, createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand, createSetLakeOutletCommand, inspectFeaturePatch, inspectLakeOutletChange} from "./lake-edit-commands.js";
 import {createApplyFeatureTopologyCommand, FEATURE_TOPOLOGY_MODE, inspectFeatureTopology, rebuildFeatureTopology} from "./feature-topology-edit-commands.js";
-import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, inspectProvinceCreation, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
+import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, indexProvinceBrushMembers, inspectProvinceCreation, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {inspectProvincialCapitalReassessment} from "../generator/provincial-capitals.js";
 import {createReassessProvincialCapitalsCommand} from "./provincial-capital-edit-commands.js";
 import {
@@ -217,7 +218,9 @@ import {
   createSetReligionColorCommand,
   createSetReligionParentCommand
 } from "./religion-edit-commands.js";
-import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
+import {SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
+import {prepareSocialBrush} from "./social-brush-preparation.js";
+import {packCellsByGrid} from "./grid-pack-index.js";
 import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, persistentHighlightKey, samePersistentHighlightMembership} from "./persistent-highlights.js";
 import {createAddRiverCommand, createDeleteRiverCommand, createEditRiverControlPointsCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
@@ -246,7 +249,7 @@ import {inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {CLIMATE_DOWNSTREAM_WORKER_TASK, getClimateDownstreamPatchPolicy} from "./climate-downstream-worker-task.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
 import {createDomainPatchCommand, createMapReplacementCommand} from "./domain-patch.js";
-import {captureCommandMapReplicaWritesAsync, createCommandMapReplicaPatch} from "./map-replica-command-patch.js";
+import {captureCommandMapReplicaWrites, captureCommandMapReplicaWritesAsync, createCommandMapReplicaPatch} from "./map-replica-command-patch.js";
 import {createCommittedHistoryGuard, settleHistoryActionResult} from "./history-async-boundary.js";
 import {getHeightDerivedPatchPolicy, HEIGHT_DERIVED_WORKER_TASK} from "./height-derived-worker-task.js";
 import {getRegenerationPatchPolicy, REGENERATION_WORKER_TASK, validateOceanCurrentRegenerationOutput} from "./regeneration-worker-task.js";
@@ -286,7 +289,7 @@ import {
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
-import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStateProvinceSuffixCommand, createSetStatesGovernmentBatchCommand, inspectStateCreation, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createStateBrushPreparation, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStateProvinceSuffixCommand, createSetStatesGovernmentBatchCommand, inspectStateCreation, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {issueCellInspectionToken, normalizeCellCreateInput, validateCellInspectionToken} from "./cell-inspection-token.js";
 import {
   createEnsureProvinceAssignmentCommand,
@@ -584,6 +587,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   const editHistory = new EditHistory({
     onMutation: mutation => {
+      if (mutation.command?.domain !== "suitability") invalidateSuitabilityStats(state?.map);
       saveState.mutation(mutation);
       const before = mapRevision.getSnapshot();
       const after = mapRevision.advance();
@@ -592,7 +596,11 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       });
     },
     onSnapshot: () => ({...mapRevision.createSnapshot(), saveContent: saveState.snapshot()}),
-    onRestore: snapshot => { mapRevision.restoreSnapshot(snapshot); saveState.restorePosition(snapshot?.saveContent); }
+    onRestore: snapshot => {
+      invalidateSuitabilityStats(state?.map);
+      mapRevision.restoreSnapshot(snapshot);
+      saveState.restorePosition(snapshot?.saveContent);
+    }
   });
   state = {
     options: {...DEFAULT_OPTIONS},
@@ -763,7 +771,11 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   const generationPanel = createGenerationPanel(documentRef, panelManager);
   state.panels.generation = generationPanel;
   await generationPanel.ready;
-  state.panels.development = createDevelopmentPanel(documentRef, panelManager);
+  state.panels.development = createDevelopmentPanel(documentRef, panelManager, () => {
+    if (!state.provinceBrushDiagnosticsPending) return;
+    state.provinceBrushDiagnosticsPending = false;
+    updateRuntimePanel(documentRef, state);
+  });
   state.panels.climate = createClimatePanel(documentRef, panelManager, {
     onInspectDownstreamRebuild: options => runtimeActions.climate.inspectDownstreamRebuild(options),
     onApplyDownstreamRebuild: options => runtimeActions.climate.applyDownstreamRebuild(options)
@@ -2781,7 +2793,11 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     const panelHandledAt = performance.now();
     if (!citySelectionSwitch) updateEditingInteractionLock(state, documentRef);
     const lockUpdatedAt = performance.now();
-    if (citySelectionSwitch) updatePickPanel(documentRef, state);
+    // 省份涂抹只改变归属；调试面板关闭时，不必重建整张诊断列表及重生成下拉框。
+    if (metadata?.provinceBrush && (!state.panels.development?.enabled || state.panels.development.collapsed)) {
+      state.provinceBrushDiagnosticsPending = true;
+      updatePickPanel(documentRef, state);
+    } else if (citySelectionSwitch) updatePickPanel(documentRef, state);
     else refreshRuntimeAndPickPanels(documentRef, state);
     const selectionCompletedAt = performance.now();
     if (selection?.object?.kind === OBJECT_KIND.CITY) {
@@ -3141,12 +3157,19 @@ function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCom
     .filter(({session}) => session && ["idle", "patching"].includes(session.status) && session.binding?.mapIdentity === after.mapIdentity);
   if (!active.length) return;
   const sourceMap = state.map;
-  const capturedWritesOutcome = new Promise(resolve => globalThis.setTimeout(resolve, 0)).then(() => captureCommandMapReplicaWritesAsync({
-    map: sourceMap,
-    command: mutation?.command,
-    budgetMs: 4,
-    isCurrent: () => state.map === sourceMap && state.mapRevision.getSnapshot().mapRevision === after.mapRevision
-  })).then(
+  // 小补丁在本次提交取值，下一笔或紧接着的撤销可以继续排队。
+  const capture = async () => {
+    if ((mutation.command?.getReplicaRows || mutation.command?.getReplicaFields || mutation.command?.getReplicaSplices) && (mutation.command.effects?.changedGridCells?.length || 0) <= 4096) {
+      return captureCommandMapReplicaWrites({map: sourceMap, command: mutation.command});
+    }
+    return new Promise(resolve => globalThis.setTimeout(resolve, 0)).then(() => captureCommandMapReplicaWritesAsync({
+      map: sourceMap,
+      command: mutation?.command,
+      budgetMs: 4,
+      isCurrent: () => state.map === sourceMap && state.mapRevision.getSnapshot().mapRevision === after.mapRevision
+    }));
+  };
+  const capturedWritesOutcome = capture().then(
     value => ({ok: true, value}),
     error => ({ok: false, error})
   );
@@ -3154,6 +3177,10 @@ function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCom
   const patchPromise = previous.catch(() => {}).then(async () => {
     const capturedWrites = await capturedWritesOutcome;
     if (!capturedWrites.ok) throw capturedWrites.error;
+    // 先让本次输入交还浏览器，副本严格按提交顺序发送。
+    if (mutation.command?.effects?.cellAttributePatch && mutation.command.effects.changedGridCells?.length) {
+      await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+    }
     if (!capturedWrites.value.length) {
       invalidateMapReplicaCoordinators(state, includeCompute, "map-revision-unpatchable");
       throw Object.assign(new Error("地图副本 mutation 没有可同步写集"), {code: "map_replica_patch_capture_empty"});
@@ -9126,6 +9153,34 @@ function refreshAfterEdit(state, commandOrEffects, binding = null) {
   state.editRefreshScheduler.run(commandOrEffects, {binding});
 }
 
+function refreshAfterBrushEdit(state, command) {
+  // 笔迹先呈现；面板与拾取用已提交的最新地图统一刷新，避免在松手这一帧重复排版。
+  const effects = command.effects;
+  state.editRefreshScheduler.run({...effects, render: "none", selection: "none", runtimeStats: false, pickPanel: false});
+  if (effects.render === "draw") state.renderer.draw({updateOverlay: false, checkGlError: false});
+  const map = state.map;
+  const view = state.renderer.canvas.ownerDocument.defaultView;
+  if (state.pendingBrushPanelMap === map) {
+    state.pendingProvinceBrushOnly &&= command.domain === "province";
+    return;
+  }
+  state.pendingBrushPanelMap = map;
+  state.pendingProvinceBrushOnly = command.domain === "province";
+  function refreshIdleBrushPanels() {
+    if (state.pendingBrushPanelMap !== map) return;
+    if (state.map === map && [state.cultureEdit, state.religionEdit, state.biomeEdit, state.suitabilityEdit,
+      state.heightEdit, state.stateEdit, state.provinceEdit].some(edit => edit?.activeStroke)) {
+      view.setTimeout(refreshIdleBrushPanels, 32);
+      return;
+    }
+    state.pendingBrushPanelMap = null;
+    if (state.map !== map) return;
+    state.selectionStore.refresh({provinceBrush: state.pendingProvinceBrushOnly});
+    refreshPanelsForEdit(state, {derived: ["object-panels"]});
+  }
+  view.requestAnimationFrame(() => view.setTimeout(refreshIdleBrushPanels, 0));
+}
+
 function refreshAfterHeightApiEdit(state, commandOrEffects, binding = null) {
   const effects = commandOrEffects?.effects || commandOrEffects || {};
   state.editRefreshScheduler.run({...effects, runtimeStats: false, pickPanel: false}, {binding});
@@ -13481,7 +13536,7 @@ function refreshAfterStateEdit(state, commandOrEffects) {
 }
 
 function refreshAfterProvinceEdit(state, commandOrEffects) {
-  updateProvincePickAtLastPointer(state);
+  if (!Array.isArray(commandOrEffects?.effects?.changedGridCells)) updateProvincePickAtLastPointer(state);
   refreshAfterEdit(state, commandOrEffects);
 }
 
@@ -16706,6 +16761,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   register(CANVAS_TOOL_MODE.BIOME_ASSIGN, "biome-panel", {
     onEnter: () => {
       prewarmHeightCellSpatialIndex(state.map);
+      packCellsByGrid(state.map);
       state.biomeEdit.activeStroke = null;
       state.biomeEdit.preview = null;
       state.panels.biome?.setAssignmentActive(true);
@@ -16721,6 +16777,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   register(CANVAS_TOOL_MODE.SUITABILITY_PAINT, "biome-panel", {
     onEnter: () => {
       prewarmHeightCellSpatialIndex(state.map);
+      packCellsByGrid(state.map);
       state.suitabilityEdit.activeStroke = null;
       state.suitabilityEdit.preview = null;
       state.panels.biome?.setSuitabilityActive(true);
@@ -16736,6 +16793,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   });
   register(CANVAS_TOOL_MODE.MARKET_ASSIGN, "economy-panel", {
     onEnter: () => {
+      prewarmPackBrushIndex(state.map);
       state.economyEdit.activeStroke = null;
       state.economyEdit.originals = new Map();
       state.economyEdit.preview = null;
@@ -16927,6 +16985,7 @@ function prewarmHeightEditorCaches(state) {
   const startedAt = performance.now();
   const spatialIndex = prewarmHeightCellSpatialIndex(state.map);
   const packCellsByGrid = prewarmHeightEditorPackCellsByGrid(state.map);
+  state.renderer?.prewarmHeightShorePaths?.();
   const result = {
     version: 1,
     gridCells: state.map.grid?.cells?.h?.length || 0,
@@ -16997,12 +17056,15 @@ function registerSocialAssignmentMode(state, documentRef, register, kind) {
   register(modeId, `${kind}-panel`, {
     onEnter: () => {
       prewarmHeightCellSpatialIndex(state.map);
+      packCellsByGrid(state.map);
       state[`${kind}Edit`].activeStroke = null;
+      prepareSocialBrush(state, kind);
       state.panels[kind]?.setAssignmentActive(true);
       activateCanvasToolTheme(state, documentRef, `${kind}s`);
     },
     onExit: () => {
       rollbackCanvasToolStroke(state, kind);
+      state.socialBrushPreparation?.dispose();
       state.panels[kind]?.setAssignmentActive(false);
     }
   });
@@ -17161,6 +17223,7 @@ function rollbackCanvasToolStroke(state, kind) {
   const editState = state[`${kind}Edit`];
   const stroke = editState?.activeStroke;
   if (!stroke) return false;
+  if (kind === "culture" || kind === "religion") state.socialBrushPreparation?.dispose();
   if (kind === "height") cancelScheduledHeightBrush(state, state.renderer?.canvas?.ownerDocument);
   editState.activeStroke = null;
   releasePointer(state.renderer?.canvas, stroke.pointerId);
@@ -17168,8 +17231,8 @@ function rollbackCanvasToolStroke(state, kind) {
   if (kind === "suitability") {
     const changes = buildSuitabilityStrokeChanges(state.map, stroke.originals);
     if (!changes.length) return false;
-    restoreSuitabilityPreview(state.map, changes);
-    state.editRefreshScheduler?.run(SUITABILITY_PREVIEW_EFFECTS);
+    restoreSuitabilityPreview(state.map, changes, stroke.originals);
+    state.editRefreshScheduler?.run({...SUITABILITY_PREVIEW_EFFECTS, changedGridCells: changes.map(change => change.gridCell)});
     state.suitabilityEdit.preview = null;
     state.panels.biome?.updateSuitability({preview: null});
     return true;
@@ -17178,7 +17241,6 @@ function rollbackCanvasToolStroke(state, kind) {
     restoreHeightBrushPreview(state.map, stroke);
     state.editRefreshScheduler?.run({
       ...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW,
-      deferTerrainRefresh: false,
       changedGridCells: [...stroke.originals.keys()]
     });
     return true;
@@ -17186,13 +17248,13 @@ function rollbackCanvasToolStroke(state, kind) {
   const restored = restoreCanvasToolStrokePreview(state.map, kind, stroke);
   if (!restored.restoredGridCells) return false;
   if (kind === "state") state.editRefreshScheduler?.run({...STATE_BRUSH_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
-  else if (kind === "province") state.editRefreshScheduler?.run(PROVINCE_BRUSH_PREVIEW_EFFECTS);
+  else if (kind === "province") state.editRefreshScheduler?.run({...PROVINCE_BRUSH_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
   else if (kind === "biome") {
     state.editRefreshScheduler?.run({...BIOME_ASSIGNMENT_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
     state.biomeEdit.preview = null;
     state.panels.biome?.updateAssignment({preview: null});
   }
-  else state.editRefreshScheduler?.run(SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS);
+  else state.editRefreshScheduler?.run({...SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS, socialField: kind, changedGridCells: [...stroke.originals.keys()]});
   return true;
 }
 
@@ -17980,7 +18042,25 @@ function roundMeasurementExport(value) {
 }
 
 function bindHeightEditing(canvas, state, documentRef) {
-  canvas.addEventListener("pointerdown", event => {
+  let releasing = null;
+  const waiting = [];
+  const register = (type, handle) => canvas.addEventListener(type, event => {
+    if (releasing && state.heightEdit.activeStroke !== releasing) {
+      releasing = null;
+      waiting.length = 0;
+    }
+    if (releasing && state.panels.height?.getBrush()?.active) {
+      if (!waiting.length && type === "pointermove" && !event.buttons) return;
+      if (type === "pointerdown") {
+        if (!isPrimaryPointerDown(event)) return;
+        capturePointer(canvas, event.pointerId);
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      waiting.push({handle, event, map: state.map});
+    } else handle(event);
+  }, true);
+  register("pointerdown", event => {
     const brush = state.panels.height?.getBrush();
     if (!brush?.active || !state.map) return;
     if (!isPrimaryPointerDown(event)) return;
@@ -18018,9 +18098,9 @@ function bindHeightEditing(canvas, state, documentRef) {
     };
     capturePointer(canvas, event.pointerId);
     scheduleHeightBrushAtEvent(state, event, documentRef);
-  }, true);
+  });
 
-  canvas.addEventListener("pointermove", event => {
+  register("pointermove", event => {
     const brush = state.panels.height?.getBrush();
     if (state.heightEdit.terrainSelectionPaint?.pointerId === event.pointerId) {
       event.preventDefault();
@@ -18048,9 +18128,9 @@ function bindHeightEditing(canvas, state, documentRef) {
     event.preventDefault();
     event.stopImmediatePropagation();
     scheduleHeightBrushAtEvent(state, event, documentRef);
-  }, true);
+  });
 
-  canvas.addEventListener("pointerup", event => {
+  register("pointerup", event => {
     if (state.heightEdit.terrainSelectionPaint?.pointerId === event.pointerId) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -18062,25 +18142,43 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    const finalPreviewChanged = flushScheduledHeightBrush(state, documentRef, event, {draw: false});
-    const commitTrace = finishHeightStroke(state, documentRef);
-    try {
-      if (finalPreviewChanged && !commitTrace?.changedCells) state.renderer.draw({updateOverlay: false, checkGlError: false});
-      releasePointer(canvas, event.pointerId);
-      updateHeightPanel(state, {includeMapSummary: false});
-      scheduleHeightPanelSummary(state, documentRef);
-    } finally {
-      if (commitTrace) {
-        state.heightEdit.lastCommitPerformance = finishHeightBrushCommitTrace(commitTrace, {
-          changedCells: commitTrace.changedCells,
-          renderer: state.renderer?.getPerformanceEvents?.() || null
-        });
-        state.heightEdit.activeCommitTrace = null;
+    const stroke = state.heightEdit.activeStroke;
+    stroke.released = true;
+    releasePointer(canvas, event.pointerId);
+    const finish = changed => {
+      if (state.heightEdit.activeStroke !== stroke) {
+        if (releasing === stroke) waiting.length = 0;
+        return;
       }
-    }
-  }, true);
+      const commitTrace = finishHeightStroke(state, documentRef);
+      try {
+        if (changed && !commitTrace?.changedCells) state.renderer.draw({updateOverlay: false, checkGlError: false});
+        updateHeightPanel(state, {includeMapSummary: false});
+        scheduleHeightPanelSummary(state, documentRef);
+      } finally {
+        if (commitTrace) {
+          state.heightEdit.lastCommitPerformance = finishHeightBrushCommitTrace(commitTrace, {
+            changedCells: commitTrace.changedCells,
+            renderer: state.renderer?.getPerformanceEvents?.() || null
+          });
+          state.heightEdit.activeCommitTrace = null;
+        }
+      }
+    };
+    const changed = flushScheduledHeightBrush(state, documentRef, event, {draw: false});
+    if (!changed?.then) return finish(changed);
+    releasing = stroke;
+    void changed.then(finish).finally(() => {
+      if (releasing !== stroke) return;
+      releasing = null;
+      while (!releasing && waiting.length) {
+        const input = waiting.shift();
+        if (input.map === state.map && state.panels.height?.getBrush()?.active) input.handle(input.event);
+      }
+    });
+  });
 
-  canvas.addEventListener("pointercancel", event => {
+  register("pointercancel", event => {
     if (state.heightEdit.terrainSelectionPaint?.pointerId === event.pointerId) {
       cancelScheduledHeightSelectionPaint(state, documentRef);
       cancelHeightSelectionPaint(state);
@@ -18096,7 +18194,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     rollbackCanvasToolStroke(state, "height");
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
-  }, true);
+  });
 
   canvas.addEventListener("pointerleave", event => {
     const brush = state.panels.height?.getBrush();
@@ -18323,7 +18421,8 @@ function applyHeightSelectionPaintAtEvent(state, event, documentRef) {
   active.previewSelection = selection;
   active.invalidNotice = "";
   const feather = createHeightCellSelectionFeather(state.map, selection.cellIds, {rings: state.heightEdit.terrainSelectionFeather});
-  const rendererPreview = state.renderer?.setHeightCellSelection?.(selection.cellIds, {weights: feather.summary.valid ? feather.weights : null}) || null;
+  const rendererPreview = state.renderer?.setHeightCellSelection?.(selection.cellIds, {weights: feather.summary.valid ? feather.weights : null, draw: false}) || null;
+  state.renderer?.draw({updateOverlay: false, checkGlError: false});
   state.heightEdit.lastNotice = `画笔选区预览 ${selection.summary.count} cells（${active.stampCount} stamps${rendererPreview ? ` / GPU ${rendererPreview.triangleCount} triangles` : ""}）。`;
   updateHeightPanel(state, {includeMapSummary: false});
 }
@@ -18543,6 +18642,8 @@ function bindStateEditing(canvas, state, documentRef) {
       pointerId: event.pointerId,
       originals: new Map(),
       originalPackStates: new Map(),
+      boundaryScan: createStateBrushPreparation(state.map),
+      revision: state.mapRevision.mapRevision,
       sourceStateId
     };
     state.stateEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
@@ -18696,6 +18797,9 @@ function bindProvinceEditing(canvas, state, documentRef) {
     state.provinceEdit.activeStroke = {
       pointerId: event.pointerId,
       originals: new Map(),
+      originalPackProvinces: new Map(),
+      memberIndex: indexProvinceBrushMembers(state.map),
+      revision: state.mapRevision.mapRevision,
       sourceProvinceId
     };
     state.provinceEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
@@ -18736,7 +18840,7 @@ function bindSocialAssignmentEditing(canvas, state, documentRef, kind) {
     if (!brush?.active || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    editState.activeStroke = {pointerId: event.pointerId, originals: new Map()};
+    editState.activeStroke = {pointerId: event.pointerId, originals: new Map(), preparation: prepareSocialBrush(state, kind)};
     capturePointer(canvas, event.pointerId);
     applySocialAssignmentAtEvent(state, event, kind);
   }, true);
@@ -18768,14 +18872,16 @@ function bindBiomeAssignmentEditing(canvas, state, documentRef) {
     if (!brush?.active || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    const picked = state.renderer.pickClientPoint(event.clientX, event.clientY);
+    const picked = state.renderer.pickCellClientPoint(event.clientX, event.clientY);
     const preview = inspectBiomeAssignment(state.map, brush.targetId, [picked?.gridCell], {scope: brush.scope});
     if (!preview.valid) {
       state.biomeEdit.preview = preview;
       state.panels.biome?.updateAssignment({preview});
       return;
     }
-    state.biomeEdit.activeStroke = {pointerId: event.pointerId, originals: new Map()};
+    state.biomeEdit.activeStroke = {pointerId: event.pointerId, brush, originals: new Map(), preview: {
+      ...preview, changed: true, packCells: [], changedGridCells: [], changedPackCells: [], warningCells: 0, warnings: []
+    }};
     capturePointer(canvas, event.pointerId);
     applyBiomeAssignmentAtEvent(state, event);
   }, true);
@@ -18809,7 +18915,7 @@ function bindSuitabilityEditing(canvas, state, documentRef) {
     if (!brush?.active || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    const picked = state.renderer.pickClientPoint(event.clientX, event.clientY);
+    const picked = state.renderer.pickCellClientPoint(event.clientX, event.clientY);
     const preview = inspectSuitabilityEdit(state.map, [picked?.gridCell], brush);
     if (!preview.valid) {
       state.suitabilityEdit.preview = preview;
@@ -18864,8 +18970,6 @@ function bindMarketAssignmentEditing(canvas, state, documentRef) {
     event.stopImmediatePropagation();
     state.economyEdit.activeStroke = null;
     releasePointer(canvas, event.pointerId);
-    updateMarketAssignmentPreview(state);
-    updateEconomyPanel(state);
   }, true);
   canvas.addEventListener("pointercancel", event => {
     if (state.economyEdit.activeStroke?.pointerId !== event.pointerId) return;
@@ -19506,33 +19610,67 @@ function cancelScheduledHeightBrush(state, documentRef) {
 
 function applyPendingHeightBrush(state, documentRef, final, draw) {
   const stroke = state.heightEdit.activeStroke;
+  if (stroke.pendingShore) return final ? stroke.pendingShore.then(() =>
+    state.heightEdit.activeStroke === stroke && applyPendingHeightBrush(state, documentRef, true, draw)) : false;
   const brush = state.panels.height.getBrush();
   const pointers = stroke.pointers.splice(0);
   if (!brush.active || !pointers.length) return;
 
-  const changedCells = new Set();
-  for (let index = 0; index < pointers.length; index++) {
-    const pointer = pointers[index];
-    const end = state.renderer.screenToWorld(pointer.clientX, pointer.clientY);
-    for (const point of sampleHeightBrushSegment(stroke, end, brush.radius, final && index === pointers.length - 1)) {
-      const changes = getHeightBrushChanges(state.map, point, brush, stroke);
-      if (!changes.length) continue;
-      applyHeightBrushPreview(state.map, changes, stroke.originalPackHeights);
-      for (const change of changes) changedCells.add(change.gridCell);
+  const map = state.map;
+  const heights = map.grid.cells.h;
+  const batch = new Map();
+  let preparing;
+  try {
+    for (let index = 0; index < pointers.length; index++) {
+      const pointer = pointers[index];
+      const end = state.renderer.screenToWorld(pointer.clientX, pointer.clientY);
+      for (const point of sampleHeightBrushSegment(stroke, end, brush.radius, final && index === pointers.length - 1)) {
+        for (const change of getHeightBrushChanges(map, point, brush, stroke)) {
+          const cell = change.gridCell;
+          const existing = batch.get(cell);
+          if (existing) existing.after = change.after;
+          else batch.set(cell, {...change, previous: heights[cell]});
+          heights[cell] = change.after;
+        }
+      }
     }
+    if (batch.size) preparing = state.renderer.prepareHeightBrushShore?.([...batch.keys()]);
+  } finally {
+    for (const change of batch.values()) heights[change.gridCell] = change.previous;
   }
 
   const pointer = pointers[pointers.length - 1];
   state.pick = state.renderer.pickClientPoint(pointer.clientX, pointer.clientY);
-  if (changedCells.size) {
-    state.heightEdit.lastAffected = changedCells.size;
-    state.heightEdit.lastNotice = stroke.notice || "";
-    state.editRefreshScheduler.run({
-      ...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW,
-      render: "none",
-      changedGridCells: [...changedCells]
+  if (batch.size) {
+    const cells = [...batch.keys()];
+    const paint = (changes, changedGridCells, redraw) => {
+      applyHeightBrushPreview(map, changes, stroke.originalPackHeights);
+      state.heightEdit.lastAffected = changedGridCells.length;
+      state.heightEdit.lastNotice = stroke.notice || "";
+      state.editRefreshScheduler.run({...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW, render: "none", changedGridCells});
+      if (redraw) state.renderer.draw({updateOverlay: false, checkGlError: false});
+    };
+    const publish = install => {
+      if (state.map !== map || state.heightEdit.activeStroke !== stroke) return false;
+      install?.();
+      paint(batch.values(), cells, draw);
+      if (!final) updatePickPanel(documentRef, state);
+      return true;
+    };
+    if (!preparing) return publish();
+    // 不跨海平面的格子先着色。其余格子的高度、岸线和填色在同一帧发布。
+    const stable = [...batch.values()].filter(change => (change.previous < 20) === (change.after < 20));
+    if (stable.length) paint(stable, stable.map(change => change.gridCell), true);
+    stroke.pendingShore = preparing.then(publish).finally(() => {
+      stroke.pendingShore = null;
+      if (!stroke.released && state.heightEdit.activeStroke === stroke && stroke.pointers.length && !state.heightEdit.brushFrame) {
+        state.heightEdit.brushFrame = documentRef.defaultView.requestAnimationFrame(() => {
+          state.heightEdit.brushFrame = 0;
+          if (state.heightEdit.activeStroke === stroke) applyPendingHeightBrush(state, documentRef, false, true);
+        });
+      }
     });
-    if (draw) state.renderer.draw({updateOverlay: false, checkGlError: false});
+    return stroke.pendingShore;
   } else if (brush.action === "fill" && !stroke.originals.size) {
     state.heightEdit.lastAffected = 0;
     state.heightEdit.lastHeight = "none";
@@ -19541,7 +19679,7 @@ function applyPendingHeightBrush(state, documentRef, final, draw) {
     updateHeightPanel(state, {includeMapSummary: false});
   }
   if (!final) updatePickPanel(documentRef, state);
-  return changedCells.size > 0;
+  return false;
 }
 
 function applyStateBrushAtEvent(state, event) {
@@ -19554,6 +19692,7 @@ function applyStateBrushAtEvent(state, event) {
   state.stateEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
   const anchorGridCell = state.renderer.pickCellClientPoint(event.clientX, event.clientY)?.gridCell;
   const changes = getStateBrushChanges(state.map, point, brush, stroke.originals, anchorGridCell);
+  stroke.boundaryScan?.advance();
   if (!changes.length) {
     const durationMs = Math.round((performance.now() - startedAt) * 10) / 10;
     if (durationMs >= 8) state.healthMonitor?.recordCanvasSample?.("state-brush-noop", {durationMs});
@@ -19562,12 +19701,14 @@ function applyStateBrushAtEvent(state, event) {
 
   const sampledAt = performance.now();
   applyStateBrushPreview(state.map, changes, stroke.originalPackStates);
+  stroke.boundaryScan?.record(changes, stroke.originalPackStates);
   const appliedAt = performance.now();
   state.stateEdit.lastAffected = changes.length;
   state.stateEdit.sourceStateId = stroke.sourceStateId;
-  state.editRefreshScheduler.run({...STATE_BRUSH_PREVIEW_EFFECTS, changedGridCells: changes.map(change => change.gridCell)});
+  state.editRefreshScheduler.run({...STATE_BRUSH_PREVIEW_EFFECTS, render: "none", changedGridCells: changes.map(change => change.gridCell)});
+  state.renderer.draw({updateOverlay: false, checkGlError: false});
   const renderedAt = performance.now();
-  updateStatePanel(state);
+  state.panels.state.updateBrushFeedback(stroke.sourceStateId, changes.length);
   state.healthMonitor?.recordCanvasSample?.("state-brush-preview", {
     durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
     sampleMs: Math.round((sampledAt - startedAt) * 10) / 10,
@@ -19588,11 +19729,12 @@ function applyProvinceBrushAtEvent(state, event) {
   const changes = getProvinceBrushChanges(state.map, point, brush, stroke.originals, anchorGridCell);
   if (!changes.length) return;
 
-  applyProvinceBrushPreview(state.map, changes);
+  applyProvinceBrushPreview(state.map, changes, stroke.originalPackProvinces);
   state.provinceEdit.lastAffected = changes.length;
   state.provinceEdit.sourceProvinceId = stroke.sourceProvinceId;
-  state.editRefreshScheduler.run(PROVINCE_BRUSH_PREVIEW_EFFECTS);
-  updateProvincePanel(state);
+  state.editRefreshScheduler.run({...PROVINCE_BRUSH_PREVIEW_EFFECTS, render: "none", changedGridCells: changes.map(change => change.gridCell)});
+  state.renderer.draw({updateOverlay: false, checkGlError: false});
+  state.panels.province.updateBrushFeedback(stroke.sourceProvinceId, changes.length);
 }
 
 function applySocialAssignmentAtEvent(state, event, kind) {
@@ -19603,32 +19745,40 @@ function applySocialAssignmentAtEvent(state, event, kind) {
   const anchorGridCell = state.renderer.pickCellClientPoint(event.clientX, event.clientY)?.gridCell;
   const changes = getSocialAssignmentChanges(state.map, point, brush, editState.activeStroke.originals, kind, anchorGridCell);
   if (!changes.length) return;
-  applySocialAssignmentPreview(state.map, kind, changes);
+  // 色面只读取 grid；关联地块与城市资料在提交时一次性同步。
+  for (const {gridCell, after} of changes) state.map.grid.cells[kind][gridCell] = after;
   editState.lastAffected = changes.length;
-  state.editRefreshScheduler.run(SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS);
-  kind === "culture" ? updateCulturePanel(state) : updateReligionPanel(state);
+  state.editRefreshScheduler.run({...SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS, render: "none", socialField: kind, changedGridCells: changes.map(change => change.gridCell)});
+  state.renderer.draw({updateOverlay: false, checkGlError: false});
+  editState.activeStroke.preparation?.edit(changes, editState.activeStroke.originals);
+  state.panels[kind].setLastAffected(changes.length);
 }
 
 function applyBiomeAssignmentAtEvent(state, event) {
-  const brush = state.panels.biome?.getBrush?.();
   const stroke = state.biomeEdit.activeStroke;
+  const brush = stroke?.brush;
   if (!brush?.active || !stroke || brush.targetId < 0) return;
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
   const anchorGridCell = state.renderer.pickCellClientPoint(event.clientX, event.clientY)?.gridCell;
   const changes = getBiomeBrushChanges(state.map, point, brush, stroke.originals, anchorGridCell);
   if (!changes.length) return;
   applyBiomeAssignmentPreview(state.map, changes);
-  const gridCells = [...stroke.originals.keys()];
-  const preview = inspectBiomeAssignment(state.map, brush.targetId, gridCells, {scope: brush.scope});
-  if (preview.valid) {
-    preview.changed = true;
-    preview.changedGridCells = gridCells;
-    preview.changedPackCells = gridCells.flatMap(gridCell => stroke.originals.get(gridCell)?.packBefore?.map(entry => entry.packCell) || []);
+  const gridCells = changes.map(change => change.gridCell);
+  const preview = stroke.preview;
+  const warnings = inspectClimateWarnings(state.map, brush.targetId, gridCells);
+  preview.warningCells += warnings.cells;
+  preview.warnings = [...new Set([...preview.warnings, ...warnings.reasons])];
+  preview.changedGridCells.push(...gridCells);
+  for (const change of changes) for (const entry of change.packBefore) {
+    preview.packCells.push(entry.packCell);
+    if (entry.before !== brush.targetId) preview.changedPackCells.push(entry.packCell);
   }
-  state.biomeEdit.lastAffected = gridCells.length;
+  preview.gridCells = preview.changedGridCells;
+  state.biomeEdit.lastAffected = stroke.originals.size;
   state.biomeEdit.preview = preview;
-  state.editRefreshScheduler.run({...BIOME_ASSIGNMENT_PREVIEW_EFFECTS, changedGridCells: changes.map(change => change.gridCell)});
-  updateBiomePanel(state);
+  state.editRefreshScheduler.run({...BIOME_ASSIGNMENT_PREVIEW_EFFECTS, render: "none", changedGridCells: gridCells});
+  state.renderer.draw({updateOverlay: false, checkGlError: false});
+  state.panels.biome.updateAssignment({lastAffected: stroke.originals.size, preview: {...preview}});
 }
 
 function applySuitabilityAtEvent(state, event) {
@@ -19656,7 +19806,8 @@ function applySuitabilityAtEvent(state, event) {
   };
   state.suitabilityEdit.lastAffected = changedGridCells.length;
   state.suitabilityEdit.preview = preview;
-  state.editRefreshScheduler.run(SUITABILITY_PREVIEW_EFFECTS);
+  state.editRefreshScheduler.run({...SUITABILITY_PREVIEW_EFFECTS, render: "none", changedGridCells: changes.map(change => change.gridCell)});
+  state.renderer.draw({updateOverlay: false, checkGlError: false});
   state.panels.biome?.updateSuitability({lastAffected: changedGridCells.length, preview});
 }
 
@@ -19664,12 +19815,13 @@ function applyMarketAssignmentAtEvent(state, event) {
   const brush = state.panels.economy?.getMarketBrush?.();
   if (!brush?.active || !state.economyEdit.activeStroke) return;
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
-  const anchor = state.renderer.pickClientPoint(event.clientX, event.clientY)?.packCell;
+  const anchor = state.renderer.pickCellClientPoint(event.clientX, event.clientY)?.packCell;
   const changes = getMarketAssignmentBrushChanges(state.map, point, brush, state.economyEdit.originals, anchor);
   if (!changes.length) return;
   applyMarketAssignmentPreview(state.map, changes);
-  state.editRefreshScheduler.run(MARKET_ASSIGNMENT_PREVIEW_EFFECTS);
+  state.editRefreshScheduler.run({...MARKET_ASSIGNMENT_PREVIEW_EFFECTS, render: "none"});
   updateMarketAssignmentSelection(state);
+  state.renderer.draw({updateOverlay: false, checkGlError: false});
   updateMarketAssignmentPreview(state);
 }
 
@@ -19694,7 +19846,7 @@ function updateMarketAssignmentSelection(state) {
   const gridCells = [...state.economyEdit.originals.keys()]
     .map(packCell => Number(state.map?.pack?.cells?.g?.[packCell]))
     .filter(cell => Number.isInteger(cell) && cell >= 0);
-  state.renderer?.setHeightCellSelection?.(gridCells);
+  state.renderer?.setHeightCellSelection?.(gridCells, {draw: false});
 }
 
 function cancelMarketAssignmentPreview(state) {
@@ -19785,15 +19937,20 @@ function finishSocialAssignmentStroke(state, documentRef, kind) {
     const after = Number(values[gridCell] || 0);
     if (before !== after) changes.push({gridCell, before, after, packBefore: original.packBefore});
   }
+  const job = stroke.preparation;
+  const current = job && job === state.socialBrushPreparation && job.map === state.map && job.revision === state.mapRevision.mapRevision;
+  const options = {preparedCoverage: current ? job.read() : null};
   const command = kind === "culture"
-    ? createApplyCultureAssignmentCommand(changes)
-    : createApplyReligionAssignmentCommand(changes);
+    ? createApplyCultureAssignmentCommand(changes, options)
+    : createApplyReligionAssignmentCommand(changes, options);
   if (command.isNoop({map: state.map})) return;
   editState.lastAffected = changes.length;
   executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
-    refresh: refreshAfterEdit
+    refresh: refreshAfterBrushEdit,
+    refreshPanels: false
   });
+  if (current) job.revision = state.mapRevision.mapRevision;
 }
 
 function finishBiomeAssignmentStroke(state, documentRef) {
@@ -19808,19 +19965,23 @@ function finishBiomeAssignmentStroke(state, documentRef) {
     }
   }
   restoreCanvasToolStrokePreview(state.map, "biome", stroke);
-  state.editRefreshScheduler.run({...BIOME_ASSIGNMENT_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
   const command = createApplyBiomeAssignmentCommand(changes);
   const execution = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
+    refresh: refreshAfterBrushEdit,
+    refreshPanels: false,
+    throwOnError: false,
+    errorStatus: changes.length > 4096 ? "单笔最多修改 4096 个区域，请分笔涂抹。" : "这次群系修改未生效，已还原预览。",
     status: executed => {
       const result = executed.getResult?.();
-      return `已更新 ${result?.gridCells || 0} 个 grid cells 的生物群系${result?.warningCells ? `，其中 ${result.warningCells} 个存在气候或高度异常` : ""}。`;
+      return `已更新 ${result?.gridCells || 0} 个区域的生物群系${result?.warningCells ? `，其中 ${result.warningCells} 个存在气候或高度异常` : ""}。`;
     },
     noopStatus: "生物群系归属没有变化。"
   });
   state.biomeEdit.lastAffected = execution.executed ? changes.length : 0;
+  if (!execution.executed) state.editRefreshScheduler.run({...BIOME_ASSIGNMENT_PREVIEW_EFFECTS, changedGridCells: [...stroke.originals.keys()]});
   state.biomeEdit.preview = null;
-  updateBiomePanel(state);
+  state.panels.biome.updateAssignment({lastAffected: state.biomeEdit.lastAffected, preview: null});
 }
 
 function finishSuitabilityStroke(state, documentRef) {
@@ -19828,11 +19989,12 @@ function finishSuitabilityStroke(state, documentRef) {
   state.suitabilityEdit.activeStroke = null;
   if (!stroke?.originals?.size) return;
   const changes = buildSuitabilityStrokeChanges(state.map, stroke.originals);
-  restoreSuitabilityPreview(state.map, changes);
-  state.editRefreshScheduler.run(SUITABILITY_PREVIEW_EFFECTS);
+  restoreSuitabilityPreview(state.map, changes, stroke.originals);
   const command = createApplySuitabilityCommand(changes);
   const execution = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
+    refresh: refreshAfterBrushEdit,
+    refreshPanels: false,
     status: executed => {
       const result = executed.getResult?.();
       return `已更新 ${result?.gridCells || 0} 个 grid cells、${result?.packCells || 0} 个 pack cells 的数值适居度。`;
@@ -19840,9 +20002,9 @@ function finishSuitabilityStroke(state, documentRef) {
     noopStatus: "数值适居度没有变化。"
   });
   state.suitabilityEdit.lastAffected = execution.executed ? changes.length : 0;
+  if (!execution.executed) state.editRefreshScheduler.run({...SUITABILITY_PREVIEW_EFFECTS, changedGridCells: changes.map(change => change.gridCell)});
   state.suitabilityEdit.preview = null;
   state.panels.biome?.updateSuitability({lastAffected: state.suitabilityEdit.lastAffected, preview: null});
-  updateBiomePanel(state);
 }
 
 function finishHeightStroke(state, documentRef) {
@@ -19893,7 +20055,8 @@ function finishStateStroke(state, documentRef) {
     const after = state.map.grid.cells.state[gridCell];
     if (before !== after) changes.push({gridCell, before, after});
   }
-  const command = createApplyStateBrushCommand(changes, {originalPackStates: stroke.originalPackStates});
+  const boundaryScan = stroke.revision === state.mapRevision.mapRevision ? stroke.boundaryScan : null;
+  const command = createApplyStateBrushCommand(changes, {originalPackStates: stroke.originalPackStates, boundaryScan});
   if (command.isNoop({map: state.map})) return;
   state.stateEdit.lastAffected = changes.length;
   state.stateEdit.sourceStateId = stroke.sourceStateId;
@@ -19901,7 +20064,8 @@ function finishStateStroke(state, documentRef) {
   try {
     executeEditCommand(state, documentRef, command, {
       context: {map: state.map},
-      refresh: refreshAfterStateEdit,
+      refresh: refreshAfterBrushEdit,
+      refreshPanels: false,
       performanceTrace: trace
     });
   } finally {
@@ -19926,13 +20090,15 @@ function finishProvinceStroke(state, documentRef) {
     const after = state.map.grid.cells.province[gridCell];
     if (before !== after) changes.push({gridCell, before, after});
   }
-  const command = createApplyProvinceBrushCommand(changes);
+  const memberIndex = stroke.revision === state.mapRevision.mapRevision ? stroke.memberIndex : null;
+  const command = createApplyProvinceBrushCommand(changes, {originalPackProvinces: stroke.originalPackProvinces, memberIndex});
   if (command.isNoop({map: state.map})) return;
   state.provinceEdit.lastAffected = changes.length;
   state.provinceEdit.sourceProvinceId = stroke.sourceProvinceId;
   executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
-    refresh: refreshAfterProvinceEdit
+    refresh: refreshAfterBrushEdit,
+    refreshPanels: false
   });
 }
 
@@ -19973,14 +20139,15 @@ function getSocialAssignmentChanges(map, point, brush, originals, kind, anchorGr
   const radius = normalizeBrushRadius(radiusId, brush?.radius);
   const cells = map.grid.cells;
   const values = cells[kind];
+  const packIndex = packCellsByGrid(map);
   const affected = [];
   for (const {gridCell} of queryBrushCellsInRadius(map, point, radius, anchorGridCell)) {
     if (!isGridLandCell(map, gridCell)) continue;
     if (Number(values[gridCell] || 0) === brush.targetId) continue;
     if (!originals.has(gridCell)) {
       const packBefore = [];
-      for (let packCell = 0; packCell < (map.pack?.cells?.g?.length || 0); packCell++) {
-        if (Number(map.pack.cells.g[packCell]) !== gridCell || Number(map.pack.cells.h?.[packCell]) < 20) continue;
+      for (const packCell of packIndex?.get(gridCell) || []) {
+        if (Number(map.pack.cells.h?.[packCell]) < 20) continue;
         packBefore.push({packCell, before: Number(map.pack.cells[kind]?.[packCell]) || 0});
       }
       originals.set(gridCell, {gridBefore: Number(values[gridCell] || 0), packBefore});
@@ -20379,7 +20546,7 @@ function getStateIdFromPick(state) {
 }
 
 function getStateIdAtEvent(state, event) {
-  const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  const pick = state.renderer.pickCellClientPoint(event.clientX, event.clientY);
   if (Number.isInteger(pick?.gridCell) && pick.gridCell >= 0) {
     return state.map.grid.cells.state[pick.gridCell] ?? null;
   }
@@ -20407,7 +20574,7 @@ function getProvinceIdFromPick(state) {
 }
 
 function getProvinceIdAtEvent(state, event) {
-  const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  const pick = state.renderer.pickCellClientPoint(event.clientX, event.clientY);
   if (Number.isInteger(pick?.gridCell) && pick.gridCell >= 0) {
     return state.map.grid.cells.province[pick.gridCell] ?? null;
   }

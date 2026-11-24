@@ -1,3 +1,4 @@
+import {packCellsByGrid} from "./grid-pack-index.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {systemAffected} from "./edit-command-effects.js";
 
@@ -17,8 +18,9 @@ const HEIGHT_DEPENDENT_DERIVED_SYSTEMS = Object.freeze([
   "diplomacy"
 ]);
 
-export function createApplyHeightBrushCommand(changes, {label = "高度笔刷", originalPackHeights} = {}) {
+export function createApplyHeightBrushCommand(changes, {label = "高度笔刷", originalPackHeights = new Map()} = {}) {
   const normalized = normalizeChanges(changes);
+  let previous;
   return {
     label: `${label} ${normalized.length} cells`,
     domain: "height",
@@ -32,15 +34,30 @@ export function createApplyHeightBrushCommand(changes, {label = "高度笔刷", 
       affected: systemAffected("height-brush", [{kind: "grid-cells", id: normalized.length}])
     },
     apply(context) {
+      if (!previous) previous = snapshotHeightStale(context.map);
       applyHeights(context.map, normalized, "after", originalPackHeights);
       if (normalized.length) markHeightDependentDerivedStale(context.map);
     },
     revert(context) {
       applyHeights(context.map, normalized, "before", originalPackHeights);
-      if (normalized.length) markHeightDependentDerivedStale(context.map);
+      for (const {section, key, value, exists} of previous || []) {
+        const owner = section ? context.map[section]?.metadata : context.map.metadata;
+        if (!owner) continue;
+        if (exists) owner[key] = value;
+        else delete owner[key];
+      }
     },
     isNoop() {
       return normalized.length === 0;
+    },
+    getReplicaRows(map) {
+      const gridCells = normalized.map(change => change.gridCell);
+      const byGrid = ensurePackCellsByGrid(map);
+      return {"grid.cells.h": gridCells, "pack.cells.h": gridCells.flatMap(cell => byGrid?.get(cell) || [])};
+    },
+    getReplicaFields(map) {
+      return [...(map.metadata ? ["metadata.derivedStale"] : []), ...["military", "zones", "markers", "economy", "diplomacy"]
+        .filter(section => map[section]?.metadata).map(section => section + ".metadata.stale")];
     },
     getChanges() {
       return normalized;
@@ -86,36 +103,29 @@ function normalizeChanges(changes) {
 function applyHeights(map, changes, key, originalPackHeights) {
   if (!map?.grid?.cells?.h) return;
   const packHeights = map.pack?.cells?.h;
-  const writePack = (packCell, change) => {
+  const writePack = (packCell, change, wasPreviewed) => {
     if (key === "after" && originalPackHeights && !originalPackHeights.has(packCell)) {
-      originalPackHeights.set(packCell, packHeights[packCell]);
+      originalPackHeights.set(packCell, wasPreviewed ? change.before : packHeights[packCell]);
     }
     const value = change[key];
     packHeights[packCell] = value === change.before ? (originalPackHeights?.get(packCell) ?? value) : value;
   };
-  const cachedPackCellsByGrid = map.__heightEditorPackCellsByGrid;
-  if (!(cachedPackCellsByGrid instanceof Map) && !Object.hasOwn(map, "__heightEditorPackCellsByGrid")) {
-    const changesByGridCell = new Map();
-    for (const change of changes) {
-      const value = clampHeight(change[key]);
-      map.grid.cells.h[change.gridCell] = value;
-      changesByGridCell.set(change.gridCell, change);
-    }
-    const packGridCells = map.pack?.cells?.g;
-    for (let packCell = 0; packCell < (packGridCells?.length || 0); packCell++) {
-      const change = changesByGridCell.get(packGridCells[packCell]);
-      if (change && packHeights) writePack(packCell, change);
-    }
-    return;
-  }
-  const packCellsByGrid = cachedPackCellsByGrid instanceof Map ? cachedPackCellsByGrid : ensurePackCellsByGrid(map);
+  const packCellsByGrid = ensurePackCellsByGrid(map);
   for (const change of changes) {
     const value = clampHeight(change[key]);
+    const wasPreviewed = key === "after" && map.grid.cells.h[change.gridCell] === value && value !== change.before;
     map.grid.cells.h[change.gridCell] = value;
     for (const packCell of packCellsByGrid?.get(change.gridCell) || []) {
-      writePack(packCell, change);
+      writePack(packCell, change, wasPreviewed);
     }
   }
+}
+
+function snapshotHeightStale(map) {
+  const capture = (owner, key, section) => ({section, key, exists: Object.hasOwn(owner, key), value: owner[key]});
+  return [...(map.metadata ? [capture(map.metadata, "derivedStale")] : []),
+    ...["military", "zones", "markers", "economy", "diplomacy"].filter(section => map[section]?.metadata)
+      .map(section => capture(map[section].metadata, "stale", section))];
 }
 
 function markHeightDependentDerivedStale(map) {
@@ -140,22 +150,7 @@ function clampHeight(value) {
 
 function ensurePackCellsByGrid(map) {
   if (!map?.pack?.cells?.g || !map?.pack?.cells?.h) return null;
-  if (!(map.__heightEditorPackCellsByGrid instanceof Map)) {
-    const byGrid = new Map();
-    for (let packCell = 0; packCell < map.pack.cells.g.length; packCell++) {
-      const mappedGrid = map.pack.cells.g[packCell];
-      if (!Number.isInteger(mappedGrid) || mappedGrid < 0) continue;
-      if (!byGrid.has(mappedGrid)) byGrid.set(mappedGrid, []);
-      byGrid.get(mappedGrid).push(packCell);
-    }
-    Object.defineProperty(map, "__heightEditorPackCellsByGrid", {
-      value: byGrid,
-      writable: true,
-      configurable: true,
-      enumerable: false
-    });
-  }
-  return map.__heightEditorPackCellsByGrid;
+  return packCellsByGrid(map, "__heightEditorPackCellsByGrid");
 }
 
 function roundMs(value) {

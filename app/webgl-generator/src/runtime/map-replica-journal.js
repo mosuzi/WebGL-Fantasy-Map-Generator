@@ -127,12 +127,19 @@ function normalizeWrite(write, index, paths) {
   if (!resolveCanonicalMapWriteDescriptor(path)) throw replicaError("map_replica_path_unregistered", `地图副本 write path 未登记：${path}`);
   paths.add(path);
   const mode = String(write.mode || "replace");
-  if (mode === "replace") return Object.freeze({path, mode, value: write.value});
+  if (mode === "replace" || mode === "field") return Object.freeze({path, mode, value: write.value});
   if (mode === "delete") {
     if (Object.hasOwn(write, "value") || Object.hasOwn(write, "ranges")) {
       throw replicaError("map_replica_delete_payload_invalid", `地图副本 delete 不得携带 payload：${path}`);
     }
     return Object.freeze({path, mode});
+  }
+  if (mode === "splice") {
+    const {start, removed, length, values} = write;
+    if (![start, removed, length].every(n => Number.isSafeInteger(n) && n >= 0) || !Array.isArray(values) || start + values.length > length) {
+      throw replicaError("map_replica_splice_invalid", `地图副本对象表区段无效：${path}`);
+    }
+    return Object.freeze({path, mode, start, removed, length, values});
   }
   if (mode === "ranges") {
     if (!Array.isArray(write.ranges) || !write.ranges.length) throw replicaError("map_replica_ranges_invalid", `地图副本 ranges 为空：${path}`);
@@ -154,12 +161,19 @@ function applyWrite(map, write) {
     deleteWritePath(map, write.path);
     return;
   }
-  const {parent, key} = resolveParent(map, write.path);
-  if (write.mode === "replace") {
+  const {parent, key} = resolveParent(map, write.path, write.mode === "field");
+  if (write.mode === "replace" || write.mode === "field") {
     parent[key] = write.value;
     return;
   }
   const target = parent[key];
+  if (write.mode === "splice") {
+    target.splice(write.start, write.removed);
+    for (let i = 0; i < write.values.length; i += 4096) {
+      target.splice(write.start + i, 0, ...write.values.slice(i, i + 4096));
+    }
+    return;
+  }
   for (const range of write.ranges) {
     if (typeof target.set === "function") target.set(range.values, range.start);
     else for (let offset = 0; offset < range.values.length; offset += 1) target[range.start + offset] = range.values[offset];
@@ -171,9 +185,16 @@ function validateWriteTarget(map, write) {
     validateDeleteWritePath(map, write.path);
     return;
   }
-  const {parent, key} = resolveParent(map, write.path);
-  if (write.mode === "replace") return;
+  const {parent, key} = resolveParent(map, write.path, write.mode === "field");
+  if (write.mode === "field" && (Array.isArray(parent) || ArrayBuffer.isView(parent))) throw replicaError("map_replica_path_invalid", `字段更新需要对象：${write.path}`);
+  if (write.mode === "replace" || write.mode === "field") return;
   const target = parent[key];
+  if (write.mode === "splice") {
+    if (!Array.isArray(target) || target.length !== write.length - write.values.length + write.removed) {
+      throw replicaError("map_replica_splice_bounds", `地图副本对象表长度不一致：${write.path}`);
+    }
+    return;
+  }
   if ((!Array.isArray(target) && !ArrayBuffer.isView(target)) || target instanceof DataView) {
     throw replicaError("map_replica_range_target_invalid", `地图副本 range 目标不是数值列：${write.path}`);
   }
@@ -205,21 +226,21 @@ function deleteWritePath(root, path) {
   delete parent[key];
 }
 
-function resolveParent(root, path) {
+function resolveParent(root, path, allowNewField = false) {
   const parts = path.split(".");
   const key = parts.pop();
   let parent = root;
   for (const part of parts) {
-    if (!parent?.[part] || typeof parent[part] !== "object") throw replicaError("map_replica_path_invalid", `地图副本 path 不存在：${path}`);
+    if (!parent || !Object.hasOwn(parent, part) || !parent[part] || typeof parent[part] !== "object") throw replicaError("map_replica_path_invalid", `地图副本 path 不存在：${path}`);
     parent = parent[part];
   }
-  if (!Object.hasOwn(parent, key)) throw replicaError("map_replica_path_invalid", `地图副本 path 不存在：${path}`);
+  if (!allowNewField && !Object.hasOwn(parent, key)) throw replicaError("map_replica_path_invalid", `地图副本 path 不存在：${path}`);
   return {parent, key};
 }
 
 function normalizePath(value) {
   const path = String(value || "").trim();
-  if (!path || path.startsWith(".") || path.endsWith(".") || path.split(".").some(part => !/^[A-Za-z0-9_-]+$/u.test(part))) {
+  if (!path || path.split(".").some(part => !/^[A-Za-z0-9_-]+$/u.test(part) || ["__proto__", "prototype", "constructor"].includes(part))) {
     throw replicaError("map_replica_path_invalid", `地图副本 path 无效：${path}`);
   }
   return path;

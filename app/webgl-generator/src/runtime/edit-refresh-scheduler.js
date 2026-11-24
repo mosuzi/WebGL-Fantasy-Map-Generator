@@ -30,7 +30,6 @@ export const EDIT_REFRESH_PRESETS = Object.freeze({
     selection: "none",
     runtimeStats: false,
     pickPanel: false,
-    deferTerrainRefresh: true,
     derived: Object.freeze(["height-field", "cell-colors"])
   }),
   STATE_SURFACE_ONLY: Object.freeze({
@@ -50,7 +49,7 @@ export const EDIT_REFRESH_PRESETS = Object.freeze({
 });
 
 export function createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel, applyVisualTheme}) {
-  let deferredLabelToken = 0;
+  let pendingLabelRefresh = null;
   return {
     run(commandOrEffects = null, {binding = null} = {}) {
       // 锁命令的撤销 / 重做也要发布新快照，不能只在点击锁按钮时刷新。
@@ -103,7 +102,9 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.derived.includes("point-layers") && typeof state.renderer.refreshPointLayers === "function") {
-        state.renderer.refreshPointLayers({draw: false, binding: retainedBinding, ...cityPointOptions(effects)});
+        const cityIds = sourceEffects?.brushCityIds;
+        const pointOptions = cityIds?.length && !effects.derived.includes("object-index") ? {cityIds} : cityPointOptions(effects);
+        state.renderer.refreshPointLayers({draw: false, binding: retainedBinding, ...pointOptions});
       }
 
       if (effects.derived.includes("object-index") && typeof state.renderer.refreshObjectPickingIndex === "function") {
@@ -120,13 +121,13 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         && measureStateBrush("editedPaletteDraw", () => state.renderer.refreshEditedPaletteSurface?.(editedPalette, effects.affected, {draw: effects.render === "draw", binding: retainedBinding}))) {
         // 纯对象改色已由 GPU 调色板与局部平滑边缘覆盖，无须重建整张 cell 表面。
       } else if (sourceEffects?.cellAttributePatch === true && effects.derived.includes("cell-colors") && changedGridCells.length
-        && measureStateBrush("cellAttributePatchAndDraw", () => state.renderer.refreshEditedCellColors?.(changedGridCells, {draw: effects.render === "draw", binding: retainedBinding}))) {
+        && measureStateBrush("cellAttributePatchAndDraw", () => state.renderer.refreshEditedCellColors?.(changedGridCells, {draw: effects.render === "draw", binding: retainedBinding, socialField: sourceEffects.socialField}))) {
         // GPU 常驻表面只需更新 cell 属性，避免每次涂抹重建整张表面。
       } else if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
         const trace = state.heightEdit?.activeCommitTrace;
         if (trace) {
           const startedAt = globalThis.performance?.now?.() ?? Date.now();
-          const result = state.renderer.refreshHeightCells(changedGridCells, {deferTopology: effects.deferTerrainRefresh, draw: false, binding: retainedBinding});
+          const result = state.renderer.refreshHeightCells(changedGridCells, {draw: false, binding: retainedBinding});
           recordHeightBrushCommitStage(trace, "refreshHeightCells", startedAt, result || {});
           if (effects.render === "draw") {
             const drawStartedAt = globalThis.performance?.now?.() ?? Date.now();
@@ -134,7 +135,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
             recordHeightBrushCommitStage(trace, "heightBrushDraw", drawStartedAt);
           }
         } else {
-          state.renderer.refreshHeightCells(changedGridCells, {deferTopology: effects.deferTerrainRefresh, draw: effects.render === "draw", binding: retainedBinding});
+          state.renderer.refreshHeightCells(changedGridCells, {draw: effects.render === "draw", binding: retainedBinding});
         }
       } else if ((terrainCaches || effects.derived.includes("cell-colors")) && typeof state.renderer.refreshCellSurface === "function") {
         measureStateBrush("refreshCellSurface", () => state.renderer.refreshCellSurface({draw: effects.render === "draw", binding: retainedBinding}));
@@ -143,38 +144,87 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
-        const labelToken = ++deferredLabelToken;
         const map = state.map;
-        const politicalLabelsOnly = stateNameOnly || politicalPatch && !effects.derived.includes("point-layers");
+        const politicalLabelsOnly = stateNameOnly || politicalPatch && (!effects.derived.includes("point-layers") || sourceEffects?.brushCityIds?.length > 0);
+        const nextOptions = {
+          ...labelRefreshOptions(effects),
+          positionTarget: sourceEffects?.labelPositionTarget,
+          politicalOnly: politicalLabelsOnly,
+          ...(sourceEffects?.brushCityIds?.length ? {cityIds: sourceEffects.brushCityIds} : {}),
+          provinceIds: sourceEffects?.brushProvinceIds
+        };
+        if (politicalLabelsOnly) nextOptions.stateIds = effects.affected.filter(target => target.kind === "state").map(target => Number(target.id));
+        // 连续落笔可能先于上一笔的标签排版，两笔的变动都须保留。
+        const pending = pendingLabelRefresh?.map === map ? pendingLabelRefresh.options : null;
+        let options = nextOptions;
+        if (pending) {
+          if (pending.politicalOnly && nextOptions.politicalOnly) {
+            const union = (a, b) => [...new Set([...(a || []), ...(b || [])])];
+            options = {...nextOptions, stateIds: union(pending.stateIds, nextOptions.stateIds), cityIds: union(pending.cityIds, nextOptions.cityIds),
+              provinceIds: pending.provinceIds && nextOptions.provinceIds ? union(pending.provinceIds, nextOptions.provinceIds) : null};
+          } else options = {};
+        }
+        const request = pendingLabelRefresh = {map, options};
         const queuedAt = globalThis.performance?.now?.() ?? Date.now();
         const refreshLabels = () => {
+          if (pendingLabelRefresh !== request) return;
+          if (state.map !== map) return;
           const startedAt = globalThis.performance?.now?.() ?? Date.now();
           const labelBinding = sourceEffects?.deferLabels
             ? state.renderer.activeRenderResourceBinding || retainedBinding
             : retainedBinding;
-          measureStateBrush("refreshLabels", () => state.renderer.refreshLabels(labelBinding, {
-            positionTarget: sourceEffects?.labelPositionTarget,
-            ...labelRefreshOptions(effects),
-            politicalOnly: politicalLabelsOnly,
-            stateIds: politicalLabelsOnly ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
-          }));
-          if (sourceEffects?.deferLabels) state.healthMonitor?.recordCanvasSample?.("state-label-refresh", {
-            durationMs: Math.round(((globalThis.performance?.now?.() ?? Date.now()) - startedAt) * 10) / 10,
-            waitMs: Math.round((startedAt - queuedAt) * 10) / 10,
-            queueToReadyMs: Math.round(((globalThis.performance?.now?.() ?? Date.now()) - queuedAt) * 10) / 10,
-            cells: changedGridCells.length,
-            buildMs: state.renderer.lastLabelRefreshProfile?.buildMs,
-            layoutMs: state.renderer.lastLabelRefreshProfile?.layoutMs
-          });
+          const finished = () => {
+            pendingLabelRefresh = null;
+            if (sourceEffects?.deferLabels) state.healthMonitor?.recordCanvasSample?.("state-label-refresh", {
+              durationMs: Math.round(((globalThis.performance?.now?.() ?? Date.now()) - startedAt) * 10) / 10,
+              waitMs: Math.round((startedAt - queuedAt) * 10) / 10,
+              queueToReadyMs: Math.round(((globalThis.performance?.now?.() ?? Date.now()) - queuedAt) * 10) / 10,
+              cells: changedGridCells.length,
+              buildMs: state.renderer.lastLabelRefreshProfile?.buildMs,
+              layoutMs: state.renderer.lastLabelRefreshProfile?.layoutMs
+            });
+          };
+          const view = documentRef?.defaultView;
+          const splitLayout = options.politicalOnly && sourceEffects?.deferLabels === "after-paint" && view?.requestAnimationFrame;
+          const layout = measureStateBrush("refreshLabels", () => state.renderer.refreshLabels(labelBinding, {...options, deferLayout: Boolean(splitLayout)}));
+          if (typeof layout === "function") {
+            view.requestAnimationFrame(() => view.setTimeout(() => {
+              if (pendingLabelRefresh !== request || state.map !== map) return;
+              layout();
+              finished();
+            }, 0));
+          } else finished();
         };
-        if (sourceEffects?.deferLabels === "after-paint" && documentRef.defaultView?.requestAnimationFrame) {
-          documentRef.defaultView.requestAnimationFrame(() => documentRef.defaultView.setTimeout(() => {
-            if (labelToken === deferredLabelToken && state.map === map) refreshLabels();
-          }, 0));
-        } else if (sourceEffects?.deferLabels === true && documentRef.defaultView?.requestAnimationFrame) {
-          documentRef.defaultView.requestAnimationFrame(() => {
-            if (labelToken === deferredLabelToken && state.map === map) refreshLabels();
-          });
+        if (sourceEffects?.deferLabels === "after-paint" && documentRef?.defaultView?.requestAnimationFrame) {
+          const view = documentRef.defaultView;
+          const afterPaint = callback => view.requestAnimationFrame(() => view.setTimeout(callback, 0));
+          const ids = options.politicalOnly ? options.stateIds : [];
+          if (!ids?.length || !state.renderer.prepareBrushStateLabel) afterPaint(refreshLabels);
+          else {
+            const placements = new Map();
+            let next = 0;
+            const prepare = () => {
+              if (pendingLabelRefresh !== request || state.map !== map) return;
+              if (state.stateEdit?.activeStroke || state.provinceEdit?.activeStroke) {
+                placements.clear();
+                next = 0;
+              } else {
+                const started = performance.now();
+                do {
+                  const id = ids[next++];
+                  placements.set(id, state.renderer.prepareBrushStateLabel(id));
+                } while (next < ids.length && performance.now() - started < 5);
+              }
+              if (next < ids.length) afterPaint(prepare);
+              else {
+                options.statePlacements = placements;
+                afterPaint(refreshLabels);
+              }
+            };
+            afterPaint(prepare);
+          }
+        } else if (sourceEffects?.deferLabels === true && documentRef?.defaultView?.requestAnimationFrame) {
+          documentRef.defaultView.requestAnimationFrame(refreshLabels);
         } else refreshLabels();
       }
 
@@ -282,23 +332,31 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         && state.renderer.refreshEditedPaletteSurface?.(editedPalette, effects.affected, {draw: effects.render === "draw", binding: retainedBinding})) {
         await checkpoint();
       } else if (sourceEffects?.cellAttributePatch === true && effects.derived.includes("cell-colors") && changedGridCells.length
-        && state.renderer.refreshEditedCellColors?.(changedGridCells, {draw: effects.render === "draw", binding: retainedBinding})) {
+        && state.renderer.refreshEditedCellColors?.(changedGridCells, {draw: effects.render === "draw", binding: retainedBinding, socialField: sourceEffects.socialField})) {
         await checkpoint();
       } else if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
-        await runStep(() => state.renderer.refreshHeightCells(changedGridCells, {deferTopology: effects.deferTerrainRefresh, draw: effects.render === "draw", binding: retainedBinding}));
+        await runStep(() => state.renderer.refreshHeightCells(changedGridCells, {draw: effects.render === "draw", binding: retainedBinding}));
       } else if ((terrainCaches || effects.derived.includes("cell-colors")) && typeof state.renderer.refreshCellSurface === "function") {
         await runStep(() => state.renderer.refreshCellSurface({draw: effects.render === "draw", binding: retainedBinding}));
       } else if (effects.render === "draw") {
         await runStep(() => state.renderer.draw());
       }
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
-        const politicalLabelsOnly = stateNameOnly || politicalPatch && !effects.derived.includes("point-layers");
-        await runStep(() => state.renderer.refreshLabels(retainedBinding, {
-          positionTarget: sourceEffects?.labelPositionTarget,
-          ...labelRefreshOptions(effects),
-          politicalOnly: politicalLabelsOnly,
-          stateIds: politicalLabelsOnly ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
-        }));
+        const politicalLabelsOnly = stateNameOnly || politicalPatch && (!effects.derived.includes("point-layers") || sourceEffects?.brushCityIds?.length > 0);
+        await runStep(() => {
+          if (pendingLabelRefresh?.map === state.map) {
+            pendingLabelRefresh = null;
+            return state.renderer.refreshLabels(retainedBinding);
+          }
+          return state.renderer.refreshLabels(retainedBinding, {
+            positionTarget: sourceEffects?.labelPositionTarget,
+            ...labelRefreshOptions(effects),
+            ...(sourceEffects?.brushCityIds?.length ? {cityIds: sourceEffects.brushCityIds} : {}),
+            provinceIds: sourceEffects?.brushProvinceIds,
+            politicalOnly: politicalLabelsOnly,
+            stateIds: politicalLabelsOnly ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
+          });
+        });
       }
       if (effects.selection === "refresh") {
         await runStep(() => state.selectionStore.refresh());
@@ -386,7 +444,6 @@ export function normalizeEditEffects(effects = {}) {
     selection: effects.selection || DEFAULT_EDIT_EFFECTS.selection,
     runtimeStats: effects.runtimeStats ?? DEFAULT_EDIT_EFFECTS.runtimeStats,
     pickPanel: effects.pickPanel ?? DEFAULT_EDIT_EFFECTS.pickPanel,
-    deferTerrainRefresh: effects.deferTerrainRefresh === true,
     derived: Array.isArray(effects.derived) && effects.derived.length ? [...effects.derived] : [...DEFAULT_EDIT_EFFECTS.derived],
     affected: Array.isArray(effects.affected) ? [...effects.affected] : []
   };

@@ -124,6 +124,27 @@ await stateNameLabelScheduler.runAsync(stateNameLabelCommand, {yieldToMain: asyn
 assert(stateNameLabelCalls.length === 2 && stateNameLabelCalls.every(options => options.politicalOnly === true && JSON.stringify(options.stateIds) === "[7]"), "国家改名的同步 / 异步刷新必须局限目标政治标签");
 
 const asyncCalls = [];
+const frameQueue = [], publishedLabels = [];
+const labelState = {map: {}, renderer: {
+  prepareBrushStateLabel: id => ({id}),
+  refreshLabels: (_binding, options) => publishedLabels.push(options)
+}};
+const labelScheduler = createEditRefreshScheduler({state: labelState, documentRef: {defaultView: {
+  requestAnimationFrame: fn => frameQueue.push(fn), setTimeout: fn => frameQueue.push(fn)
+}}});
+const paintLabels = id => labelScheduler.run({...stateNameLabelCommand.effects, render: "none", deferLabels: "after-paint",
+  affected: [{kind: "state", id}], brushProvinceIds: [10 + id]});
+paintLabels(1);
+frameQueue.shift()();
+frameQueue.shift()();
+paintLabels(2);
+while (frameQueue.length) frameQueue.shift()();
+assert(publishedLabels.length === 1 && publishedLabels[0].statePlacements.size === 2, "连续涂抹必须丢弃旧排版并同时更新两笔国名");
+assertAffected(publishedLabels[0].provinceIds, [11, 12], "两笔省份标签合并");
+paintLabels(3);
+labelState.map = {};
+while (frameQueue.length) frameQueue.shift()();
+assert(publishedLabels.length === 1, "旧图的延迟标签不得写入新图");
 const asyncState = {
   map: {visualTheme: {preset: "default"}},
   renderer: {

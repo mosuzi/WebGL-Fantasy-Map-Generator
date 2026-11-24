@@ -81,6 +81,10 @@ async function profileMap(browserInstance, requestedCells) {
       return brush.active && brush.action === "lower" && !brush.preserveSurface && !brush.falloff && brush.strength === 5;
     });
     const topologySamples = [];
+    if (requestedCells === 100000) {
+      const other = await page.evaluate(findVisibleShoreCellPoint, crossingCenter);
+      await checkInterruptedAndQueuedStrokes(page, other);
+    }
     for (let index = 0; index < 2; index += 1) topologySamples.push(await runStroke(page, crossingCenter, [crossingCenter], "跨水陆岸线笔刷"));
     const map = await page.evaluate(() => ({
       gridCells: window.__webglGeneratorApp.map.grid.cells.i.length,
@@ -99,14 +103,10 @@ async function profileMap(browserInstance, requestedCells) {
     assert.equal(map.heightSelectionCells, uiState.selectionCells, "进入高度编辑后真实地形选区高亮未恢复");
     assert.equal(shoreSamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.incremental === true), true, "岸线高度笔刷不应触发完整拓扑重建");
     assert.ok(Math.max(...shoreSamples.map(sample => sample.wallMs)) < 500, `岸线高度笔刷停手仍超过 500ms：${shoreSamples.map(sample => sample.wallMs).join(", ")}`);
-    if (!topologySamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.topology === "local")) {
-      console.error(JSON.stringify({requestedCells, topologySamples}, null, 2));
-      assert.fail("跨水陆高度笔刷必须走局部拓扑刷新");
-    }
+    assert.ok(topologySamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.incremental), "松笔须复用预览已更新的海岸");
     assert.ok(topologySamples.every(sample => sample.surfaceRefreshDelta === 0), "跨海陆时不得重建整图地表");
-    const blocked = topologySamples.flatMap(sample => sample.commitLongTasks).filter(ms => ms > 200);
-    assert.deepEqual(blocked, [], "岸线落笔的主线程任务超过 200ms");
-    const maxTopologyRefreshMs = Math.max(...topologySamples.map(sample => sample.commitPerformance?.stages?.refreshHeightCells?.ms || Infinity));
+    assert.deepEqual(topologySamples.flatMap(sample => sample.commitLongTasks), [], "岸线落笔出现至少 50ms 的主线程任务");
+    const maxTopologyRefreshMs = Math.max(...topologySamples.map(sample => sample.commitPerformance?.stages?.refreshHeightCells?.ms ?? Infinity));
     assert.ok(maxTopologyRefreshMs < 500, `跨水陆高度笔刷核心刷新仍超过 500ms：${topologySamples.map(sample => sample.commitPerformance?.stages?.refreshHeightCells?.ms).join(", ")}`);
     assert.ok(Math.max(...topologySamples.map(sample => sample.wallMs)) < 650, `跨水陆高度笔刷 pointerup 仍超过 650ms：${topologySamples.map(sample => sample.wallMs).join(", ")}`);
     let hardShore;
@@ -114,8 +114,8 @@ async function profileMap(browserInstance, requestedCells) {
       await page.evaluate(() => window.webglGeneratorApi.layers.setSmoothCellBorders(false));
       hardShore = await runStroke(page, crossingCenter, [crossingCenter], "跨水陆岸线笔刷");
       assert.equal(hardShore.surfaceRefreshDelta, 0);
-      assert.equal(hardShore.commitPerformance.stages.refreshHeightCells.topology, "local");
-      assert.ok(hardShore.commitLongTasks.every(ms => ms <= 200), "直岸落笔的主线程任务超过 200ms");
+      assert.equal(hardShore.commitPerformance.stages.refreshHeightCells.incremental, true);
+      assert.deepEqual(hardShore.commitLongTasks, [], "直岸落笔出现至少 50ms 的主线程任务");
       await page.evaluate(() => window.webglGeneratorApi.layers.setSmoothCellBorders(true));
     }
     await page.evaluate(() => window.webglGeneratorApi.history.redo());
@@ -263,6 +263,7 @@ function findVisibleShoreCellPoint(crossing) {
     const point = points[cells.p[gridCell]];
     if (!point) continue;
     const screen = app.renderer.worldToScreen(point[0], point[1], rect);
+    if (typeof crossing === "object" && Math.hypot(rect.x + screen.x - crossing.x, rect.y + screen.y - crossing.y) < 100) continue;
     if (screen.x > rect.width * 0.3 && screen.x < rect.width * 0.8 && screen.y > rect.height * 0.3 && screen.y < rect.height * 0.75
       && document.elementFromPoint(rect.x + screen.x, rect.y + screen.y) === app.renderer.canvas) {
       return {x: rect.x + screen.x, y: rect.y + screen.y, gridCell};
@@ -271,8 +272,40 @@ function findVisibleShoreCellPoint(crossing) {
   throw new Error("未找到可视岸线 cell");
 }
 
-async function readShoreFrame(page, start) {
-  await page.mouse.move(0, 0);
+async function checkInterruptedAndQueuedStrokes(page, point) {
+  const original = await readShoreFrame(page, point);
+  const depth = await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo);
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    document.addEventListener("pointerdown", event => {
+      function cancelPending() {
+        const stroke = app.heightEdit.activeStroke;
+        if (!stroke) return;
+        if (!stroke.pendingShore) return requestAnimationFrame(cancelPending);
+        const pending = stroke.pendingShore;
+        app.renderer.canvas.dispatchEvent(new PointerEvent("pointercancel", {pointerId: event.pointerId, bubbles: true}));
+        pending.then(() => { window.shoreCancelSettled = true; });
+      }
+      requestAnimationFrame(cancelPending);
+    }, {once: true, capture: true});
+  });
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.waitForFunction(() => window.shoreCancelSettled, null, {timeout: 5000});
+  await page.mouse.up();
+  assert.deepEqual(await readShoreFrame(page, point), original, "取消后迟到的岸线不得覆盖原图");
+  assert.equal(await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo), depth);
+  await page.mouse.click(point.x, point.y);
+  await page.mouse.click(point.x, point.y);
+  await page.waitForFunction(d => !window.__webglGeneratorApp.heightEdit.activeStroke && window.__webglGeneratorApp.editHistory.getStats().undo === d + 2, depth);
+  assert.equal((await readShoreFrame(page, point)).height, original.height - 10, "两次快速落笔应独立降低高度");
+  for (let i = 0; i < 2; i++) assert.ok((await page.evaluate(() => window.webglGeneratorApi.history.undo())).ok);
+  assert.deepEqual(await readShoreFrame(page, point), original, "两笔应可分别撤销至原始岸线和像素");
+  assert.ok(!await page.evaluate(() => window.__webglGeneratorApp.renderer.lastHeightShoreError));
+}
+
+async function readShoreFrame(page, start, held = false) {
+  if (!held) await page.mouse.move(0, 0);
   return page.evaluate(({x, y, gridCell}) => {
     const {renderer, map} = window.__webglGeneratorApp;
     const {gl, canvas} = renderer;
@@ -308,13 +341,30 @@ async function runStroke(page, start, points, label) {
   const checkShore = label === "跨水陆岸线笔刷";
   const originalShore = checkShore ? await readShoreFrame(page, start) : null;
   const before = await page.evaluate(readBrushSnapshot);
-  if (checkShore) await page.evaluate(() => {
+  if (checkShore) await page.evaluate(cell => {
     window.brushLongTasks = [];
+    const app = window.__webglGeneratorApp;
+    const height = app.map.grid.cells.h;
+    const neighbors = new Set([cell, ...app.map.grid.cells.c[cell]]);
+    for (const n of [...neighbors]) for (const next of app.map.grid.cells.c[n]) neighbors.add(next);
+    const original = [...neighbors].map(n => [n, height[n]]);
+    const receipt = window.shoreFeedback = {};
+    document.addEventListener("pointerdown", () => {
+      const start = performance.now();
+      function tick() {
+        if (window.shoreFeedback !== receipt) return;
+        const ms = Math.round((performance.now() - start) * 10) / 10;
+        if (receipt.firstChangeMs === undefined && original.some(([n, before]) => height[n] !== before)) receipt.firstChangeMs = ms;
+        if (height[cell] < 20) receipt.shoreReadyMs = ms;
+        else requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }, {capture: true, once: true});
     window.brushObserver = new PerformanceObserver(list => {
       for (const entry of list.getEntries()) window.brushLongTasks.push(entry.duration);
     });
     window.brushObserver.observe({type: "longtask"});
-  });
+  }, start.gridCell);
   const frameStartedAt = await page.evaluate(() => {
     const startedAt = performance.now();
     window.__heightBrushPerfFrame = null;
@@ -327,6 +377,12 @@ async function runStroke(page, start, points, label) {
   const pointerDownMs = round(performance.now() - startedAt);
   for (const point of points.slice(1)) await page.mouse.move(point.x, point.y, {steps: 1});
   const during = await page.evaluate(readBrushSnapshot);
+  let heldShore;
+  if (checkShore) {
+    await page.waitForFunction(cell => window.__webglGeneratorApp.map.grid.cells.h[cell] < 20, start.gridCell);
+    heldShore = await readShoreFrame(page, start, true);
+    assert.equal(heldShore.errors, 0, "按住画笔时岸线必须已经贴合真实水陆");
+  }
   await page.mouse.up();
   const wallMs = round(performance.now() - startedAt);
   const feedbackMs = await page.evaluate(frameStarted => window.__heightBrushPerfFrame === null ? null : Math.round((window.__heightBrushPerfFrame - frameStarted) * 10) / 10, frameStartedAt);
@@ -338,6 +394,7 @@ async function runStroke(page, start, points, label) {
   const after = await page.evaluate(readBrushSnapshot);
   const changedShore = checkShore ? await readShoreFrame(page, start) : null;
   if (checkShore) {
+    assert.deepEqual(heldShore, changedShore, "松笔不应再次改变已经显示的海岸或色块");
     assert.equal(changedShore.errors, 0, "岸线与实际海陆不符");
     assert.ok(originalShore.height >= 20 && changedShore.height < 20, "目标格必须从陆地变成水面");
     assert.notEqual(changedShore.pixels, originalShore.pixels, "海陆变化必须可见");
@@ -354,6 +411,7 @@ async function runStroke(page, start, points, label) {
   return {
     label,
     commitLongTasks,
+    visibleChanges: checkShore ? await page.evaluate(() => window.shoreFeedback) : null,
     pointerDownMs,
     wallMs,
     feedbackMs,

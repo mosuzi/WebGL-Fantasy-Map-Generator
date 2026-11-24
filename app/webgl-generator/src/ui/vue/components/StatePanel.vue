@@ -170,7 +170,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import {formatListCount, formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
-import {compareRowsByKey} from "../../sort-utils.js";
+import {compareRowsByKey, reuseMetricRows} from "../../sort-utils.js";
 import {buildStateCapitalOptions} from "../../state-capital-options.js";
 import {GOVERNMENT_OPTIONS, governmentSuffixOptions as readGovernmentSuffixOptions} from "../../../generator/governments.js";
 import {provinceFormForState, provinceFormsForState} from "../../../generator/province-naming.js";
@@ -242,9 +242,9 @@ const splitCapitalCityId = ref(null);
 const splitNameDraft = ref("");
 const topologyInspection = ref(null);
 const topologyError = ref("");
-const metrics = computed(() => {
+const metrics = computed(previous => {
   props.state.version;
-  return buildStateMetrics(props.state.map);
+  return reuseMetricRows(buildStateMetrics(props.state.map), previous);
 });
 const stateOptions = computed(() => {
   props.state.version;

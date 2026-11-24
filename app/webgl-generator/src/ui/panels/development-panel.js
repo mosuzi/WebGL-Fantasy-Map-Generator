@@ -1,4 +1,4 @@
-export function createDevelopmentPanel(documentRef, manager) {
+export function createDevelopmentPanel(documentRef, manager, onOpen) {
   const LOAD_TRACE_LIMIT = 80;
   const HEALTH_EVENT_LIMIT = 80;
   const CANVAS_SAMPLE_LIMIT = 160;
@@ -147,6 +147,7 @@ export function createDevelopmentPanel(documentRef, manager) {
     collapsed = false;
     showControl(true);
     manager.open("development-panel");
+    onOpen?.();
     renderCanvasPerformance(documentRef, canvasSamples, documentRef.defaultView.__webglGeneratorHealth?.getCanvasMonitoringSupport?.());
     control?.classList.add("active");
     control?.setAttribute("aria-pressed", "true");

@@ -3,6 +3,11 @@ import {captureCommandMapReplicaWrites, captureCommandMapReplicaWritesAsync, cre
 import {applyMapReplicaPatch} from "../app/webgl-generator/src/runtime/map-replica-journal.js";
 import {computeAppliedMapReplicaPatchTargetChecksum, computeCanonicalMapReplicaChecksum} from "../app/webgl-generator/src/runtime/map-replica-checksum.js";
 import {createRenameObjectCommand} from "../app/webgl-generator/src/runtime/object-edit-commands.js";
+import {createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
+import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {createApplyStateBrushCommand} from "../app/webgl-generator/src/runtime/state-edit-commands.js";
+import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, indexProvinceBrushMembers} from "../app/webgl-generator/src/runtime/province-edit-commands.js";
+import {buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand} from "../app/webgl-generator/src/runtime/biome-edit-commands.js";
 
 const source = {
   visualTheme: {preset: "old"},
@@ -17,6 +22,86 @@ const source = {
 source.pack.states = source.politics.states;
 source.pack.provinces = source.politics.provinces;
 const target = structuredClone(source);
+const land = {metadata: {}, military: {metadata: {}}, grid: {cells: {h: [21, 20, 26]}}, pack: {cells: {g: [0, 1, 1, 2], h: [21, 20, 22, 26]}}};
+const background = structuredClone(land);
+const untouched = background.pack.cells.h;
+const stroke = createApplyHeightBrushCommand([{gridCell: 1, before: 20, after: 16}], {originalPackHeights: new Map()});
+let landChecksum = await computeCanonicalMapReplicaChecksum(land);
+for (const [baseRevision, action] of ["apply", "revert", "apply"].entries()) {
+  stroke[action]({map: land});
+  const patch = await createCommandMapReplicaPatch({map: land, command: stroke, mapIdentity: "shore",
+    baseRevision, targetRevision: baseRevision + 1, baseChecksum: landChecksum});
+  assert.deepEqual(patch.writes.filter(write => write.mode === "ranges").map(write => [write.path, write.ranges[0].start, write.ranges[0].values.length]),
+    [["grid.cells.h", 1, 1], ["pack.cells.h", 1, 2]]);
+  applyMapReplicaPatch(background, patch);
+  assert.deepEqual(background, land);
+  assert.equal(background.pack.cells.h, untouched);
+  landChecksum = await computeAppliedMapReplicaPatchTargetChecksum(background, patch);
+  assert.equal(landChecksum, patch.targetChecksum);
+}
+const brushMap = generatePlaceholderMap({cellsTarget: 3000, seed: "all-brush-journal", heightmapTemplate: "continents"});
+for (const kind of ["province", "biome", "state", "new-capital", "retire"]) {
+  const map = structuredClone(brushMap);
+  map.pack.provinces = structuredClone(map.politics.provinces);
+  map.pack.states = structuredClone(map.politics.states);
+  const cells = map.grid.cells;
+  const city = kind === "new-capital" || kind === "retire"
+    ? map.settlements.cities.find(city => city.capital && cells.state[city.cell] === city.state)
+    : map.settlements.cities.find(city => !city.capital && city.province > 0 && map.politics.provinces.some(p => p?.i && p.i !== city.province && p.state === city.state));
+  const cell = city.cell;
+  const owner = city.state;
+  const target = map.politics.states.find(s => s?.i && s.i !== owner).i;
+  let command;
+  if (kind === "province") {
+    const other = map.politics.provinces.find(p => p?.i && p.i !== city.province && p.state === owner);
+    const changes = Array.from(cells.i).filter(id => cells.province[id] === city.province && cells.h[id] >= 20)
+      .slice(0, 48).map(gridCell => ({gridCell, before: city.province, after: other.i}));
+    assert.ok(changes.length);
+    const indexed = structuredClone(map), reference = structuredClone(map);
+    const memberIndex = indexProvinceBrushMembers(indexed), originals = new Map();
+    applyProvinceBrushPreview(indexed, changes, originals);
+    const indexedCommand = createApplyProvinceBrushCommand(changes, {memberIndex, originalPackProvinces: originals});
+    const directCommand = createApplyProvinceBrushCommand(changes);
+    for (const action of ["apply", "revert", "apply"]) {
+      indexedCommand[action]({map: indexed});
+      directCommand[action]({map: reference});
+      assert.deepEqual(indexed.politics.provinces, reference.politics.provinces, "局部遍历应保留省份统计、邻接顺序与标注位置");
+      assert.deepEqual(indexed.pack.provinces, reference.pack.provinces);
+    }
+    command = createApplyProvinceBrushCommand([{gridCell: cell, before: city.province, after: other.i}]);
+  } else if (kind === "biome") {
+    command = createApplyBiomeAssignmentCommand(buildBiomeAssignmentChanges(map, cells.biome[cell] === 1 ? 2 : 1, [cell]));
+  } else {
+    if (kind === "new-capital") {
+      for (const other of map.settlements.cities) {
+        if (other === city || other.state !== owner) continue;
+        other.state = target;
+        map.pack.burgs[other.burgId].state = target;
+      }
+    }
+    const ids = kind === "retire" ? Array.from(cells.i).filter(id => cells.state[id] === owner) : [cell];
+    command = createApplyStateBrushCommand(ids.map(gridCell => ({gridCell, before: cells.state[gridCell], after: target})));
+  }
+  const before = structuredClone(map);
+  const replica = structuredClone(map);
+  let after;
+  let checksum = await computeCanonicalMapReplicaChecksum(map);
+  for (const [revision, action] of ["apply", "revert", "apply"].entries()) {
+    command[action]({map});
+    if (revision === 0) after = structuredClone(map);
+    const patch = await createCommandMapReplicaPatch({map, command, mapIdentity: kind, baseRevision: revision, targetRevision: revision + 1, baseChecksum: checksum});
+    if (kind === "new-capital") assert.ok(patch.writes.some(write => write.path === "settlements.cities" && write.mode === "splice"));
+    if (kind === "retire" && action === "apply") assert.ok(map.politics.states[owner].removed);
+    assert.ok(patch.writes.every(write => write.mode !== "replace"));
+    applyMapReplicaPatch(replica, patch);
+    checksum = patch.targetChecksum;
+    for (const section of ["grid", "pack", "politics", "settlements", "climate", "metadata", "military", "zones", "markers", "economy", "diplomacy"]) {
+      assert.deepEqual(map[section], replica[section], `${kind} ${action} 的 ${section} 副本不一致`);
+      if (action === "revert") assert.deepEqual(map[section], before[section], `${kind} 没有还原 ${section}`);
+      if (revision === 2) assert.deepEqual(map[section], after[section], `${kind} 重做没有复现 ${section}`);
+    }
+  }
+}
 target.pack.states = target.politics.states;
 target.pack.provinces = target.politics.provinces;
 target.visualTheme = {preset: "new"};

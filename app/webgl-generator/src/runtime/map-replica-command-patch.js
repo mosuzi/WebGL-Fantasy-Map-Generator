@@ -82,9 +82,34 @@ function collectCommandMapReplicaWrites({map, command} = {}) {
   if (!map || typeof map !== "object" || !command) return [];
   const domain = String(command.domain || "none");
   const commandPaths = typeof command.getReplicaPaths === "function" ? command.getReplicaPaths(map) : null;
-  const paths = Array.isArray(commandPaths) && commandPaths.length ? commandPaths : DOMAIN_PATHS[domain];
-  if (!paths) return [];
+  const local = command.getReplicaRows || command.getReplicaFields || command.getReplicaSplices;
+  const paths = commandPaths?.length ? commandPaths : local ? [] : DOMAIN_PATHS[domain] || [];
+  const rows = command.getReplicaRows?.(map) || {};
   const writes = [];
+  for (const {path, start, removed, added} of command.getReplicaSplices?.(map) || []) {
+    const {value} = resolvePath(map, path);
+    if (!Array.isArray(value) || ![start, removed, added].every(n => Number.isSafeInteger(n) && n >= 0) || start + added > value.length) {
+      throw patchError("map_replica_splice_invalid", `地图副本对象表区段无效：${path}`);
+    }
+    writes.push({path, mode: "splice", start, removed, length: value.length, values: value.slice(start, start + added)});
+  }
+  for (const path of command.getReplicaFields?.(map) || []) {
+    if (!resolveCanonicalMapWriteDescriptor(path)) throw patchError("map_replica_path_unregistered", `地图副本字段未登记：${path}`);
+    const field = resolvePath(map, path);
+    writes.push(field.found ? {path, mode: "field", value: field.value} : {path, mode: "delete"});
+  }
+  for (const [path, indices] of Object.entries(rows)) {
+    if (!resolveCanonicalMapWriteDescriptor(path)) throw patchError("map_replica_path_unregistered", `地图副本字段未登记：${path}`);
+    const {value} = resolvePath(map, path);
+    const ranges = [];
+    for (const index of [...new Set(indices)].sort((a, b) => a - b)) {
+      if (!Number.isSafeInteger(index) || index < 0 || index >= (value?.length ?? 0)) throw patchError("map_replica_range_bounds", `地图副本行越界：${path}`);
+      const tail = ranges.at(-1);
+      if (tail && tail.start + tail.values.length === index) tail.values.push(value[index]);
+      else ranges.push({start: index, values: [value[index]]});
+    }
+    if (ranges.length) writes.push({path, mode: "ranges", ranges});
+  }
   for (const path of paths) {
     if (!resolveCanonicalMapWriteDescriptor(path)) {
       throw patchError("map_replica_path_unregistered", `地图副本 write path 未登记：${path}`);

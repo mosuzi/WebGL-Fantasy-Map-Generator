@@ -226,6 +226,10 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       if (!provinceExists(map, panelState.selectedProvinceId)) panelState.selectedProvinceId = firstProvinceId(map);
       panelState.version++;
     },
+    updateBrushFeedback(sourceProvinceId, lastAffected) {
+      panelState.sourceProvinceId = sourceProvinceId;
+      panelState.lastAffected = lastAffected;
+    },
     setSelectedProvinceId(provinceId) {
       const normalized = normalizeProvinceId(provinceId);
       if (provinceExists(panelState.map, normalized)) {

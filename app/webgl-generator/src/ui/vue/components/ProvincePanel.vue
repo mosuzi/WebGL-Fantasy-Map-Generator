@@ -12,6 +12,7 @@
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
+    :selection-scroll-context="state.active ? JSON.stringify([state.filter, state.sortKey, state.sortDir]) : null"
     :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -117,7 +118,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import {formatListCount, formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
-import {compareRowsByKey} from "../../sort-utils.js";
+import {compareRowsByKey, reuseMetricRows} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
@@ -173,9 +174,9 @@ const unitPreferences = useUnitPreferences();
 const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);
-const metrics = computed(() => {
+const metrics = computed(previous => {
   props.state.version;
-  return buildProvinceMetrics(props.state.map);
+  return reuseMetricRows(buildProvinceMetrics(props.state.map), previous);
 });
 const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
@@ -241,13 +242,17 @@ watch(() => selected.value?.id, id => {
 });
 
 function buildProvinceMetrics(map) {
+  const cityCounts = new Map();
+  for (const city of map?.settlements?.cities || []) {
+    if (city) cityCounts.set(city.province, (cityCounts.get(city.province) || 0) + 1);
+  }
   const rows = provinceRows(map).map(row => {
     const province = getProvince(map, row.id);
     const state = map?.politics?.states?.[province?.state];
     const centerCell = province?.center ?? 0;
     const cultureId = map?.pack?.cells?.culture?.[centerCell];
     const religionId = province?.religion ?? map?.pack?.cells?.religion?.[centerCell];
-    const cityCount = (map?.settlements?.cities || []).filter(city => city?.province === row.id).length;
+    const cityCount = cityCounts.get(row.id) || 0;
     const neutral = row.id === 0;
     const neutralStats = neutral ? neutralProvinceStats(map) : null;
     const population = Number(province?.rural || 0) + Number(province?.urban || 0);

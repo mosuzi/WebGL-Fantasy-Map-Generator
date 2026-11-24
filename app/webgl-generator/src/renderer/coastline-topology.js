@@ -1096,9 +1096,18 @@ function nearestIndexedPathProjection(point, source, index, maxDistance) {
 function querySegmentIndexesByBounds(index, bounds) {
   const result = new Set();
   if (!index?.buckets) return result;
-  forEachBoundsCell(bounds, index.cellSize, (column, row) => {
-    for (const segmentIndex of index.buckets.get(column)?.get(row) || []) result.add(segmentIndex);
-  });
+  const firstColumn = Math.max(index.minColumn, Math.floor(bounds.minX / index.cellSize));
+  const lastColumn = Math.min(index.maxColumn, Math.floor(bounds.maxX / index.cellSize));
+  const firstRow = Math.max(index.minRow, Math.floor(bounds.minY / index.cellSize));
+  const lastRow = Math.min(index.maxRow, Math.floor(bounds.maxY / index.cellSize));
+  for (let column = firstColumn; column <= lastColumn; column++) {
+    const rows = index.buckets.get(column);
+    if (!rows) continue;
+    for (let row = firstRow; row <= lastRow; row++) {
+      const segments = rows.get(row);
+      if (segments) for (const segment of segments) result.add(segment);
+    }
+  }
   return result;
 }
 

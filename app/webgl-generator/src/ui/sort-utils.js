@@ -6,6 +6,17 @@ export function compareListValues(a, b, locale = "zh-CN") {
   return String(a ?? "").localeCompare(String(b ?? ""), locale, {numeric: true});
 }
 
+// 保留显示值相同的行，让对象表的 v-memo 只更新本次编辑涉及的行。
+export function reuseMetricRows(metrics, previous) {
+  if (!previous) return metrics;
+  const prior = new Map(previous.rows.map(row => [row.id, row]));
+  metrics.rows = metrics.rows.map(row => {
+    const old = prior.get(row.id);
+    return old && Object.keys(row).every(key => Object.is(row[key], old[key])) ? old : row;
+  });
+  return metrics;
+}
+
 export function compareRowsByKey(a, b, key, direction = "asc", {fallbackKey = "id", locale = "zh-CN"} = {}) {
   const factor = direction === "asc" ? 1 : -1;
   const compared = compareListValues(a?.[key], b?.[key], locale);

@@ -57,15 +57,19 @@ export async function computeAppliedMapReplicaPatchTargetChecksum(map, patch, op
     }
     if (!resolved.found) throw checksumError("map_replica_path_invalid", `地图副本 path 不存在：${write.path}`);
     const value = resolved.value;
-    if (write.mode === "replace") return {path: write.path, mode: write.mode, value};
+    if (write.mode === "splice") {
+      return {path: write.path, mode: write.mode, start: write.start, removed: write.removed,
+        length: value.length, values: value.slice(write.start, write.start + write.values.length)};
+    }
+    if (write.mode === "replace" || write.mode === "field") return {path: write.path, mode: write.mode, value};
     return {
       path: write.path,
       mode: write.mode,
       ranges: write.ranges.map(range => ({
         start: range.start,
-        values: typeof value.slice === "function"
-          ? value.slice(range.start, range.start + range.values.length)
-          : Array.from(value).slice(range.start, range.start + range.values.length)
+        values: Array.isArray(range.values)
+          ? Array.from({length: range.values.length}, (_, index) => value[range.start + index])
+          : range.values.constructor.from(value.slice(range.start, range.start + range.values.length))
       }))
     };
   });

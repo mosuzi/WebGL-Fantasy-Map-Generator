@@ -15,6 +15,7 @@ export function restoreCanvasToolStrokePreview(map, kind, stroke) {
 
   let restoredGridCells = 0;
   let restoredPackCells = 0;
+  const packOriginals = stroke.originalPackProvinces ?? stroke.originalPackStates ?? stroke.originalPackHeights;
   for (const [gridCell, original] of stroke.originals) {
     if (!Number.isInteger(gridCell) || gridCell < 0 || gridCell >= gridValues.length) continue;
     const before = kind === "culture" || kind === "religion" || kind === "biome" ? Number(original?.gridBefore) || 0 : Number(original) || 0;
@@ -29,11 +30,17 @@ export function restoreCanvasToolStrokePreview(map, kind, stroke) {
       }
       continue;
     }
-    if (!packValues) continue;
+    if (!packValues || packOriginals) continue;
     for (let packCell = 0; packCell < (map.pack?.cells?.g?.length || 0); packCell++) {
       if (Number(map.pack.cells.g[packCell]) !== gridCell) continue;
       if (kind !== "height" && kind !== "biome" && Number(map.pack.cells.h?.[packCell]) < 20) continue;
       packValues[packCell] = before;
+      restoredPackCells++;
+    }
+  }
+  if (packValues && packOriginals) {
+    for (const [cell, before] of packOriginals) {
+      packValues[cell] = before;
       restoredPackCells++;
     }
   }

@@ -62,11 +62,14 @@ function defineBiomes(grid, pack) {
   cells.biome = new Uint8Array(cells.i.length);
 
   for (const cell of cells.i) {
-    const height = cells.h[cell];
-    const moisture = height < 20 ? 0 : calculateMoisture(grid, cells, cell);
-    const temperature = grid.cells.temp[cells.g[cell]];
-    cells.biome[cell] = getBiomeId(moisture, temperature, height, Boolean(cells.r[cell]));
+    cells.biome[cell] = biomeForPackCell(grid, cells, cell);
   }
+}
+
+export function biomeForPackCell(grid, cells, cell) {
+  const height = cells.h[cell];
+  const moisture = height < 20 ? 0 : calculateMoisture(grid, cells, cell);
+  return getBiomeId(moisture, grid.cells.temp[cells.g[cell]], height, Boolean(cells.r[cell]));
 }
 
 function calculateMoisture(grid, cells, cell) {
@@ -98,51 +101,52 @@ function isWetland(moisture, temperature, height) {
 }
 
 function rankCells(pack) {
-  const {cells, features} = pack;
+  const {cells} = pack;
   const hasGoodsAtRankTime = Boolean(cells.good);
   let resourceRankBonusCells = 0;
   let resourceRankBonusTotal = 0;
   cells.s = new Int16Array(cells.i.length);
   cells.pop = new Float32Array(cells.i.length);
 
-  const positiveFlux = Array.from(cells.fl).filter(Boolean).sort((a, b) => a - b);
-  const meanFlux = medianSorted(positiveFlux) || 0;
-  const maxFlux = maxValue(cells.fl) + maxValue(cells.conf);
-  const meanArea = average(Array.from(cells.area));
+  const inputs = suitabilityRankInputs(pack);
 
   for (const cell of cells.i) {
-    if (cells.h[cell] < 20) continue;
-    let score = BIOMES[cells.biome[cell]]?.habitability || 0;
-    if (!score) continue;
-
-    if (meanFlux) score += normalize((cells.fl[cell] || 0) + (cells.conf[cell] || 0), meanFlux, maxFlux) * 250;
-    score -= (cells.h[cell] - 50) / 5;
+    if (cells.h[cell] < 20 || !BIOMES[cells.biome[cell]]?.habitability) continue;
     const resourceScore = resourceRankScore(pack, cell);
     if (resourceScore > 0) {
-      score += resourceScore;
       resourceRankBonusCells++;
       resourceRankBonusTotal += resourceScore;
     }
 
-    if (cells.t[cell] === 1) {
-      if (cells.r[cell]) score += SCORE_MAP.estuary;
-      const havenFeature = features[cells.f[cells.haven[cell]]];
-      if (havenFeature?.type === "lake") {
-        score += SCORE_MAP[havenFeature.group] || 0;
-      } else {
-        score += SCORE_MAP.ocean_coast;
-        if (cells.harbor[cell] === 1) score += SCORE_MAP.save_harbor;
-      }
-    }
-
-    cells.s[cell] = score / 5;
-    cells.pop[cell] = cells.s[cell] > 0 ? (cells.s[cell] * cells.area[cell]) / meanArea : 0;
+    cells.s[cell] = suitabilityForPackCell(pack, cell, inputs, resourceScore);
+    cells.pop[cell] = cells.s[cell] > 0 ? (cells.s[cell] * cells.area[cell]) / inputs.meanArea : 0;
   }
 
   return {hasGoodsAtRankTime, resourceRankBonusCells, resourceRankBonusTotal: round(resourceRankBonusTotal, 2)};
 }
 
-function resourceRankScore(pack, cell) {
+export function suitabilityRankInputs(pack) {
+  const cells = pack.cells;
+  const positiveFlux = Array.from(cells.fl).filter(Boolean).sort((a, b) => a - b);
+  return {meanFlux: medianSorted(positiveFlux) || 0, maxFlux: maxValue(cells.fl) + maxValue(cells.conf), meanArea: average(cells.area)};
+}
+
+export function suitabilityForPackCell(pack, cell, {meanFlux, maxFlux}, resourceScore = resourceRankScore(pack, cell)) {
+  const cells = pack.cells;
+  let score = BIOMES[cells.biome[cell]]?.habitability || 0;
+  if (cells.h[cell] < 20 || !score) return 0;
+  if (meanFlux) score += normalize((cells.fl[cell] || 0) + (cells.conf[cell] || 0), meanFlux, maxFlux) * 250;
+  score -= (cells.h[cell] - 50) / 5;
+  score += resourceScore;
+  if (cells.t[cell] === 1) {
+    if (cells.r[cell]) score += SCORE_MAP.estuary;
+    const haven = pack.features[cells.f[cells.haven[cell]]];
+    score += haven?.type === "lake" ? SCORE_MAP[haven.group] || 0 : SCORE_MAP.ocean_coast + (cells.harbor[cell] === 1 ? SCORE_MAP.save_harbor : 0);
+  }
+  return Math.trunc(score / 5) || 0;
+}
+
+export function resourceRankScore(pack, cell) {
   const goodId = pack.cells.good?.[cell] || 0;
   if (!goodId) return 0;
   const value = Number(pack.goods?.[goodId]?.value || 2);

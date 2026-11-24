@@ -147,6 +147,7 @@ function closePanel() {
 
 function onDocumentPointerDown(event) {
   if (!props.active) return;
+  if (activeAction.value?.canvasInteraction && event.target === root.value?.ownerDocument.getElementById("map-canvas")) return;
   if (panel.value?.contains(event.target)) return;
   if (root.value?.contains(event.target)) {
     const action = event.target?.closest?.("button[data-action-id]");

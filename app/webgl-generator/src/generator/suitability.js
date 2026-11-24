@@ -1,5 +1,6 @@
 export const SUITABILITY_VALUE_RANGE = Object.freeze({min: 0, max: 100, step: 1, defaultValue: 25});
 export const SUITABILITY_OVERRIDE_UNSET = -1;
+const checkedStores = new WeakMap();
 
 export function ensureSuitabilityStores(pack) {
   const cells = pack?.cells;
@@ -7,8 +8,12 @@ export function ensureSuitabilityStores(pack) {
   if (!cells || !length) return {base: null, overrides: null};
   if (!cells.s || cells.s.length !== length) cells.s = normalizeBaseStore(cells.s, cells.suitabilityBase, length);
   if (!cells.pop || cells.pop.length !== length) cells.pop = normalizePopulationStore(cells.pop, length);
-  cells.suitabilityBase = normalizeBaseStore(cells.suitabilityBase, cells.s, length);
-  cells.suitabilityOverride = normalizeOverrideStore(cells.suitabilityOverride, length);
+  const previous = checkedStores.get(cells);
+  if (previous?.length !== length || previous.base !== cells.suitabilityBase || previous.overrides !== cells.suitabilityOverride) {
+    cells.suitabilityBase = normalizeBaseStore(cells.suitabilityBase, cells.s, length);
+    cells.suitabilityOverride = normalizeOverrideStore(cells.suitabilityOverride, length);
+    checkedStores.set(cells, {length, base: cells.suitabilityBase, overrides: cells.suitabilityOverride});
+  }
   return {base: cells.suitabilityBase, overrides: cells.suitabilityOverride};
 }
 
@@ -75,14 +80,13 @@ export function populationForSuitability(cells, cell, suitability, meanArea = av
 }
 
 function normalizeBaseStore(source, fallback, length) {
-  const values = new Int16Array(length);
+  const values = new Array(length);
   for (let index = 0; index < length; index++) values[index] = normalizeBaseValue(source?.[index] ?? fallback?.[index]);
   return values;
 }
 
 function normalizeOverrideStore(source, length) {
-  const values = new Int16Array(length);
-  values.fill(SUITABILITY_OVERRIDE_UNSET);
+  const values = new Array(length).fill(SUITABILITY_OVERRIDE_UNSET);
   for (let index = 0; index < length; index++) {
     const value = Number(source?.[index]);
     if (Number.isFinite(value) && value >= SUITABILITY_VALUE_RANGE.min) values[index] = normalizeOverrideValue(value);
@@ -91,8 +95,8 @@ function normalizeOverrideStore(source, length) {
 }
 
 function normalizePopulationStore(source, length) {
-  const values = new Float32Array(length);
-  for (let index = 0; index < length; index += 1) values[index] = Number(source?.[index]) || 0;
+  const values = new Array(length);
+  for (let index = 0; index < length; index += 1) values[index] = Math.fround(Number(source?.[index]) || 0);
   return values;
 }
 

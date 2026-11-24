@@ -9,9 +9,10 @@ import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, createMapFeatureGeoJson, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {resolveObject} from "../app/webgl-generator/src/runtime/object-resolver.js";
 import {captureLockedRegenerationObjects} from "../app/webgl-generator/src/runtime/regeneration-lock-protection.js";
-import {createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, inspectStateCreation} from "../app/webgl-generator/src/runtime/state-edit-commands.js";
+import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createStateBrushPreparation, inspectStateCreation} from "../app/webgl-generator/src/runtime/state-edit-commands.js";
 
 const map = generatePlaceholderMap({seed: "state-lifecycle-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
+verifyPreparedStateBrush(map);
 assert.ok(NEW_STATE_COLOR_PALETTE.length >= 120, "新建国家的后备调色盘应足够容纳连续建国");
 const syntheticNeighbors = NEW_STATE_COLOR_PALETTE.map((color, index) => ({id: index + 1, i: index + 1, color}));
 const syntheticState = {id: syntheticNeighbors.length + 1, i: syntheticNeighbors.length + 1, neighbors: syntheticNeighbors.map(item => item.id)};
@@ -416,6 +417,37 @@ function verifyBrushColorAndCapitalRepair(targetMap, newStateId) {
   delete redone.stale?.updatedAt;
   assert.deepEqual(redone, after, "重做应稳定恢复相邻配色与唯一首都");
   return {newStateId, neighborId, borderCell, color: newState.color, history: history.getStats()};
+}
+
+function verifyPreparedStateBrush(source) {
+  const prepared = structuredClone(source);
+  const reference = structuredClone(source);
+  const changes = Array.from(source.grid.cells.i)
+    .filter(id => source.grid.cells.h[id] >= 20 && source.grid.cells.state[id] > 1)
+    .slice(0, 120).map(gridCell => ({gridCell, before: source.grid.cells.state[gridCell], after: 1}));
+  assert.ok(changes.length > 20);
+  const preparation = createStateBrushPreparation(prepared);
+  const originals = new Map();
+  for (let i = 0; i < changes.length; i += 10) {
+    const stamp = changes.slice(i, i + 10);
+    preparation.advance();
+    applyStateBrushPreview(prepared, stamp, originals);
+    preparation.record(stamp, originals);
+  }
+  assert.deepEqual(prepared.pack.cells.province, reference.pack.cells.province, "预读省份不得改变画笔期间的省份事实");
+  const direct = createApplyStateBrushCommand(changes);
+  const staged = createApplyStateBrushCommand(changes, {boundaryScan: preparation, originalPackStates: originals});
+  for (const action of ["apply", "revert", "apply"]) {
+    direct[action]({map: reference});
+    staged[action]({map: prepared});
+    const actual = snapshotStateCollections(prepared), expected = snapshotStateCollections(reference);
+    if (expected.stale?.updatedAt) {
+      assert.ok(Number.isFinite(Date.parse(actual.stale.updatedAt)));
+      delete actual.stale.updatedAt;
+      delete expected.stale.updatedAt;
+    }
+    assert.deepEqual(actual, expected, "分笔预读与整笔事务的全部归属和统计须一致");
+  }
 }
 
 function snapshotStateCollections(targetMap) {

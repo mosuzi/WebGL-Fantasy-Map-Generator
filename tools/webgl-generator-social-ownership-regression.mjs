@@ -3,11 +3,14 @@ import assert from "node:assert/strict";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {createApplyCultureAssignmentCommand, createDeleteCultureCommand} from "../app/webgl-generator/src/runtime/culture-edit-commands.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {createCommandMapReplicaPatch} from "../app/webgl-generator/src/runtime/map-replica-command-patch.js";
+import {applyMapReplicaPatch} from "../app/webgl-generator/src/runtime/map-replica-journal.js";
 import {createMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {objectNoteId, restoreObjectNote} from "../app/webgl-generator/src/runtime/object-notes.js";
 import {resolveObject} from "../app/webgl-generator/src/runtime/object-resolver.js";
 import {createApplyReligionAssignmentCommand, createDeleteReligionCommand} from "../app/webgl-generator/src/runtime/religion-edit-commands.js";
 import {applySocialAssignmentPreview} from "../app/webgl-generator/src/runtime/social-ownership-edit-commands.js";
+import {socialCoverageInput, summarizeSocialCoverage} from "../app/webgl-generator/src/runtime/social-brush-coverage.js";
 import {selectDeterministicOwnedCenter} from "../app/webgl-generator/src/runtime/social-expansion-edit-commands.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
 
@@ -21,8 +24,8 @@ const culture = findOwnedObject(map.grid.cells.culture, map.society.cultures);
 const religion = findOwnedObject(map.grid.cells.religion, map.society.religions);
 assert.ok(culture && religion, "固定 seed 应生成有覆盖的文化与宗教");
 
-verifyAssignment("culture", culture, createApplyCultureAssignmentCommand);
-verifyAssignment("religion", religion, createApplyReligionAssignmentCommand);
+await verifyAssignment("culture", culture, createApplyCultureAssignmentCommand);
+await verifyAssignment("religion", religion, createApplyReligionAssignmentCommand);
 verifyCenterFallback("culture", createApplyCultureAssignmentCommand);
 verifyCenterFallback("religion", createApplyReligionAssignmentCommand);
 verifyDeletion("culture", culture, createDeleteCultureCommand);
@@ -39,7 +42,7 @@ console.log(JSON.stringify({
   staleSystems: map.metadata.derivedStale?.systems || []
 }, null, 2));
 
-function verifyAssignment(kind, source, createCommand) {
+async function verifyAssignment(kind, source, createCommand) {
   const field = kind;
   const gridCell = findHeterogeneousGridCell(kind);
   assert.ok(gridCell >= 0, `${kind} 固定 seed 应包含 pack 归属异质的 grid cell`);
@@ -50,20 +53,48 @@ function verifyAssignment(kind, source, createCommand) {
   const packCells = packCellsForGridCell(gridCell);
   assert.ok(new Set(packCells.map(cell => Number(map.pack.cells[field][cell]))).size > 1);
   const before = ownershipSnapshot(kind);
+  const replica = structuredClone(map);
+  const originalGrid = map.grid.cells[field];
+  const originalPack = map.pack.cells[field];
   const packBefore = packCells.map(packCell => ({packCell, before: Number(map.pack.cells[field][packCell]) || 0}));
   const changes = [{gridCell, before: sourceId, after: targetId, packBefore}];
   applySocialAssignmentPreview(map, kind, changes);
-  const command = createCommand(changes);
+  const preparedCoverage = summarizeSocialCoverage(structuredClone(socialCoverageInput(map, field)));
+  const command = createCommand(changes, {preparedCoverage});
   history.execute(command, {map});
+  await verifyReplica(0);
   assert.equal(map.grid.cells[field][gridCell], targetId);
   assert.ok(packCells.every(cell => Number(map.pack.cells[field][cell]) === targetId), `${kind} pack 归属必须同步`);
+  for (const owner of activeObjects(kind)) {
+    const cells = map.pack.cells;
+    let count = 0, area = 0, rural = 0;
+    for (let id = 0; id < cells[field].length; id++) {
+      if (cells[field][id] !== objectId(owner)) continue;
+      count++;
+      area = Math.round((area + cells.area[id]) * 100) / 100;
+      rural = Math.round((rural + cells.pop[id]) * 100) / 100;
+    }
+    assert.deepEqual([owner.cells, owner.area, owner.rural], [count, area, rural]);
+  }
   if (kind === "religion") assertReligionUrban();
   assert.ok(map.metadata.derivedStale.systems.length > 0);
   history.undo({map});
+  await verifyReplica(1);
   assert.deepEqual(ownershipSnapshot(kind), before, `${kind} 归属撤销必须完整恢复`);
   history.redo({map});
+  await verifyReplica(2);
   assert.equal(map.grid.cells[field][gridCell], targetId);
   history.undo({map});
+
+  async function verifyReplica(revision) {
+    const patch = await createCommandMapReplicaPatch({map, command, mapIdentity: "social", baseRevision: revision, targetRevision: revision + 1, baseChecksum: "social"});
+    const cells = patch.writes.filter(write => write.path.endsWith(`.cells.${kind}`));
+    assert.deepEqual(cells.map(write => write.ranges.flatMap(range => range.values).length), [1, packCells.length]);
+    applyMapReplicaPatch(replica, patch);
+    assert.deepEqual(replica, map);
+    assert.equal(map.grid.cells[field], originalGrid);
+    assert.equal(map.pack.cells[field], originalPack);
+  }
 }
 
 function verifyCenterFallback(kind, createCommand) {

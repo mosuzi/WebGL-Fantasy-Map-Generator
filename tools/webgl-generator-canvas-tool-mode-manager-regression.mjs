@@ -382,8 +382,9 @@ function testRuntimeIntegrationContract() {
     assert.match(appSource, new RegExp(escapeRegex(`rollbackCanvasToolStroke(state, "${kind}")`)));
   }
   const heightBinding = sourceBetween(appSource, "function bindHeightEditing", "function updateHeightFillPreviewAtEvent");
-  const heightPointerUp = sourceBetween(heightBinding, 'canvas.addEventListener("pointerup"', 'canvas.addEventListener("pointercancel"');
-  const heightPointerCancel = heightBinding.slice(heightBinding.indexOf('canvas.addEventListener("pointercancel"'));
+  assert.match(heightBinding, /const register = \(type, handle\) => canvas\.addEventListener\(type, event =>/);
+  const heightPointerUp = sourceBetween(heightBinding, 'register("pointerup"', 'register("pointercancel"');
+  const heightPointerCancel = heightBinding.slice(heightBinding.indexOf('register("pointercancel"'));
   assert.match(heightPointerUp, /finishHeightStroke\(state, documentRef\)/, "高度 pointerup 必须正式提交笔刷");
   assert.doesNotMatch(heightPointerUp, /rollbackCanvasToolStroke\(state, "height"\)/, "高度 pointerup 不得回滚预览");
   assert.match(heightPointerCancel, /rollbackCanvasToolStroke\(state, "height"\)/, "高度 pointercancel 必须完整回滚预览");

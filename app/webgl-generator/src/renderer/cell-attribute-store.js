@@ -100,6 +100,7 @@ export function ensureCellAttributePaletteEntry(gl, store, map, mode, id, gridCe
   const offset = (id + 1) * 4;
   const bytes = Uint8Array.from(colorForCell(gridCell, map, mode, viewOptions).map(colorByte));
   if (offset + 4 <= previous.length) {
+    if (bytes.every((value, channel) => value === previous[offset + channel])) return current;
     gl.bindTexture(gl.TEXTURE_2D, current.textures.palettes[mode]);
     try {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, id + 1, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
@@ -262,7 +263,7 @@ function writeCellAttributes(map, cell, identities, terrain, numeric, offset) {
     encodeSignedId(cells.culture?.[cell]), encodeSignedId(cells.religion?.[cell])
   ], offset);
   const feature = Number(cells.f?.[cell]);
-  const land = Boolean(map.features?.features?.[feature]?.land) || Number(cells.h?.[cell]) >= 20;
+  const land = isLandCell(cell, map);
   terrain.set([encodeHeight(cells.h?.[cell]), toUint(cells.biome?.[cell]), encodeSignedId(feature), (terrainClassAt(map.grid, cell) << 1) | Number(land)], offset);
   numeric.set([
     finite(cells.pop?.[cell]), finite(cells.temp?.[cell]), finite(cells.prec?.[cell]), finite(cells.region?.[cell])

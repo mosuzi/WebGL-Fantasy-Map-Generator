@@ -1,7 +1,9 @@
+import {packCellsByGrid, packCellsForGrid} from "./grid-pack-index.js";
 import {rebuildInheritanceTree, summarizeInheritanceTree} from "../generator/inheritance.js";
 import {deleteObjectNote} from "./object-notes.js";
 import {objectAffected, systemAffected} from "./edit-command-effects.js";
 import {selectDeterministicOwnedCenter} from "./social-expansion-edit-commands.js";
+import {socialCoverageInput, summarizeSocialCoverage} from "./social-brush-coverage.js";
 
 const SOCIAL_ASSIGNMENT_STALE = Object.freeze({
   culture: ["states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"],
@@ -10,13 +12,15 @@ const SOCIAL_ASSIGNMENT_STALE = Object.freeze({
 
 export const SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS = Object.freeze({
   render: "draw",
+  cellAttributePatch: true,
+  reuseResourceBinding: true,
   selection: "none",
   runtimeStats: false,
   pickPanel: false,
   derived: Object.freeze(["culture-cells", "religion-cells", "cell-colors"])
 });
 
-export function createApplySocialAssignmentCommand(kind, changes, {label = null} = {}) {
+export function createApplySocialAssignmentCommand(kind, changes, {label = null, preparedCoverage = null} = {}) {
   const config = socialConfig(kind);
   const normalized = normalizeGridChanges(changes);
   const affectedIds = [...new Set(normalized.flatMap(change => [change.before, change.after]).filter(id => id > 0))];
@@ -34,14 +38,18 @@ export function createApplySocialAssignmentCommand(kind, changes, {label = null}
       affected: systemAffected(`${config.kind}-assignment`, affectedIds.length
         ? affectedIds.map(id => ({kind: config.kind, id}))
         : [{kind: "grid-cells", id: normalized.length}]),
-      derived: [config.cellsEffect, "cell-colors", "object-index", "object-panels", "derived-stale"]
+      changedGridCells: normalized.map(change => change.gridCell),
+      cellAttributePatch: true,
+      socialField: kind,
+      derived: [config.cellsEffect, "cell-colors", "object-panels", "derived-stale"]
     },
     apply(context) {
       validateAssignmentTarget(context.map, config, normalized);
       snapshot ??= captureAssignmentSnapshot(context.map, config, normalized);
       applyGridChanges(context.map, config, normalized, "after");
-      syncAssignmentReferences(context.map, config, normalized);
-      refreshSocialCoverage(context.map, config);
+      writeAssignmentReferences(context.map, config, snapshot.references, false);
+      refreshSocialCoverage(context.map, config, preparedCoverage);
+      preparedCoverage = null;
       markSocialStale(context.map, config.kind);
       result = {
         kind: config.kind,
@@ -51,13 +59,27 @@ export function createApplySocialAssignmentCommand(kind, changes, {label = null}
     },
     revert(context) {
       if (!snapshot) throw new Error(`缺少可撤销的${config.label}归属快照`);
-      restoreAssignmentSnapshot(context.map, config, snapshot);
+      restoreAssignmentSnapshot(context.map, config, normalized, snapshot);
     },
     isNoop(context) {
       return !normalized.length || normalized.every(change => change.before === change.after) || !hasValidTargets(context.map, config, normalized);
     },
     getChanges() {
       return normalized.map(change => ({...change}));
+    },
+    getReplicaRows() {
+      return {
+        [`grid.cells.${kind}`]: normalized.map(change => change.gridCell),
+        [`pack.cells.${kind}`]: [...snapshot.packValues.keys()]
+      };
+    },
+    getReplicaFields(map) {
+      return [
+        `society.${config.plural}`, `pack.${config.plural}`, "metadata.derivedStale",
+        ...(map.society?.metadata ? ["society.metadata"] : []),
+        ...snapshot.references.map(({section, table, index}) => `${section}.${table}.${index}.${kind}`),
+        ...Object.keys(snapshot.stale.flags).filter(section => map[section]?.metadata).map(section => `${section}.metadata.stale`)
+      ];
     },
     getResult() {
       return result ? {...result, targetIds: [...result.targetIds]} : null;
@@ -153,80 +175,73 @@ function clearSocialReferences(map, config, id) {
   return changed;
 }
 
-function syncAssignmentReferences(map, config, changes) {
-  const packCells = packCellsForGridChanges(map, changes);
-  for (const burg of map.pack?.burgs || []) {
-    if (!burg || burg.removed || !packCells.has(Number(burg.cell))) continue;
-    burg[config.field] = Number(map.pack.cells[config.field]?.[burg.cell]) || 0;
-  }
-  for (const city of map.settlements?.cities || []) {
-    const cell = Number.isInteger(city?.packCell) ? city.packCell : city?.cell;
-    if (!city || !packCells.has(Number(cell))) continue;
-    city[config.field] = Number(map.pack.cells[config.field]?.[cell]) || 0;
-  }
-  for (const collection of politicalCollections(map)) {
-    for (const item of collection) {
-      if (!item || item.removed || !Object.prototype.hasOwnProperty.call(item, config.field) || !packCells.has(Number(item.center))) continue;
-      item[config.field] = Number(map.pack.cells[config.field]?.[item.center]) || 0;
+function captureAssignmentReferences(map, field, packValues) {
+  const references = [];
+  for (const [section, table] of [["pack", "burgs"], ["settlements", "cities"], ["politics", "states"], ["pack", "states"], ["politics", "provinces"], ["pack", "provinces"]]) {
+    const items = map[section]?.[table] || [];
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+      if (!item || (table !== "cities" && item.removed)) continue;
+      let cell = item.cell;
+      if (table === "cities" && Number.isInteger(item.packCell)) cell = item.packCell;
+      if (table === "states" || table === "provinces") {
+        if (!Object.hasOwn(item, field)) continue;
+        cell = item.center;
+      }
+      if (packValues.has(Number(cell))) references.push({section, table, index, cell, present: Object.hasOwn(item, field), before: item[field]});
     }
+  }
+  return references;
+}
+
+function writeAssignmentReferences(map, config, references, revert) {
+  for (const {section, table, index, cell, present, before} of references) {
+    const item = map[section][table][index];
+    if (revert && !present) delete item[config.field];
+    else item[config.field] = revert ? before : Number(map.pack.cells[config.field][cell]) || 0;
   }
 }
 
-function refreshSocialCoverage(map, config) {
+function refreshSocialCoverage(map, config, prepared) {
   const stores = getStores(map, config);
   const packCells = map.pack?.cells;
-  for (const store of stores) {
-    for (const item of store) {
-      if (!item || item.removed || !(Number(item.i ?? item.id) > 0)) continue;
-      item.cells = 0;
-      item.area = 0;
-      item.rural = 0;
-      if (Object.prototype.hasOwnProperty.call(item, "urban")) item.urban = 0;
-    }
-  }
-  for (const burg of map.pack?.burgs || []) {
-    if (!burg?.i || burg.removed) continue;
-    const id = Number(packCells?.[config.field]?.[burg.cell]) || 0;
-    for (const store of stores) {
-      const item = store[id];
-      if (!item || item.removed || !Object.prototype.hasOwnProperty.call(item, "urban")) continue;
-      item.urban = round(Number(item.urban) + (Number(burg.population) || 0));
-    }
-  }
+  const coverage = prepared || summarizeSocialCoverage(socialCoverageInput(map, config.field));
   const primary = getPrimaryStore(map, config);
-  for (let cell = 0; cell < (packCells?.[config.field]?.length || 0); cell++) {
-    const id = Number(packCells[config.field][cell]) || 0;
-    if (!id || !primary?.[id] || primary[id].removed) continue;
-    for (const store of stores) {
-      const item = store[id];
-      if (!item || item.removed) continue;
-      item.cells++;
-      item.area = round(Number(item.area) + (Number(packCells.area?.[cell]) || 0));
-      item.rural = round(Number(item.rural) + (Number(packCells.pop?.[cell]) || 0));
-    }
-  }
   for (const store of stores) {
+    const neutral = store[0];
+    if (neutral && !neutral.removed && Object.hasOwn(neutral, "urban")) {
+      for (const population of coverage.neutralBurgs) neutral.urban = round(Number(neutral.urban) + (Number(population) || 0));
+    }
     const used = new Set();
     const items = store
       .filter(item => item && !item.removed && Number(item.i ?? item.id) > 0)
       .sort((left, right) => Number(left.i ?? left.id) - Number(right.i ?? right.id));
     for (const item of items) {
       const id = Number(item.i ?? item.id);
+      const row = coverage.rows.get(id);
+      const land = primary?.[id] && !primary[id].removed ? row : null;
+      item.cells = land?.cells || 0;
+      item.area = land?.area || 0;
+      item.rural = land?.rural || 0;
+      if (Object.hasOwn(item, "urban")) item.urban = row?.urban || 0;
       let center = Number(item.center);
       const centerOwned = Number.isInteger(center)
         && Number(packCells?.h?.[center]) >= 20
         && Number(packCells?.[config.field]?.[center]) === id;
-      if (!centerOwned || used.has(center)) center = selectDeterministicOwnedCenter(packCells, config.field, id, used);
+      if (!centerOwned || used.has(center)) {
+        center = row?.best ?? -1;
+        if (used.has(center)) center = selectDeterministicOwnedCenter(packCells, config.field, id, used);
+      }
       item.center = center;
       item.gridCenter = center >= 0 && Number.isInteger(Number(packCells?.g?.[center])) ? Number(packCells.g[center]) : -1;
       if (center >= 0) used.add(center);
     }
     rebuildInheritanceTree(store);
   }
-  refreshSocietyMetadata(map, config);
+  refreshSocietyMetadata(map, config, coverage);
 }
 
-function refreshSocietyMetadata(map, config) {
+function refreshSocietyMetadata(map, config, coverage) {
   const metadata = map.society?.metadata;
   if (!metadata) return;
   const items = getPrimaryStore(map, config) || [];
@@ -234,8 +249,8 @@ function refreshSocietyMetadata(map, config) {
   metadata[config.plural] = active.length;
   metadata[config.namesKey] = active.map(item => item.name || `${config.label} #${item.i ?? item.id}`);
   metadata[config.centersKey] = active.map(item => Number(item.gridCenter) || 0);
-  metadata[config.packCountKey] = countPositive(map.pack?.cells?.[config.field]);
-  metadata[config.gridCountKey] = countPositive(map.grid?.cells?.[config.field]);
+  metadata[config.packCountKey] = coverage.packCount;
+  metadata[config.gridCountKey] = coverage.gridCount;
   metadata[config.treeKey] = summarizeInheritanceTree(items);
 }
 
@@ -254,39 +269,38 @@ function markSocialStale(map, kind) {
 function applyGridChanges(map, config, changes, key) {
   const gridValues = map.grid?.cells?.[config.field];
   const packValues = map.pack?.cells?.[config.field];
+  const index = packCellsByGrid(map);
   for (const change of changes) {
     const value = Number(change[key]) || 0;
     gridValues[change.gridCell] = value;
-    for (let packCell = 0; packCell < (map.pack?.cells?.g?.length || 0); packCell++) {
-      if (Number(map.pack.cells.g[packCell]) !== change.gridCell || Number(map.pack.cells.h?.[packCell]) < 20) continue;
+    for (const packCell of index?.get(change.gridCell) || []) {
+      if (Number(map.pack.cells.h?.[packCell]) < 20) continue;
       packValues[packCell] = value;
     }
   }
 }
 
 function captureAssignmentSnapshot(map, config, changes) {
-  const packValues = cloneArrayLike(map.pack?.cells?.[config.field]);
-  const gridValues = cloneArrayLike(map.grid?.cells?.[config.field]);
+  const packValues = new Map();
+  for (const cell of packCellsForGridChanges(map, changes)) packValues.set(cell, map.pack.cells[config.field][cell]);
   for (const change of changes) {
-    gridValues[change.gridCell] = change.before;
-    if (change.packBefore?.length) {
-      for (const entry of change.packBefore) packValues[entry.packCell] = entry.before;
+    for (const entry of change.packBefore) {
+      if (packValues.has(entry.packCell)) packValues.set(entry.packCell, entry.before);
     }
   }
   return {
     packValues,
-    gridValues,
-    references: captureReferenceValues(map, config),
+    references: captureAssignmentReferences(map, config.field, packValues),
     stores: captureStores(map, config),
     societyMetadata: clonePlain(map.society?.metadata || null),
     stale: captureStale(map)
   };
 }
 
-function restoreAssignmentSnapshot(map, config, snapshot) {
-  map.pack.cells[config.field] = cloneArrayLike(snapshot.packValues);
-  map.grid.cells[config.field] = cloneArrayLike(snapshot.gridValues);
-  restoreReferenceValues(snapshot.references);
+function restoreAssignmentSnapshot(map, config, changes, snapshot) {
+  for (const change of changes) map.grid.cells[config.field][change.gridCell] = change.before;
+  for (const [cell, before] of snapshot.packValues) map.pack.cells[config.field][cell] = before;
+  writeAssignmentReferences(map, config, snapshot.references, true);
   restoreStores(map, config, snapshot.stores);
   if (snapshot.societyMetadata) map.society.metadata = clonePlain(snapshot.societyMetadata);
   restoreStale(map, snapshot.stale);
@@ -470,12 +484,8 @@ function normalizeGridChanges(changes) {
 }
 
 function packCellsForGridChanges(map, changes) {
-  const gridCells = new Set(changes.map(change => change.gridCell));
-  const result = new Set();
-  for (let packCell = 0; packCell < (map.pack?.cells?.g?.length || 0); packCell++) {
-    if (gridCells.has(Number(map.pack.cells.g[packCell])) && Number(map.pack.cells.h?.[packCell]) >= 20) result.add(packCell);
-  }
-  return result;
+  const packCells = packCellsForGrid(map, changes.map(change => change.gridCell));
+  return new Set(packCells.filter(cell => Number(map.pack.cells.h?.[cell]) >= 20));
 }
 
 function replaceValue(values, target, replacement) {
@@ -486,12 +496,6 @@ function replaceValue(values, target, replacement) {
     changed++;
   }
   return changed;
-}
-
-function countPositive(values) {
-  let count = 0;
-  for (const value of values || []) if (Number(value) > 0) count++;
-  return count;
 }
 
 function cloneArrayLike(value) {

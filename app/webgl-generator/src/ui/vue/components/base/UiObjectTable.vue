@@ -148,6 +148,7 @@ const props = defineProps({
     required: true
   },
   virtualThreshold: Number,
+  selectionScrollContext: {type: String, default: null},
   selectedId: {
     type: [Number, String, null],
     default: null
@@ -319,8 +320,8 @@ const selectedRowPosition = computed(() => selectedRowIndex());
 const rowOrderSignature = computed(() => selectionOrderSignature(props.rows.map(row => rowKey(row))));
 const selectedScrollAnchor = computed(() => selectionCenterAnchor(
   props.selectedId === null || props.selectedId === undefined ? null : objectIdKey(props.selectedId),
-  selectedRowPosition.value,
-  rowOrderSignature.value
+  props.selectionScrollContext === null ? selectedRowPosition.value : Math.min(selectedRowPosition.value, 0),
+  props.selectionScrollContext ?? rowOrderSignature.value
 ));
 const selectedCenterController = createSelectionCenterController({
   getScroller: () => tableScroller(tableWrap.value),

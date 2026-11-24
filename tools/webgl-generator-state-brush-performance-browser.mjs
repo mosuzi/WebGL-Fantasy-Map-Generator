@@ -4,6 +4,7 @@ import {createReadStream, existsSync, statSync} from "node:fs";
 import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {extname, join, resolve, sep} from "node:path";
+import {checkSmoothPaint} from "./webgl-generator-smooth-paint-check.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const dist = join(root, "dist", "webgl-generator");
@@ -22,8 +23,13 @@ let browser;
 try {
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   const results = [];
-  for (const cellsTarget of (process.argv.includes("--100k-only") ? [100000] : [10000, 100000])) results.push(await exercise(browser, port, cellsTarget));
-  console.log(JSON.stringify({ok: true, results: process.argv.includes("--summary") ? results.map(result => ({
+  const smoothCoast = process.argv.includes("--smooth-coast");
+  if (smoothCoast) {
+    results.push(await checkSmoothPaint(browser, port, process.env.FMG_SMOOTH_PAINT_SAVE));
+  } else {
+    for (const cellsTarget of (process.argv.includes("--100k-only") ? [100000] : [10000, 100000])) results.push(await exercise(browser, port, cellsTarget));
+  }
+  console.log(JSON.stringify({ok: true, results: !smoothCoast && process.argv.includes("--summary") ? results.map(result => ({
     cellsTarget: result.cellsTarget,
     commitMs: result.commit.durationMs,
     previewMaxMs: Math.max(...result.previews.map(item => item.durationMs)),
@@ -152,7 +158,7 @@ async function exercise(browserInstance, localPort, cellsTarget) {
     assert.ok(observed.commit, "未收集画笔提交耗时");
     assert.ok(observed.label && observed.label.durationMs < 200, "画笔落定后的标签刷新卡顿");
     assert.ok(observed.commit.durationMs < 200, `画笔提交卡顿 ${observed.commit.durationMs}ms`);
-    assert.ok(observed.preview.every(item => item.durationMs < 100), "画笔预览响应超过 100ms");
+    assert.ok(observed.preview.every(item => item.durationMs < 100), `${cellsTarget} 格画笔预览超过 100ms：${JSON.stringify(observed.preview)}`);
     assert.equal(observed.webglError, 0, "WebGL 错误");
     assert.equal(observed.boundaryError, null, "异步国界计算错误");
     const gestureLongTasks = observed.health.filter(item => item.type === "main-thread-long-task" && item.detail?.startTime >= gestureStartedAt && item.detail?.durationMs > 200);

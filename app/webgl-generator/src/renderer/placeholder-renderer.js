@@ -9,7 +9,7 @@ import {colorForCell, colorForHeight, isLandCell} from "./color-modes.js";
 import {ANCIENT_COLOR_PROJECTION_GLSL, ancientDisplayColor, ancientDisplayHex, isAncientTheme} from "./ancient-colors.js";
 import {buildCompactGridCellSurfaceGeometry, buildGridCellSurfacePatchFromBase, politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, refreshCellVisualMeshCells, summarizeCellVisualMesh} from "./cell-visual-layer.js";
-import {buildSelectionMeshBundle, drawSelectionMeshBatches, emptySelectionDrawRanges, selectionHighlightMode} from "./selection-layer.js";
+import {buildSelectionMeshBundle, drawSelectionMeshBatches, emptySelectionDrawRanges, selectionHighlightMode, surfaceAreaSelection, SURFACE_AREA_HIGHLIGHT_VECTORS} from "./selection-layer.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh, emptyHeightCellSelectionStats, emptyHeightTransformPreviewStats} from "./height-transform-preview-layer.js";
 import {pushZoneTextureLayer} from "./zone-layer.js";
 import {
@@ -34,6 +34,8 @@ import {
   buildShoreVisualPaths,
   emptyShoreVisualPaths,
   patchHardShoreLines,
+  planHeightShoreEdit,
+  prewarmShorePathIndexes,
   pushShoreLineLayers,
   recolorShoreSurfaceVertexLayers,
   summarizeShoreVisualPaths
@@ -396,6 +398,7 @@ const MARKER_ICON_PALETTES = Object.freeze({
 });
 
 const WEBGL_DIRECT_BUFFER_KEYS = Object.freeze([
+  "landCorrectionIdentityBuffer", "landCoverIdentityBuffer", "waterCorrectionIdentityBuffer", "waterCoverIdentityBuffer",
   "editedCellEdgesBuffer", "surfacePatchBuffer", "landCorrectionBuffer", "waterCorrectionBuffer", "landCoverBuffer", "waterCoverBuffer",
   "routeBuffer", "tradeFlowBuffer", "riverBuffer", "selectionBuffer", "heightTransformPreviewBuffer",
   "heightCellSelectionBuffer", "oceanCurrentBuffer", "lineBuffer", "shoreLineBuffer", "pointBuffer",
@@ -445,6 +448,11 @@ function initializeWebGlBindingsAndBuffers(renderer) {
     color: gl.getAttribLocation(renderer.surfaceProgram, "a_color"), scale: gl.getUniformLocation(renderer.surfaceProgram, "u_scale"),
     offset: gl.getUniformLocation(renderer.surfaceProgram, "u_offset"), pointMode: gl.getUniformLocation(renderer.surfaceProgram, "u_pointMode"),
     iceOverlay: gl.getUniformLocation(renderer.surfaceProgram, "u_iceOverlay"),
+    areaSelected: gl.getUniformLocation(renderer.surfaceProgram, "u_areaSelected"),
+    areaColor: gl.getUniformLocation(renderer.surfaceProgram, "u_areaColor"),
+    areaHighlightCount: gl.getUniformLocation(renderer.surfaceProgram, "u_areaHighlightCount"),
+    areaHighlights: gl.getUniformLocation(renderer.surfaceProgram, "u_areaHighlights[0]"),
+    areaMultiColor: gl.getUniformLocation(renderer.surfaceProgram, "u_areaMultiColor"),
     surfaceSideMode: gl.getUniformLocation(renderer.surfaceProgram, "u_surfaceSideMode"), cellColorMode: gl.getUniformLocation(renderer.surfaceProgram, "u_cellColorMode"),
     cellCount: gl.getUniformLocation(renderer.surfaceProgram, "u_cellCount"), cellTextureSize: gl.getUniformLocation(renderer.surfaceProgram, "u_cellTextureSize"),
     terrainTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_terrainTexture"), numericTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_numericTexture"),
@@ -1195,7 +1203,7 @@ export class PlaceholderMapRenderer {
         await upload(staged.tradeFlowBuffer, new Float32Array(), this.gl.DYNAMIC_DRAW);
 
         const selectionStartedAt = performance.now();
-        const selectionLayer = buildSelectionMeshBundle(map, camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights, this.riverWaypointPreview);
+        const selectionLayer = buildSelectionMeshBundle(map, camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights, this.riverWaypointPreview, usesCellIdentitySurface(this));
         staged.selectionVertexCount = selectionLayer.vertices.length / 6;
         staged.selectionDrawRanges = selectionLayer.drawRanges;
         staged.selectionBuildMs = roundMs(performance.now() - selectionStartedAt);
@@ -1722,9 +1730,9 @@ export class PlaceholderMapRenderer {
     return true;
   }
 
-  refreshCellAttributeCells(gridCells) {
+  refreshCellAttributeCells(gridCells, source = this.map) {
     if (!this.map || !this.cellAttributeStore) return false;
-    const patch = prepareCellAttributePatch(this.cellAttributeStore, this.map, gridCells);
+    const patch = prepareCellAttributePatch(this.cellAttributeStore, source, gridCells);
     return applyCellAttributePatch(this.gl, patch);
   }
 
@@ -1762,11 +1770,23 @@ export class PlaceholderMapRenderer {
     return true;
   }
 
-  refreshEditedCellColors(gridCells, {draw = true, binding = null} = {}) {
-    if (!gridCells?.length || !this.canPresentGpuResidentColorMode(this.colorMode)) return false;
+  refreshEditedCellColors(gridCells, {draw = true, binding = null, socialField = null} = {}) {
+    if (!gridCells?.length || !this.cellAttributeStore) return false;
+    const resident = this.canPresentGpuResidentColorMode(this.colorMode);
+    if (socialField) {
+      // 空文化或宗教可能刚取得第一格，旧调色板中还没有它的陆地颜色。
+      const seen = new Set();
+      for (const cell of gridCells) {
+        const id = this.map.grid.cells[socialField][cell];
+        if (id < 0 || seen.has(id) || !isLandCell(cell, this.map)) continue;
+        seen.add(id);
+        installRendererCellAttributeStore(this, ensureCellAttributePaletteEntry(this.gl, this.cellAttributeStore, this.map, `${socialField}s`, id, cell, this.viewOptions));
+      }
+    } else if (!resident) return false;
     if (!this.refreshCellAttributeCells(gridCells)) return false;
+    if (!resident) return false;
     if (shouldDrawShoreVisualBands(this.colorMode)) refreshShoreSurfaceCellColors(this, gridCells);
-    if (binding) this.rebindEditedRendererResources(binding);
+    if (binding) rebindEditedRendererResources(this, binding, null, this.surfaceResourceOwner);
     if (draw) this.draw();
     return true;
   }
@@ -2323,12 +2343,68 @@ export class PlaceholderMapRenderer {
   }
 
 
+  prewarmHeightShorePaths() {
+    if (!this.map) return;
+    const objects = prewarmShorePathIndexes(this.map, this.shoreVisualPaths);
+    if (objects && this.warmPoliticalBrushWorker() && objects !== this.heightShoreObjects) {
+      this.heightShoreObjects = objects;
+      this.politicalBrushWorker.postMessage({type: "shore-objects", objects});
+    }
+  }
+
+  prepareHeightBrushShore(changedCells) {
+    if (!this.surfaceCellRanges.size || !this.canPresentGpuResidentColorMode(this.colorMode)) return null;
+    const map = this.map, before = this.shoreVisualPaths;
+    const heights = map.grid.cells.h;
+    const crossings = heightSurfaceCrossings(this, changedCells, heights);
+    if (!crossings.length) return null;
+    if (!this.heightShoreObjects || this.politicalBrushWorkerMap !== map) this.prewarmHeightShorePaths();
+    if (!this.heightShoreObjects || !this.politicalBrushWorker) return null;
+    const plan = planHeightShoreEdit(map, before, crossings);
+    if (!plan) return null;
+    const mode = this.colorMode, theme = this.viewOptions.visualTheme, surfaceKey = gpuResidentShoreSurfaceKey(mode, this.viewOptions);
+    const colors = new Map();
+    for (const source of plan.sources) for (const cells of [source.landCells, source.waterCells]) {
+      for (const cell of cells) if (!colors.has(cell)) colors.set(cell, colorForCell(cell, map, mode, this.viewOptions));
+    }
+    const id = this.nextHeightShoreId = (this.nextHeightShoreId || 0) + 1;
+    const request = {type: "prepare-shore", id, sources: plan.sources, colors, heights: crossings.map(cell => [cell, heights[cell]]), viewOptions: {visualTheme: theme}};
+    return new Promise(resolve => {
+      this.heightShoreRequests.set(id, result => resolve(() => {
+        if (!result || this.map !== map || this.shoreVisualPaths !== before || this.viewOptions.visualTheme !== theme || gpuResidentShoreSurfaceKey(this.colorMode, this.viewOptions) !== surfaceKey) return;
+        const {after, added} = plan.finish(result.shapes);
+        this.preparedHeightShore = {after, surface: result.surface};
+        added.forEach((path, index) => this.shoreLinePathObjectVertices.set(path, result.lines[index]));
+      }));
+      if (this.politicalBrushWorkerReady) this.politicalBrushWorker.postMessage(request);
+      else this.politicalBrushPendingPatches.push(request);
+    }).catch(error => {
+      this.heightShoreRequests.delete(id);
+      this.lastHeightShoreError = error.message;
+      return null;
+    });
+  }
+
   refreshResidentHeightTopology(crossings, normalizedCells, draw, binding) {
     const before = this.shoreVisualPaths;
     const started = performance.now();
     const after = buildIncrementalShoreVisualPaths(this.map, before, crossings);
+    const prepared = this.preparedHeightShore?.after === after ? this.preparedHeightShore.surface : null;
+    this.preparedHeightShore = null;
     const shoreBuilt = performance.now();
     if (!after) return null;
+    const admin = this.map.grid.cells;
+    if (admin.state && admin.province) {
+      const flipped = new Set(crossings);
+      const boundary = crossings.some(cell => admin.c[cell].some(n => (admin.h[n] >= 20 || flipped.has(n)) &&
+        (admin.state[cell] !== admin.state[n] || admin.province[cell] && admin.province[n] && admin.province[cell] !== admin.province[n])));
+      if (boundary) this.queuePoliticalBrushRefresh(crossings);
+      else if (this.politicalBrushWorker) {
+        const patch = {type: "height", cells: crossings.map(i => [i, admin.state[i], admin.province[i], admin.h[i]])};
+        if (this.politicalBrushWorkerReady) this.politicalBrushWorker.postMessage(patch);
+        else this.politicalBrushPendingPatches.push(patch);
+      }
+    }
     updateSurfaceWaterSides(this.gl, this.surfaceBaseBufferSet, this.surfaceVertices, this.surfaceCompactGeometry, this.surfaceCellRanges, this.map.grid.cells.h, crossings);
     if (this.editedCellEdges?.base !== this.cellVisualCorrectionGeometry) {
       this.editedCellEdges = {base: this.cellVisualCorrectionGeometry, flipped: new Set(), slots: new Map(),
@@ -2349,7 +2425,7 @@ export class PlaceholderMapRenderer {
       const bundle = updateShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode, this.viewOptions, before, after, {
         landCorrections: this.landCorrectionVertices, waterCorrections: this.waterCorrectionVertices,
         landCovers: this.landCoverVertices, waterCovers: this.waterCoverVertices, cellRanges: this.shoreSurfaceCellRanges, shorePathEnds: this.shorePathEnds
-      });
+      }, prepared);
       this.installGpuResidentShoreSurface(bundle, key);
       if (this.viewOptions.smoothCellBorders === false) this.refreshGpuResidentShoreSurface();
     } else {
@@ -2365,7 +2441,7 @@ export class PlaceholderMapRenderer {
       localShoreMs: roundMs(shoreBuilt - started), localMeshMs: roundMs(edgesBuilt - shoreBuilt), localSurfaceMs: roundMs(surfaceBuilt - edgesBuilt)};
   }
 
-  refreshHeightCells(gridCells, {draw = true, deferTopology = false, binding = null} = {}) {
+  refreshHeightCells(gridCells, {draw = true, binding = null} = {}) {
     const normalizedCells = [...new Set((gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))].sort((a, b) => a - b);
     if (!this.map || !normalizedCells.length) return {incremental: false, cells: 0, spans: 0};
     // 底图着色从地形纹理取高度。首次预览、取消和历史回放共用这份数据。
@@ -2376,7 +2452,7 @@ export class PlaceholderMapRenderer {
     ) : [];
     if (textureChanges.length) this.refreshCellAttributeCells(textureChanges);
     const resident = terrain && this.canPresentGpuResidentColorMode(this.colorMode);
-    const crossings = !deferTopology && this.surfaceCellRanges.size
+    const crossings = this.surfaceCellRanges.size
       ? heightSurfaceCrossings(this, normalizedCells, heights) : [];
     if (resident && crossings.length) {
       const topology = this.refreshResidentHeightTopology(crossings, normalizedCells, draw, binding);
@@ -2476,6 +2552,17 @@ export class PlaceholderMapRenderer {
     return {incremental: true, cells: changedCells, spans: merged.length, shoreSpans};
   }
 
+  prepareBrushStateLabel(id) {
+    const state = this.map?.politics?.states?.[id];
+    if (!state || state.removed || isGeneratedLabelHidden(this.map, LABEL_TARGET_KIND.STATE, id)) return null;
+    const placement = stateLabelPlacement(this.map, state, state.fullName || state.name);
+    if (placement?.componentCellSet.size) {
+      const outline = homelandOutline(this.map, placement.componentCellSet);
+      homelandLabelSites(outline, placement.x, placement.y, placement.rotation);
+    }
+    return placement;
+  }
+
   refreshLabels(binding = null, options = {}) {
     if (!this.map) return;
     const startedAt = performance.now();
@@ -2488,15 +2575,20 @@ export class PlaceholderMapRenderer {
     if (!options.positionTarget || !this.refreshLabelPosition(options.positionTarget)) this.buildLabels(this.map, options);
     const builtAt = performance.now();
     if (resourceBinding) adoptOverlayLabelResourceBinding(this, resourceBinding);
-    this.updateLabels();
-    const finishedAt = performance.now();
-    this.lastLabelRefreshProfile = {
-      buildMs: roundMs(builtAt - startedAt),
-      layoutMs: roundMs(finishedAt - builtAt),
-      totalMs: roundMs(finishedAt - startedAt),
-      politicalOnly: options.politicalOnly === true,
-      stateIds: options.stateIds?.length || 0
+    const layout = () => {
+      const layoutAt = performance.now();
+      this.updateLabels();
+      const finishedAt = performance.now();
+      this.lastLabelRefreshProfile = {
+        buildMs: roundMs(builtAt - startedAt),
+        layoutMs: roundMs(finishedAt - layoutAt),
+        totalMs: roundMs(finishedAt - startedAt),
+        politicalOnly: options.politicalOnly === true,
+        stateIds: options.stateIds?.length || 0
+      };
     };
+    if (options.deferLayout) return layout;
+    layout();
   }
 
   getLabelLayoutSnapshot(targetKind, targetId) {
@@ -2784,7 +2876,7 @@ export class PlaceholderMapRenderer {
     }, {bufferGroup: "line"});
     const uploadedAt = performance.now();
     adoptRenderCacheResourceBinding(this, "line", currentRendererRenderCacheBinding(this, binding));
-    if (draw) this.draw();
+    if (draw) this.draw({updateOverlay: !preparedVertices, checkGlError: !preparedVertices});
     this.lastPoliticalLineRefresh = {
       assembleMs: Math.round((assembledAt - startedAt) * 10) / 10,
       uploadMs: Math.round((uploadedAt - assembledAt) * 10) / 10,
@@ -2795,6 +2887,10 @@ export class PlaceholderMapRenderer {
   }
 
   resetPoliticalBrushWorker() {
+    for (const finish of this.heightShoreRequests?.values() || []) finish(null);
+    this.heightShoreRequests = new Map();
+    this.heightShoreObjects = null;
+    this.preparedHeightShore = null;
     this.politicalBrushWorker?.terminate();
     this.politicalBrushWorker = null;
     this.politicalBrushWorkerMap = null;
@@ -2817,6 +2913,13 @@ export class PlaceholderMapRenderer {
     this.politicalBrushLastError = null;
     worker.onmessage = event => {
       const result = event.data;
+      if (result.type === "shore-result") {
+        if (this.map !== source || this.politicalBrushGeneration !== generation) return;
+        this.heightShoreRequests.get(result.id)?.(result.result);
+        this.heightShoreRequests.delete(result.id);
+        this.lastHeightShoreError = result.error || null;
+        return;
+      }
       if (this.map !== source || result.generation !== this.politicalBrushGeneration || result.request !== this.politicalBrushRequest) return;
       if (result.type === "error") {
         this.politicalBrushLastError = result.message;
@@ -2843,6 +2946,7 @@ export class PlaceholderMapRenderer {
     worker.postMessage({
       type: "init", generation,
       metadata: {graphWidth: source.metadata.graphWidth, graphHeight: source.metadata.graphHeight},
+      gridMetadata: source.grid.metadata,
       features: source.features.features.map(feature => ({land: Boolean(feature?.land)})),
       indices: source.grid.cells.i,
       cellCount: source.grid.cells.state.length,
@@ -2862,10 +2966,11 @@ export class PlaceholderMapRenderer {
       try {
         if (!await sendChunks("cells", {
           c: source.grid.cells.c, v: source.grid.cells.v, p: source.grid.cells.p,
-          f: source.grid.cells.f, state: source.grid.cells.state, province: source.grid.cells.province
+          f: source.grid.cells.f, h: source.grid.cells.h, state: source.grid.cells.state, province: source.grid.cells.province
         }, source.grid.cells.state.length)) return;
         if (!await sendChunks("points", {points: source.grid.points}, source.grid.points.length)) return;
         if (!await sendChunks("vertices", {p: source.grid.vertices.p, c: source.grid.vertices.c || []}, source.grid.vertices.p.length)) return;
+        if (source.grid.refinement?.children?.length && !await sendChunks("refinement", {children: source.grid.refinement.children}, source.grid.refinement.children.length)) return;
         if (this.politicalBrushGeneration !== generation || this.map !== source) return;
         this.politicalBrushWorkerReady = true;
         for (const patch of this.politicalBrushPendingPatches) worker.postMessage(patch);
@@ -2884,7 +2989,7 @@ export class PlaceholderMapRenderer {
 
   queuePoliticalBrushRefresh(gridCells) {
     if (!this.warmPoliticalBrushWorker()) return false;
-    const cells = gridCells.map(cell => [cell, this.map.grid.cells.state[cell], this.map.grid.cells.province[cell]]);
+    const cells = gridCells.map(cell => [cell, this.map.grid.cells.state[cell], this.map.grid.cells.province[cell], this.map.grid.cells.h[cell]]);
     const patch = {
       type: "refresh", generation: this.politicalBrushGeneration,
       request: ++this.politicalBrushRequest, cells,
@@ -3692,6 +3797,13 @@ export class PlaceholderMapRenderer {
     if (updateDynamicBuffers && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.updateRouteBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.tradeFlows && this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.rivers && this.layerVisibility.rivers) this.updateRiverBuffer();
+    const surfaceAreas = usesCellIdentitySurface(this);
+    if (this.selectionUsesSurfaceAreas !== surfaceAreas) {
+      this.selectionUsesSurfaceAreas = surfaceAreas;
+      if (this.selection || this.objectHighlights?.length) this.dynamicBuffersDirty.selection = true;
+    }
+    this.activeSurfaceAreas = surfaceAreas && (this.selection || this.objectHighlights?.length)
+      ? surfaceAreaSelection(this.map, this.selection, this.locateFlash, this.objectHighlights) : null;
     if (updateDynamicBuffers && this.dynamicBuffersDirty.selection) this.updateSelectionBuffer();
     assertRenderCacheResourceBindings(this);
 
@@ -3718,10 +3830,10 @@ export class PlaceholderMapRenderer {
     drawSurfaceBase(gl, this, gl.ALWAYS);
     drawCellVisualCorrection(gl, this);
     drawSurfaceDepthBatch(gl, this, this.surfacePatchBuffer, this.surfacePatchVertexCount, gl.ALWAYS);
-    drawSurfaceDepthBatch(gl, this, this.landCorrectionBuffer, this.landCorrectionVertexCount, gl.LESS);
-    drawSurfaceDepthBatch(gl, this, this.waterCorrectionBuffer, this.waterCorrectionVertexCount, gl.GREATER);
-    drawSurfaceDepthBatch(gl, this, this.landCoverBuffer, this.landCoverVertexCount, gl.LESS);
-    drawSurfaceDepthBatch(gl, this, this.waterCoverBuffer, this.waterCoverVertexCount, gl.GREATER);
+    drawShoreSurface(gl, this, "landCorrection", this.landCorrectionVertexCount, false);
+    drawShoreSurface(gl, this, "waterCorrection", this.waterCorrectionVertexCount, true);
+    drawShoreSurface(gl, this, "landCover", this.landCoverVertexCount, false);
+    drawShoreSurface(gl, this, "waterCover", this.waterCoverVertexCount, true);
     gl.depthMask(false);
     const layerOrder = ["surface"];
     if (this.layerVisibility.iceFields && this.cellAttributeStore) {
@@ -4471,7 +4583,7 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("selectionMesh", {mode: "sync"}, startedAt);
     try {
-      const {vertices: selectionVertices, drawRanges} = buildSelectionMeshBundle(this.map, this.camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights, this.riverWaypointPreview);
+      const {vertices: selectionVertices, drawRanges} = buildSelectionMeshBundle(this.map, this.camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights, this.riverWaypointPreview, usesCellIdentitySurface(this));
       this.selectionVertexCount = selectionVertices.length / 6;
       this.selectionDrawRanges = drawRanges;
       const upload = this.recordBufferUpload("selection-screen-mesh", () => {
@@ -5181,7 +5293,7 @@ export class PlaceholderMapRenderer {
     };
   }
 
-  buildLabels(map, {cityRolesOnly = false, politicalOnly = false, stateIds = [], cityIds = null} = {}) {
+  buildLabels(map, {cityRolesOnly = false, politicalOnly = false, stateIds = [], cityIds = null, provinceIds = null, statePlacements = null} = {}) {
     if (!this.overlay) {
       this.gridCellIdLayer = null;
       this.labelItems = [];
@@ -5210,14 +5322,15 @@ export class PlaceholderMapRenderer {
     // 保留其他标签和标记，避免每次点击重新遍历全部国家领土并重建整个覆盖层。
     const scoped = (cityRolesOnly || politicalOnly) && Boolean(this.selectionMarker?.parentNode === this.overlay);
     const stateIdSet = new Set(stateIds.map(Number));
-    const provinceIdSet = politicalOnly
+    const provinceIdSet = provinceIds ? new Set(provinceIds) : politicalOnly
       ? new Set((map.politics?.provinces || []).filter(province => stateIdSet.has(Number(province?.state))).map(province => Number(province.i ?? province.id)))
       : new Set();
     const sourceLabels = scoped
       ? politicalOnly ? [
-        ...this.labelItems.filter(item => !(item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId))) && !(item.targetKind === LABEL_TARGET_KIND.PROVINCE && provinceIdSet.has(Number(item.targetId)))),
-        ...getLabelStates(map, stateIdSet),
-        ...getLabelProvinces(map, provinceIdSet)
+        ...this.labelItems.filter(item => !(item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId))) && !(item.targetKind === LABEL_TARGET_KIND.PROVINCE && provinceIdSet.has(Number(item.targetId))) && !(cityIds?.length && item.targetKind === LABEL_TARGET_KIND.CITY)),
+        ...getLabelStates(map, stateIdSet, statePlacements),
+        ...getLabelProvinces(map, provinceIdSet),
+        ...(cityIds?.length ? getLabelCities(map, this.labelOptions) : [])
       ] : [
         ...[...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE && !stateIdSet.has(Number(item.targetId))), ...getLabelStates(map, stateIdSet)].sort((a, b) => b.priority - a.priority || a.rank - b.rank),
         ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.PROVINCE).sort((a, b) => b.priority - a.priority || a.rank - b.rank),
@@ -5226,7 +5339,7 @@ export class PlaceholderMapRenderer {
         ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CUSTOM).sort((a, b) => a.rank - b.rank)
       ]
       : [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getLabelZones(map), ...getCustomLabels(map)];
-    const localEdit = scoped && cityIds?.length && !politicalOnly;
+    const localEdit = scoped && cityIds?.length;
     const retained = new Set();
     if (localEdit) {
       const oldCities = new Map(this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).map(item => [item.targetId, item]));
@@ -5247,7 +5360,7 @@ export class PlaceholderMapRenderer {
       for (const item of this.labelItems) {
         if (retained.has(item)) continue;
         if (politicalOnly
-          ? (item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId))) || (item.targetKind === LABEL_TARGET_KIND.PROVINCE && provinceIdSet.has(Number(item.targetId)))
+          ? (item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId))) || (item.targetKind === LABEL_TARGET_KIND.PROVINCE && provinceIdSet.has(Number(item.targetId))) || (localEdit && item.targetKind === LABEL_TARGET_KIND.CITY)
           : item.targetKind === LABEL_TARGET_KIND.CITY || (item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId)))) item.node.remove();
       }
     } else this.overlay.replaceChildren();
@@ -5255,7 +5368,7 @@ export class PlaceholderMapRenderer {
     const fragment = documentRef.createDocumentFragment();
     const labels = sourceLabels.map(item => {
       if (scoped && item.node) {
-        if (!localEdit) fragment.append(item.node);
+        if (!localEdit && !politicalOnly) fragment.append(item.node);
         return item;
       }
       const node = documentRef.createElement("span");
@@ -5288,10 +5401,13 @@ export class PlaceholderMapRenderer {
       return {...item, manualPath, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null};
     });
     this.labelItems = hasManualLabelPriorities(map) ? sortLabelItemsByPriority(labels) : labels;
-    const cityLabelWidths = politicalOnly ? null : new Map(labels
+    const refreshCities = !politicalOnly || Boolean(cityIds?.length);
+    const cityLabelWidths = !refreshCities ? null : new Map(labels
       .filter(item => item.targetKind === LABEL_TARGET_KIND.CITY)
       .map(item => [String(item.targetId), item.metrics?.width]));
-    if (!politicalOnly) this.cityIconItems = getCityIconItems(map).map(item => {
+    const retainedIcons = politicalOnly && cityIds?.length && this.cityIconItems.length === (map.settlements?.cities || []).filter(Boolean).length
+      ? {models: this.cityIconItemsById, changed: new Set(cityIds)} : null;
+    if (refreshCities) this.cityIconItems = getCityIconItems(map, retainedIcons).map(item => {
       const old = localEdit && this.cityIconItemsById.get(String(item.id));
       if (old && !cityIds.includes(item.id) && old.rank === item.rank && old.scale === item.scale
         && old.nameWidthCss === cityLabelWidths.get(String(item.id))) return old;
@@ -5306,8 +5422,8 @@ export class PlaceholderMapRenderer {
         selected: old?.selected || false
       };
     });
-    if (!politicalOnly) {
-      if (localEdit) this.cityIconLayer.updateModels(this.cityIconItems.filter(item => item !== this.cityIconItemsById.get(String(item.id))));
+    if (refreshCities) {
+      if (localEdit && this.cityIconItems.length === this.cityIconItemsById.size && this.cityIconItems.every(item => this.cityIconItemsById.has(String(item.id)))) this.cityIconLayer.updateModels(this.cityIconItems.filter(item => item !== this.cityIconItemsById.get(String(item.id))));
       else this.cityIconLayer.setInstances(this.cityIconItems, {nowMs: performance.now()});
       this.cityIconItemsById = new Map(this.cityIconItems.map(item => [String(item.id), item]));
     }
@@ -6564,6 +6680,7 @@ function expandBounds(bounds, padding) {
 
 function getLabelCities(map, labelOptions = {}) {
   const maxCityLabels = normalizeMaxCityLabels(labelOptions.maxCityLabels, DEFAULT_MAX_CITY_LABELS);
+  const manualPriorities = hasManualLabelPriorities(map);
   const candidates = [...map.settlements.cities]
     .filter(city => city && Number.isInteger(city.id))
     .filter(city => !isGeneratedLabelHidden(map, LABEL_TARGET_KIND.CITY, city.id))
@@ -6572,10 +6689,10 @@ function getLabelCities(map, labelOptions = {}) {
       return {
         city,
         priority,
-        layout: resolveLabelLayout(map, LABEL_TARGET_KIND.CITY, city.id, city, {x: city.x, y: city.y, priority})
+        layout: manualPriorities ? resolveLabelLayout(map, LABEL_TARGET_KIND.CITY, city.id, city, {x: city.x, y: city.y, priority}) : null
       };
     });
-  const ranked = hasManualLabelPriorities(map)
+  const ranked = manualPriorities
     ? sortLabelItemsByPriority(candidates)
     : candidates.sort((a, b) => b.priority - a.priority);
   return ranked
@@ -6593,14 +6710,15 @@ function getLabelCities(map, labelOptions = {}) {
     }));
 }
 
-function getLabelStates(map, stateIds = null) {
+function getLabelStates(map, stateIds = null, placements = null) {
   return (map?.politics?.states || [])
     .filter(state => state && (state.i || state.id) && !state.removed)
     .filter(state => !isGeneratedLabelHidden(map, LABEL_TARGET_KIND.STATE, state.i ?? state.id))
     .map((state, rank) => {
       if (stateIds && !stateIds.has(Number(state.i ?? state.id))) return null;
       const text = state.fullName || state.name || `国家 #${state.i ?? state.id}`;
-      const placement = stateLabelPlacement(map, state, text);
+      const id = Number(state.i ?? state.id);
+      const placement = placements?.has(id) ? placements.get(id) : stateLabelPlacement(map, state, text);
       return placement ? {
         targetKind: LABEL_TARGET_KIND.STATE,
         targetId: state.i ?? state.id,
@@ -6720,7 +6838,7 @@ export function collectLabelLayoutItems(map, {labelOptions = {}, visualTheme = {
   return hasManualLabelPriorities(map) ? sortLabelItemsByPriority(source) : source;
 }
 
-function getCityIconItems(map) {
+function getCityIconItems(map, retained = null) {
   const cities = [...(map?.settlements?.cities || [])];
   const scaleContext = createCityScaleContext(cities, map?.pack?.burgs);
   return cities
@@ -6728,6 +6846,10 @@ function getCityIconItems(map) {
     .map(city => ({city, priority: scoreCityIcon(city)}))
     .sort((a, b) => b.priority - a.priority)
     .map(({city, priority}, rank) => {
+      const old = retained?.models.get(String(city.id));
+      if (old && !retained.changed.has(city.id) && old.city === city && old.priority === priority) {
+        return old.rank === rank ? old : {...old, rank};
+      }
       const culture = map?.society?.cultures?.[city.culture] || map?.pack?.cultures?.[city.culture] || null;
       const burg = map?.pack?.burgs?.[city.burgId] || null;
       const scale = deriveCityScale(city, scaleContext, burg);
@@ -7833,6 +7955,18 @@ function drawCellVisualCorrection(gl, renderer) {
 }
 
 function configureGpuResidentSurfaceColors(gl, renderer) {
+  const area = renderer.activeSurfaceAreas;
+  const loc = renderer.surfaceLocations;
+  gl.uniform2i(loc.areaSelected, area?.first || 0, area?.second || 0);
+  gl.uniform1i(loc.areaHighlightCount, area?.count || 0);
+  if (area) {
+    const ancient = isAncientTheme(renderer.visualTheme);
+    gl.uniform4fv(loc.areaColor, ancient ? ancientDisplayColor(area.color) : area.color);
+    if (area.count) {
+      gl.uniform4iv(loc.areaHighlights, area.packed);
+      gl.uniform4fv(loc.areaMultiColor, ancient ? ancientDisplayColor(area.multiColor) : area.multiColor);
+    }
+  }
   gl.uniform1i(renderer.surfaceLocations.ancientPalette, isAncientTheme(renderer.visualTheme) ? 1 : 0);
   const mode = GPU_RESIDENT_COLOR_MODES[renderer.colorMode] || 0;
   const store = renderer.cellAttributeStore;
@@ -7897,6 +8031,42 @@ function summarizeRendererCellVisualCorrection(renderer) {
     byteLength: 0,
     maxSegmentBytes: 0
   };
+}
+
+function usesCellIdentitySurface(renderer) {
+  return Boolean(renderer.cellAttributeStore && GPU_RESIDENT_COLOR_MODES[renderer.colorMode] && !renderer.surfacePatchVertexCount);
+}
+
+const shoreIdentitySources = new WeakMap();
+
+function drawShoreSurface(gl, renderer, kind, count, water) {
+  if (!count) return;
+  const buffer = renderer[kind + "Buffer"];
+  const depth = water ? gl.GREATER : gl.LESS;
+  const ranges = renderer.shoreSurfaceCellRanges?.[kind + "s"];
+  if (!usesCellIdentitySurface(renderer) || !ranges?.size) return drawSurfaceDepthBatch(gl, renderer, buffer, count, depth);
+  const identityBuffer = renderer[kind + "IdentityBuffer"];
+  gl.bindBuffer(gl.ARRAY_BUFFER, identityBuffer);
+  if (shoreIdentitySources.get(identityBuffer) !== ranges) {
+    const owners = new Uint32Array(count);
+    for (const [cell, spans] of ranges) {
+      for (const {start, end} of spans) owners.fill(cell * 2 + Number(water), start / 6, end / 6);
+    }
+    gl.bufferData(gl.ARRAY_BUFFER, owners, gl.STATIC_DRAW);
+    shoreIdentitySources.set(identityBuffer, ranges);
+  }
+  const loc = renderer.surfaceLocations;
+  gl.useProgram(renderer.surfaceProgram);
+  gl.enableVertexAttribArray(loc.identity);
+  gl.vertexAttribIPointer(loc.identity, 1, gl.UNSIGNED_INT, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.enableVertexAttribArray(loc.position);
+  gl.vertexAttribPointer(loc.position, 2, gl.FLOAT, false, 24, 0);
+  gl.enableVertexAttribArray(loc.color);
+  gl.vertexAttribPointer(loc.color, 3, gl.FLOAT, false, 24, 8);
+  gl.depthFunc(depth);
+  gl.drawArrays(gl.TRIANGLES, 0, count);
+  gl.useProgram(renderer.program);
 }
 
 function drawSurfaceDepthBatch(gl, renderer, buffer, vertexCount, depthFunction) {
@@ -8008,13 +8178,19 @@ function buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPat
   return {vertices, pathVertices, pathObjectVertices, rebuiltPaths};
 }
 
+const shoreLinePathKeys = new WeakMap();
+
 export function shoreLinePathKey(featureType, path) {
+  const cached = shoreLinePathKeys.get(path);
+  if (cached?.featureType === featureType) return cached.key;
   const edges = (path?.sourceEdges || []).map(edge => {
     const a = edge.a?.join(",") || "";
     const b = edge.b?.join(",") || "";
     return `${edge.landCell}:${edge.waterCell}:${a < b ? `${a}:${b}` : `${b}:${a}`}`;
   }).sort().join("|");
-  return `${featureType}:${edges || (path?.points || []).map(point => point.join(",")).join("|")}`;
+  const key = `${featureType}:${edges || (path?.points || []).map(point => point.join(",")).join("|")}`;
+  if (path) shoreLinePathKeys.set(path, {featureType, key});
+  return key;
 }
 
 function pushMapEdgeFade(vertices, context, map, visualTheme) {
@@ -9424,6 +9600,11 @@ uniform bool u_pointMode;
 uniform bool u_surfaceSideMode;
 uniform bool u_ancientPalette;
 uniform bool u_iceOverlay;
+uniform ivec2 u_areaSelected;
+uniform vec4 u_areaColor;
+uniform int u_areaHighlightCount;
+uniform ivec4 u_areaHighlights[${SURFACE_AREA_HIGHLIGHT_VECTORS}];
+uniform vec4 u_areaMultiColor;
 uniform int u_cellColorMode;
 uniform uint u_cellCount;
 uniform ivec2 u_cellTextureSize;
@@ -9500,6 +9681,24 @@ void main() {
   v_color = u_ancientPalette ? projectAncientColor(color) : color;
   gl_PointSize = 4.0;
   bool water = (a_packedCellIdAndSide & 1u) == 1u;
+  if (!water && cellId < u_cellCount && (u_areaSelected.x != 0 || u_areaHighlightCount > 0)) {
+    ivec2 ids = ivec2(texelFetch(u_identityTexture, attributeCoord(cellId), 0).rg);
+    ids.y = -ids.y;
+    if ((u_areaSelected.x != 0 && any(equal(ids, u_areaSelected.xx))) || (u_areaSelected.y != 0 && any(equal(ids, u_areaSelected.yy)))) {
+      v_color.rgb = mix(v_color.rgb, u_areaColor.rgb, u_areaColor.a);
+    }
+    for (int channel = 0; channel < 2 && u_areaHighlightCount > 0; ++channel) {
+      int low = 0, high = u_areaHighlightCount;
+      while (low < high) {
+        int mid = (low + high) / 2;
+        if (u_areaHighlights[mid / 4][mid % 4] < ids[channel]) low = mid + 1;
+        else high = mid;
+      }
+      if (low < u_areaHighlightCount && u_areaHighlights[low / 4][low % 4] == ids[channel]) {
+        v_color.rgb = mix(v_color.rgb, u_areaMultiColor.rgb, u_areaMultiColor.a);
+      }
+    }
+  }
   float z = u_surfaceSideMode ? (water ? 0.5 : -0.5) : 0.0;
   gl_Position = vec4(a_position * u_scale + u_offset, z, 1.0);
 }`;

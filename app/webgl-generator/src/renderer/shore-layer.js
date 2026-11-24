@@ -283,12 +283,12 @@ export function buildShoreSurfaceVertexLayers(context, colorMode, viewOptions, p
   };
 }
 
-export function updateShoreSurfaceVertexLayers(context, colorMode, options, before, after, current) {
+export function updateShoreSurfaceVertexLayers(context, colorMode, options, before, after, current, prepared = null) {
   const oldPaths = new Set([...before.coastline, ...before.lakeShore]);
   const newPaths = new Set([...after.coastline, ...after.lakeShore]);
   if (current.shorePathEnds?.landCorrections?.length === oldPaths.size) {
     const added = [...newPaths].filter(path => !oldPaths.has(path));
-    const local = buildShoreSurfaceVertexLayers(context, colorMode, options, {coastline: added, lakeShore: []});
+    const local = prepared || buildShoreSurfaceVertexLayers(context, colorMode, options, {coastline: added, lakeShore: []});
     return spliceShoreSurfacePaths([...oldPaths], current, added, local, [...newPaths]);
   }
   const dirty = new Set();
@@ -425,7 +425,7 @@ function pushShoreSurfaceCorrections(layers, cellRanges, path, context, colorMod
   const {map} = context;
   for (const command of buildShoreSurfaceDrawPacket(path, map).commands) {
     const cell = command.side === "land" ? command.landCell : command.waterCell;
-    const color = withSurfaceSideAlpha(colorForCell(cell, map, colorMode, viewOptions), command.side);
+    const color = withSurfaceSideAlpha(context.shoreColors?.get(cell) || colorForCell(cell, map, colorMode, viewOptions), command.side);
     const key = command.kind === "correction"
       ? command.side === "land" ? "landCorrections" : "waterCorrections"
       : command.side === "land" ? "landCovers" : "waterCovers";
@@ -1873,6 +1873,50 @@ export function buildShoreVisualPaths(map, algorithmOptions = {}) {
 
 const lastShoreEdit = new WeakMap();
 
+// 先取得受影响的原始岸段。曲线、填色和描边全部准备完毕后才一起发布。
+export function planHeightShoreEdit(map, before, crossings) {
+  const pending = new Map();
+  const paths = buildIncrementalShoreVisualPaths(map, before, crossings, {
+    prepareEditedPath(source, kind, fallbackReason) {
+      const draft = {...source, renderPoints: source.points};
+      pending.set(draft, {kind, fallbackReason});
+      return draft;
+    }
+  });
+  if (!paths || !pending.size) return null;
+  const added = [...paths.coastline, ...paths.lakeShore].filter(path => pending.has(path));
+  const sources = added.map(path => ({
+    ...pending.get(path), points: path.points, sideVectors: path.sideVectors, landCells: path.landCells, waterCells: path.waterCells
+  }));
+  return {sources, finish(results) {
+    const replacements = new Map(added.map((path, index) => [path, Object.freeze({...path, sourcePoints: path.points, ...results[index]})]));
+    const replace = path => replacements.get(path) || path;
+    const after = Object.freeze({
+      coastline: Object.freeze(paths.coastline.map(replace)), lakeShore: Object.freeze(paths.lakeShore.map(replace)),
+      topology: Object.freeze({...paths.topology, renderPointCount: [...paths.coastline, ...paths.lakeShore].reduce((n,p) => n + replace(p).renderPoints.length, 0)})
+    });
+    lastShoreEdit.set(map, {key: [...crossings].sort((a, b) => a - b).join(","), before, after});
+    return {after, added: added.map(replace)};
+  }};
+}
+
+export function prepareHeightShoreGeometry(map, sources, protectedObjects, colors, viewOptions) {
+  const options = {...createShoreVisualBuildOptions(map), protectedObjects, measureChanges: false};
+  const paths = sources.map(source => {
+    const settings = source.kind === "lakeShore" ? lakeShoreBuildOptions(map, options) : options;
+    const preparedArcs = source.fallbackReason ? new Map([[source, {
+      sourcePoints: source.points, renderPoints: source.points, closed: pointsNear(source.points[0], source.points.at(-1)),
+      fallbackReason: source.fallbackReason
+    }]]) : undefined;
+    return buildShoreTopologySnapshot([source], map, {...settings, preparedArcs}).paths[0];
+  });
+  const surface = buildShoreSurfaceVertexLayers({...createRenderContext(map), shoreColors: colors}, "height", viewOptions, {coastline: paths, lakeShore: []});
+  const lines = paths.map((path, i) => buildShoreLinePathVertices(map, path, sources[i].kind, viewOptions));
+  const shapes = paths.map(({renderPoints, closed, topologyFallbackReason, topologyLocalFallbackReasons, topologyLocalFallbackSegments}) =>
+    ({renderPoints, closed, topologyFallbackReason, topologyLocalFallbackReasons, topologyLocalFallbackSegments}));
+  return {surface, lines, shapes};
+}
+
 export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGridCells, algorithmOptions = {}) {
   if (!map || !previousPaths?.coastline || !previousPaths?.lakeShore) return null;
   if ([...(previousPaths.coastline || []), ...(previousPaths.lakeShore || [])].some(path => !Array.isArray(path.sourceEdges))) return null;
@@ -1900,7 +1944,9 @@ export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGrid
   shoreProtectedObjectsCache.set(map, protectedObjects);
   const options = {...createShoreVisualBuildOptions(map, algorithmOptions), protectedObjects, measureChanges: false};
   const edges = collectShoreVisualEdges(map, affected, changed, water);
+  const edgesAt = performance.now();
   const coastline = rebuildIncrementalShoreType(map, "coastline", previousPaths.coastline, options, edges.coastline, changed);
+  const coastAt = performance.now();
   const lakeShore = rebuildIncrementalShoreType(map, "lakeShore", previousPaths.lakeShore, lakeShoreBuildOptions(map, options), edges.lakeShore, changed);
   const paths = [...coastline.paths, ...lakeShore.paths];
   const topology = {
@@ -1909,6 +1955,7 @@ export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGrid
     sourcePointCount: paths.reduce((sum, path) => sum + path.points.length, 0),
     renderPointCount: paths.reduce((sum, path) => sum + path.renderPoints.length, 0),
     buildMs: roundMs(performance.now() - startedAt),
+    edgesMs: roundMs(edgesAt - startedAt), coastMs: roundMs(coastAt - edgesAt), lakeMs: roundMs(performance.now() - coastAt),
     incremental: true
   };
   const after = Object.freeze({
@@ -1916,7 +1963,7 @@ export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGrid
     lakeShore: Object.freeze(lakeShore.paths),
     topology: Object.freeze(topology)
   });
-  lastShoreEdit.set(map, {key: editKey, before: previousPaths, after});
+  if (!algorithmOptions.prepareEditedPath) lastShoreEdit.set(map, {key: editKey, before: previousPaths, after});
   return after;
 }
 
@@ -1950,6 +1997,15 @@ function createShoreVisualBuildOptions(map, algorithmOptions = {}) {
 
 
 const shorePathIndexes = new WeakMap();
+
+export function prewarmShorePathIndexes(map, paths) {
+  if (!paths?.coastline || !paths?.lakeShore) return;
+  if (!shoreProtectedObjectsCache.has(map)) shoreProtectedObjectsCache.set(map, collectProtectedShoreObjects(map));
+  for (const kind of ["coastline", "lakeShore"]) {
+    if (paths?.[kind]?.every(path => Array.isArray(path.sourceEdges))) shorePathIndex(map, kind, paths[kind]);
+  }
+  return shoreProtectedObjectsCache.get(map);
+}
 
 function shorePathIndex(map, kind, paths) {
   if (!shorePathIndexes.has(map)) shorePathIndexes.set(map, {});
@@ -2011,6 +2067,7 @@ function rebuildIncrementalShoreType(map, kind, previousPaths, options, changedE
     // 已经按原始格边显示的岸段沿用原形，在变动处接合；分裂出的新环单独评估。
     const retainsRing = previous?.closed && previous.topologyFallbackReason && owners.size === 1
       && source.sourceEdges.filter(edge => original.get(edgeKey(edge)) === previous).length > previous.sourceEdges.length / 2;
+    if (options.prepareEditedPath) return options.prepareEditedPath(source, kind, retainsRing ? previous.topologyFallbackReason : null);
     const preparedArcs = retainsRing ? new Map([[source, {
       sourcePoints: source.points, renderPoints: source.points, closed: pointsNear(source.points[0], source.points.at(-1)),
       fallbackReason: previous.topologyFallbackReason

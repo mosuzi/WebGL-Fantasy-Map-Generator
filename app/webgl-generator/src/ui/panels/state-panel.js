@@ -180,6 +180,10 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       manager.open("state-panel");
       lazyPanel.load();
     },
+    updateBrushFeedback(sourceStateId, lastAffected) {
+      panelState.sourceStateId = sourceStateId;
+      panelState.lastAffected = lastAffected;
+    },
     update({map = panelState.map, sourceStateId = panelState.sourceStateId, lastAffected = panelState.lastAffected, history = panelState.history} = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.sourceStateId = sourceStateId;

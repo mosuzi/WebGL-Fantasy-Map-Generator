@@ -190,6 +190,9 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
         panelState.targetReligionId = normalized;
       }
     },
+    setLastAffected(count) {
+      panelState.lastAffected = count;
+    },
     setAssignmentActive(active) {
       panelState.assignmentActive = Boolean(active);
       panelState.version++;

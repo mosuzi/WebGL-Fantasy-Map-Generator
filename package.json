@@ -1,6 +1,6 @@
 {
   "name": "fmg-webgl-reimplementation",
-  "version": "0.6.18",
+  "version": "0.6.19",
   "description": "由 mosuzi 创作并完全通过 Codex + GPT 生成的 WebGL 幻想地图生成器。",
   "private": true,
   "author": "mosuzi",
@@ -192,6 +192,7 @@
     "regress:lake-delete": "node --no-warnings ./tools/webgl-generator-lake-delete-regression.mjs",
     "regress:lake-delete-browser": "node --no-warnings ./tools/webgl-generator-lake-delete-browser-regression.mjs",
     "regress:social-ownership": "node --no-warnings ./tools/webgl-generator-social-ownership-regression.mjs",
+    "regress:all-brush-browser": "node --no-warnings ./tools/webgl-generator-all-brush-browser.mjs",
     "regress:social-expansion": "node --no-warnings ./tools/webgl-generator-social-expansion-regression.mjs",
     "regress:social-expansion-ui-api": "node --no-warnings ./tools/webgl-generator-social-expansion-ui-api-regression.mjs",
     "regress:social-expansion-worker-task": "node --no-warnings ./tools/webgl-generator-social-expansion-worker-task-regression.mjs",

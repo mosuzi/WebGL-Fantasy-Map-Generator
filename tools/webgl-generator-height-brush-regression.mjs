@@ -124,11 +124,12 @@ assert(/scheduleHeightBrushAtEvent/.test(appSource) && /flushScheduledHeightBrus
 assert(/flushScheduledHeightBrush\(state, documentRef, event(?:, \{draw: false\})?\)/.test(appSource) && /flushScheduledHeightSelectionPaint\(state, documentRef, event\)/.test(appSource), "高度画笔或范围涂选没有提交 pointerup 的真实末次坐标");
 assert(appSource.includes("state.pick = state.renderer.pickClientPoint(pointer.clientX, pointer.clientY)"), "高度画笔没有同步本帧末次落点");
 assert(/if \(active\) releasePointer\(state\.renderer\?\.canvas, active\.pointerId\)/.test(appSource), "取消范围涂选时没有释放 pointer capture");
-assert(appSource.includes("changedGridCells: [...changedCells]"), "高度预览没有合并本帧实际变动的格子");
+const heightPreviewSource = appSource.slice(appSource.indexOf("function applyPendingHeightBrush("), appSource.indexOf("function applyStateBrushAtEvent("));
+assert(heightPreviewSource.includes("batch.set(cell,") && heightPreviewSource.includes("const cells = [...batch.keys()]")
+  && heightPreviewSource.includes("paint(batch.values(), cells, draw)") && heightPreviewSource.includes('render: "none", changedGridCells}'),
+  "高度预览必须合并同一格的多次采样，只刷新本帧实际变动的格子");
 assert(/updateHeightPanel\(state, \{includeMapSummary: false\}\)/.test(appSource), "连续高度交互仍会逐帧统计整图摘要");
-assert(/deferTerrainRefresh: true/.test(refreshSchedulerSource), "高度预览没有声明延后岸线 / 地形派生刷新");
-assert(/refreshHeightCells\(changedGridCells, \{deferTopology: effects\.deferTerrainRefresh(?:, draw: [^}]+)?\}\)/.test(refreshSchedulerSource), "高度预览没有把地形派生刷新延后到提交阶段");
-assert(rendererSource.includes("refreshHeightCells(gridCells, {draw = true, deferTopology = false, binding = null}"), "高度刷新没有提供延后拓扑重建参数");
+assert(!refreshSchedulerSource.includes("deferTerrainRefresh"), "高度预览必须在本帧同步海岸");
 assert(/changedGridCells: normalized\.map\(change => change\.gridCell\)/.test(await readFile(new URL("../app/webgl-generator/src/runtime/height-edit-commands.js", import.meta.url), "utf8")), "高度提交命令没有绑定实际变更 cell");
 assert(/refreshHeightCells\(gridCells/.test(rendererSource) && /bufferSubData/.test(rendererSource), "renderer 缺少受影响 surface 颜色增量更新");
 assert(/changedGridCells\.length && typeof state\.renderer\.refreshHeightCells/.test(refreshSchedulerSource), "刷新调度器没有优先使用高度局部 surface 更新");

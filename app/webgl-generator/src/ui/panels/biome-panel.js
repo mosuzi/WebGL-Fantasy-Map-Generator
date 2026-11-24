@@ -190,7 +190,6 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
     updateAssignment({lastAffected, preview} = {}) {
       if (lastAffected !== undefined) panelState.lastAffected = Number(lastAffected) || 0;
       if (preview !== undefined) panelState.assignmentPreview = preview;
-      panelState.version++;
     },
     setSuitabilityActive(active) {
       panelState.suitabilityActive = Boolean(active);
@@ -199,7 +198,6 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
     updateSuitability({lastAffected, preview} = {}) {
       if (lastAffected !== undefined) panelState.suitabilityLastAffected = Number(lastAffected) || 0;
       if (preview !== undefined) panelState.suitabilityPreview = preview;
-      panelState.version++;
     },
     getBrush() {
       return {

@@ -1,4 +1,9 @@
-import {recalculateBiomeSuitability} from "../generator/biomes.js";
+import {packCellsForGrid} from "./grid-pack-index.js";
+import {BIOMES, resourceRankScore, suitabilityForPackCell, suitabilityRankInputs} from "../generator/biomes.js";
+import {ensureSuitabilityStores, populationForSuitability} from "../generator/suitability.js";
+import {captureSuitabilityEdit, restoreSuitabilityEdit, refreshSuitabilityGridCell} from "./suitability-edit-commands.js";
+import {localFieldPaths} from "./local-edit-fields.js";
+import {touchSuitabilityStats} from "./suitability-stat-index.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
 import {queryBrushCellsInRadius} from "./height-cell-spatial-index.js";
 import {systemAffected} from "./edit-command-effects.js";
@@ -8,6 +13,7 @@ const BIOME_ASSIGNMENT_STALE = Object.freeze(["cities", "states", "provinces", "
 
 export const BIOME_ASSIGNMENT_PREVIEW_EFFECTS = Object.freeze({
   cellAttributePatch: true,
+  reuseResourceBinding: true,
   render: "draw",
   selection: "none",
   runtimeStats: false,
@@ -60,8 +66,7 @@ export function buildBiomeAssignmentChanges(map, biomeId, gridCellIds, options =
     gridCell,
     before: Number(map.grid.cells.biome?.[gridCell]) || 0,
     after: preview.biomeId,
-    packBefore: preview.packCells
-      .filter(packCell => Number(map.pack.cells.g?.[packCell]) === gridCell)
+    packBefore: packCellsForGrid(map, [gridCell])
       .map(packCell => ({packCell, before: Number(map.pack.cells.biome?.[packCell]) || 0}))
   })).filter(change => change.before !== change.after || change.packBefore.some(entry => entry.before !== change.after));
 }
@@ -74,14 +79,14 @@ export function getBiomeBrushChanges(map, point, brush, originals, anchorGridCel
   for (const {gridCell} of queryBrushCellsInRadius(map, point, radius, anchorGridCell)) {
     const water = Number(map.grid.cells.h?.[gridCell]) < WATER_LEVEL;
     if (water !== (scope === "water")) continue;
-    if (Number(map.grid.cells.biome?.[gridCell]) === target) continue;
-    if (!originals.has(gridCell)) {
-      originals.set(gridCell, {
-        gridBefore: Number(map.grid.cells.biome?.[gridCell]) || 0,
-        packBefore: packCellsForGrid(map, [gridCell]).map(packCell => ({packCell, before: Number(map.pack.cells.biome?.[packCell]) || 0}))
-      });
-    }
-    changes.push({gridCell, before: originals.get(gridCell).gridBefore, after: target, packBefore: originals.get(gridCell).packBefore});
+    if (originals.has(gridCell)) continue;
+    const packCells = packCellsForGrid(map, [gridCell]);
+    if (packCells.some(cell => (map.pack.cells.h[cell] < WATER_LEVEL) !== water)) continue;
+    if (Number(map.grid.cells.biome?.[gridCell]) === target && packCells.every(cell => map.pack.cells.biome[cell] === target)) continue;
+    const gridBefore = Number(map.grid.cells.biome?.[gridCell]) || 0;
+    const packBefore = packCells.map(packCell => ({packCell, before: Number(map.pack.cells.biome?.[packCell]) || 0}));
+    originals.set(gridCell, {gridBefore, packBefore});
+    changes.push({gridCell, before: gridBefore, after: target, packBefore});
   }
   return changes;
 }
@@ -92,6 +97,11 @@ export function applyBiomeAssignmentPreview(map, changes) {
 
 export function createApplyBiomeAssignmentCommand(changes, {label = "生物群系归属"} = {}) {
   const normalized = normalizeChanges(changes);
+  const grid = normalized.map(change => change.gridCell);
+  const pack = normalized.flatMap(change => change.packBefore.map(entry => entry.packCell));
+  const rows = {"grid.cells.biome": grid, "grid.cells.s": grid, "grid.cells.pop": grid,
+    "pack.cells.biome": pack, "pack.cells.s": pack, "pack.cells.pop": pack, "pack.cells.suitabilityBase": pack};
+  let fields;
   let before = null;
   let after = null;
   let result = null;
@@ -110,22 +120,35 @@ export function createApplyBiomeAssignmentCommand(changes, {label = "生物群�
     },
     apply(context) {
       if (after) {
-        restoreSnapshot(context.map, after);
+        restoreSuitabilityEdit(context.map, after, rows);
         return;
       }
       const target = normalized[0]?.after;
       const preview = inspectBiomeAssignment(context.map, target, normalized.map(change => change.gridCell));
       if (!preview.valid) throw previewError(preview);
-      before = captureSnapshot(context.map);
-      applyBiomeChanges(context.map, normalized, "after");
-      refreshBiomeDerived(context.map);
+      ensureSuitabilityStores(context.map.pack);
+      fields = localFieldPaths(context.map, ["climate.metadata.biomeCounts", "climate.metadata.maxPopulation",
+        "climate.metadata.maxSuitability", "climate.metadata.positiveSuitabilityCells", "climate.metadata.positivePopulationCells",
+        "climate.metadata.manualSuitabilityCells", "climate.metadata.rankCellsInputs", "pack.metadata.rankCellsInputs",
+        "metadata.derivedStale", ...["settlements", "markers", "zones", "military", "economy", "diplomacy"]
+          .filter(section => context.map[section]?.metadata).map(section => section + ".metadata.stale")]);
+      before = captureSuitabilityEdit(context.map, rows, fields);
+      try {
+        applyBiomeChanges(context.map, normalized, "after");
+        refreshBiomeDerived(context.map, grid, pack);
+        after = captureSuitabilityEdit(context.map, rows, fields);
+      } catch (error) {
+        restoreSuitabilityEdit(context.map, before, rows);
+        throw error;
+      }
       result = {biomeId: target, gridCells: normalized.length, packCells: preview.packCells.length, warningCells: preview.warningCells, warnings: [...preview.warnings]};
-      after = captureSnapshot(context.map);
     },
     revert(context) {
       if (!before) throw new Error("缺少可撤销的生物群系归属快照");
-      restoreSnapshot(context.map, before);
+      restoreSuitabilityEdit(context.map, before, rows);
     },
+    getReplicaFields: () => fields,
+    getReplicaRows: () => rows,
     isNoop() {
       return !normalized.length || normalized.every(change => change.before === change.after && change.packBefore.every(entry => entry.before === change.after));
     },
@@ -138,8 +161,38 @@ export function createApplyBiomeAssignmentCommand(changes, {label = "生物群�
   };
 }
 
-function refreshBiomeDerived(map) {
-  const metadata = recalculateBiomeSuitability(map.grid, map.pack);
+function refreshBiomeDerived(map, gridIds, packIds) {
+  const cells = map.pack.cells;
+  const inputs = suitabilityRankInputs(map.pack);
+  for (const cell of packIds) {
+    const base = Math.max(0, Math.min(32767, suitabilityForPackCell(map.pack, cell, inputs)));
+    cells.suitabilityBase[cell] = base;
+    cells.s[cell] = cells.suitabilityOverride[cell] >= 0 ? cells.suitabilityOverride[cell] : base;
+    cells.pop[cell] = Math.fround(populationForSuitability(cells, cell, cells.s[cell], inputs.meanArea || 1));
+  }
+  for (const id of gridIds) refreshSuitabilityGridCell(map, id);
+  touchSuitabilityStats(map, gridIds, packIds);
+  const rank = {hasGoodsAtRankTime: Boolean(cells.good), resourceRankBonusCells: 0, resourceRankBonusTotal: 0};
+  const metadata = {biomeCounts: {}, positiveSuitabilityCells: 0, positivePopulationCells: 0,
+    maxSuitability: 0, maxPopulation: 0, manualSuitabilityCells: 0, rankCellsInputs: rank};
+  for (const id of cells.i) {
+    const biome = cells.biome[id];
+    metadata.biomeCounts[biome] = (metadata.biomeCounts[biome] || 0) + 1;
+    if (cells.s[id] > 0) metadata.positiveSuitabilityCells++;
+    if (cells.pop[id] > 0) metadata.positivePopulationCells++;
+    if (cells.suitabilityOverride[id] >= 0) metadata.manualSuitabilityCells++;
+    metadata.maxSuitability = Math.max(metadata.maxSuitability, cells.s[id]);
+    metadata.maxPopulation = Math.max(metadata.maxPopulation, cells.pop[id]);
+    if (cells.h[id] < WATER_LEVEL || !BIOMES[biome]?.habitability) continue;
+    const bonus = resourceRankScore(map.pack, id);
+    if (bonus > 0) {
+      rank.resourceRankBonusCells++;
+      rank.resourceRankBonusTotal += bonus;
+    }
+  }
+  rank.resourceRankBonusTotal = Math.round(rank.resourceRankBonusTotal * 100) / 100;
+  map.pack.metadata.rankCellsInputs = rank;
+  metadata.maxPopulation = Math.round(metadata.maxPopulation * 1000) / 1000;
   map.climate.metadata = {...(map.climate.metadata || {}), ...metadata};
   map.metadata.derivedStale = {
     ...(map.metadata.derivedStale || {}),
@@ -151,7 +204,7 @@ function refreshBiomeDerived(map) {
   }
 }
 
-function inspectClimateWarnings(map, biomeId, gridCellIds) {
+export function inspectClimateWarnings(map, biomeId, gridCellIds) {
   const reasons = new Set();
   let cells = 0;
   for (const gridCell of gridCellIds) {
@@ -197,53 +250,6 @@ function applyBiomeChanges(map, changes, key) {
   }
 }
 
-function packCellsForGrid(map, gridCellIds) {
-  const selected = new Set(gridCellIds);
-  const result = [];
-  for (let packCell = 0; packCell < (map?.pack?.cells?.g?.length || 0); packCell++) if (selected.has(Number(map.pack.cells.g[packCell]))) result.push(packCell);
-  return result;
-}
-
-function captureSnapshot(map) {
-  return {
-    gridBiome: Array.from(map.grid.cells.biome || []),
-    gridSuitability: Array.from(map.grid.cells.s || []),
-    gridPopulation: Array.from(map.grid.cells.pop || []),
-    packBiome: Array.from(map.pack.cells.biome || []),
-    packSuitability: Array.from(map.pack.cells.s || []),
-    packPopulation: Array.from(map.pack.cells.pop || []),
-    packRankInputs: clone(map.pack.metadata?.rankCellsInputs),
-    climateMetadata: clone(map.climate?.metadata || {}),
-    derivedStale: clone(map.metadata?.derivedStale),
-    sectionStale: Object.fromEntries(["settlements", "markers", "zones", "military", "economy", "diplomacy"].map(kind => [kind, map[kind]?.metadata?.stale]))
-  };
-}
-
-function restoreSnapshot(map, snapshot) {
-  restoreField(map.grid.cells, "biome", snapshot.gridBiome);
-  restoreField(map.grid.cells, "s", snapshot.gridSuitability);
-  restoreField(map.grid.cells, "pop", snapshot.gridPopulation);
-  restoreField(map.pack.cells, "biome", snapshot.packBiome);
-  restoreField(map.pack.cells, "s", snapshot.packSuitability);
-  restoreField(map.pack.cells, "pop", snapshot.packPopulation);
-  if (snapshot.packRankInputs === undefined) delete map.pack.metadata.rankCellsInputs;
-  else map.pack.metadata.rankCellsInputs = clone(snapshot.packRankInputs);
-  map.climate.metadata = clone(snapshot.climateMetadata);
-  if (snapshot.derivedStale === undefined) delete map.metadata.derivedStale;
-  else map.metadata.derivedStale = clone(snapshot.derivedStale);
-  for (const [kind, stale] of Object.entries(snapshot.sectionStale)) {
-    if (!map[kind]?.metadata) continue;
-    if (stale === undefined) delete map[kind].metadata.stale;
-    else map[kind].metadata.stale = stale;
-  }
-}
-
-function restoreField(owner, key, values) {
-  const current = owner[key];
-  if (Array.isArray(current)) owner[key] = [...values];
-  else if (current?.constructor?.from) owner[key] = current.constructor.from(values);
-  else owner[key] = [...values];
-}
 
 function invalidPreview(code, reason) {
   return {valid: false, code, reason, changed: false, gridCells: [], packCells: [], changedGridCells: [], changedPackCells: [], warningCells: 0, warnings: []};
@@ -253,8 +259,4 @@ function previewError(preview) {
   const error = new Error(preview.reason);
   error.code = preview.code;
   return error;
-}
-
-function clone(value) {
-  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }

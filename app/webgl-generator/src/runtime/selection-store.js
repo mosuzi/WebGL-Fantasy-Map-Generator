@@ -70,10 +70,10 @@ export class SelectionStore {
     this.onChange(this.getSnapshot(), metadata);
   }
 
-  refresh() {
+  refresh(metadata = null) {
     this.selection = this.normalizeSelection(this.selection);
     this.editingObject = this.editingObject ? this.resolveObject(this.editingObject) : null;
-    this.emit();
+    this.emit(metadata);
   }
 
   normalizeSelection(selection) {

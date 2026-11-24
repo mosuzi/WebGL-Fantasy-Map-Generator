@@ -252,7 +252,6 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     },
     updateMarketAssignmentPreview(preview) {
       panelState.assignmentPreview = preview ? {...preview} : null;
-      panelState.version++;
     },
     isOpen() {
       return panelState.open;

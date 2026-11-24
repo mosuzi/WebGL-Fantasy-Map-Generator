@@ -508,12 +508,12 @@ export function politicalMeshDebugCache(meshes, mode) {
   return null;
 }
 
-function collectPoliticalVisualEdges(map, field) {
+export function collectPoliticalVisualEdges(map, field, candidateCells = null) {
   const edges = [];
   const cells = map?.grid?.cells;
   if (!cells?.c || !cells?.v || !cells?.[field]) return edges;
 
-  for (const cell of cells.i || []) {
+  for (const cell of candidateCells || cells.i || []) {
     if (!isLandCell(cell, map)) continue;
     const valueA = cells[field][cell] || 0;
     for (const neighbor of cells.c[cell] || []) {
@@ -531,6 +531,7 @@ function collectPoliticalVisualEdges(map, field) {
         ? normalizeWorldVector(centerA[0] - centerB[0], centerA[1] - centerB[1])
         : normalizeWorldVector(centerB[0] - centerA[0], centerB[1] - centerA[1]);
       edges.push({
+        cell, neighbor,
         a: edge[0],
         b: edge[1],
         pair: `${firstValue}:${secondValue}`,
@@ -544,7 +545,7 @@ function collectPoliticalVisualEdges(map, field) {
   return edges;
 }
 
-function buildPoliticalPathsFromEdges(edges) {
+export function buildPoliticalPathsFromEdges(edges) {
   const graph = buildPoliticalGraph(edges);
   const paths = [];
   const visited = new Uint8Array(graph.edges.length);

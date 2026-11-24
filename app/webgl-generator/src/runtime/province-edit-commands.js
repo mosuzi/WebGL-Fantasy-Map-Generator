@@ -1,3 +1,5 @@
+import {findProvincePoleCell} from "./state-edit-commands.js";
+import {packCellsByGrid} from "./grid-pack-index.js";
 import {createChineseNameGenerator} from "../generator/names.js";
 import {provinceFormForState} from "../generator/province-naming.js";
 import {newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
@@ -20,6 +22,8 @@ const PROVINCE_CELL_SURFACE_EFFECTS = Object.freeze({
 
 export const PROVINCE_BRUSH_PREVIEW_EFFECTS = Object.freeze({
   render: "draw",
+  cellAttributePatch: true,
+  reuseResourceBinding: true,
   selection: "none",
   runtimeStats: false,
   pickPanel: false,
@@ -45,7 +49,33 @@ const PROVINCE_COLLECTION_EFFECTS = Object.freeze({
   ])
 });
 
-export function createApplyProvinceBrushCommand(changes, {label = "省份笔刷"} = {}) {
+export function indexProvinceBrushMembers(map) {
+  const cells = map?.pack?.cells;
+  if (!cells?.i || !cells.province) return null;
+  const members = new Map();
+  const order = new Uint32Array(cells.province.length);
+  for (let i = 0; i < cells.i.length; i++) {
+    const cell = cells.i[i];
+    order[cell] = i;
+    if (cells.h?.[cell] < 20) continue;
+    const id = normalizeProvinceId(cells.province[cell]);
+    if (!members.has(id)) members.set(id, []);
+    members.get(id).push(cell);
+  }
+  return {
+    cells,
+    candidates(ids, changed) {
+      let count = changed.size;
+      for (const id of ids) count += members.get(id)?.length || 0;
+      if (count * 2 > cells.i.length) return cells.i;
+      const selected = new Set(changed.keys());
+      for (const id of ids) for (const cell of members.get(id) || []) selected.add(cell);
+      return [...selected].sort((a, b) => order[a] - order[b]);
+    }
+  };
+}
+
+export function createApplyProvinceBrushCommand(changes, {label = "省份笔刷", originalPackProvinces = new Map(), memberIndex} = {}) {
   const normalized = normalizeChanges(changes);
   const affectedProvinces = [...new Set(normalized.flatMap(change => [change.before, change.after]).filter(Boolean))];
   let snapshot = null;
@@ -54,16 +84,40 @@ export function createApplyProvinceBrushCommand(changes, {label = "省份笔刷"
     domain: "province",
     effects: {
       ...PROVINCE_CELL_SURFACE_EFFECTS,
+      derived: [...PROVINCE_CELL_SURFACE_EFFECTS.derived, "labels"],
+      deferLabels: "after-paint",
+      changedGridCells: normalized.map(change => change.gridCell),
+      cellAttributePatch: true,
       affected: systemAffected("province-brush", affectedProvinces.length ? affectedProvinces.map(id => ({kind: "province", id})) : [{kind: "grid-cells", id: normalized.length}])
     },
     apply(context) {
-      snapshot ??= captureProvinceSnapshot(context.map, normalized);
-      applyProvinceChanges(context.map, normalized, "after");
-      repairProvinceDerivatives(context.map, normalized);
+      snapshot ??= captureProvinceSnapshot(context.map, normalized, originalPackProvinces);
+      applyProvinceChanges(context.map, normalized, "after", originalPackProvinces);
+      const ids = snapshot.provinces.map(item => item.provinceId);
+      const index = memberIndex?.cells === context.map.pack?.cells ? memberIndex : null;
+      memberIndex = null;
+      repairProvinceDerivatives(context.map, normalized, originalPackProvinces, ids, index);
+      this.effects.brushProvinceIds = snapshot.provinces.map(item => item.provinceId);
+      for (const {id} of snapshot.burgs) {
+        const burg = context.map.pack.burgs[id];
+        burg.province = context.map.pack.cells.province[burg.cell];
+      }
+      if (snapshot.mirrors.length) {
+        const updated = snapshotProvinces(context.map, snapshot.mirrors.map(item => item.provinceId));
+        restoreProvinces(context.map, updated, context.map.pack.provinces);
+      }
     },
     revert(context) {
-      applyProvinceChanges(context.map, normalized, "before");
+      applyProvinceChanges(context.map, normalized, "before", originalPackProvinces);
       restoreProvinceSnapshot(context.map, snapshot);
+    },
+    getReplicaRows(map) {
+      return {"grid.cells.province": normalized.map(change => change.gridCell),
+        "pack.cells.province": [...originalPackProvinces.keys()],
+        "politics.provinces": snapshot.provinces.map(item => item.provinceId),
+        "pack.provinces": snapshot.provinces.map(item => item.provinceId).filter(id => map.pack.provinces?.[id]),
+        "pack.burgs": snapshot.burgs.map(item => item.id),
+        "settlements.cities": snapshot.cities.map(item => item.cityId)};
     },
     isNoop() {
       return normalized.length === 0;
@@ -164,8 +218,8 @@ export function createDeleteProvinceCommand(provinceId, {label = "删除省份"}
   };
 }
 
-export function applyProvinceBrushPreview(map, changes) {
-  applyProvinceChanges(map, normalizeChanges(changes), "after");
+export function applyProvinceBrushPreview(map, changes, originalPackProvinces) {
+  applyProvinceChanges(map, normalizeChanges(changes), "after", originalPackProvinces);
 }
 
 function addProvinceAtGridCell(map, gridCell) {
@@ -270,12 +324,13 @@ function normalizeChanges(changes) {
   return [...byCell.values()];
 }
 
-function captureProvinceSnapshot(map, changes) {
+function captureProvinceSnapshot(map, changes, originalPackProvinces) {
   const packCells = uniquePackCellsForChanges(map, changes);
-  const affectedProvinceIds = new Set(changes.flatMap(change => [change.before, change.after]).filter(Boolean));
+  const affectedProvinceIds = new Set(changes.flatMap(change => [change.before, change.after]));
   for (const packCell of packCells) {
-    const provinceId = normalizeProvinceId(map?.pack?.cells?.province?.[packCell]);
-    if (provinceId) affectedProvinceIds.add(provinceId);
+    const provinceId = normalizeProvinceId(originalPackProvinces?.get(packCell) ?? map?.pack?.cells?.province?.[packCell]);
+    affectedProvinceIds.add(provinceId);
+    for (const neighbor of map.pack.cells.c?.[packCell] || []) affectedProvinceIds.add(map.pack.cells.province[neighbor]);
   }
   const cityIds = new Set();
   const changedGridCells = new Set(changes.map(change => change.gridCell));
@@ -290,32 +345,44 @@ function captureProvinceSnapshot(map, changes) {
       const city = map?.settlements?.cities?.[cityId];
       return city ? {cityId, province: city.province, provincial: city.provincial} : null;
     }).filter(Boolean),
-    provinces: snapshotProvinces(map, affectedProvinceIds)
+    provinces: snapshotProvinces(map, affectedProvinceIds),
+    mirrors: map.pack.provinces && map.pack.provinces !== map.politics?.provinces
+      ? snapshotProvinces(map, affectedProvinceIds, map.pack.provinces) : [],
+    burgs: (map.pack.burgs || []).flatMap((burg, id) => burg && changedPackCells.has(burg.cell)
+      ? [{id, province: burg.province, present: Object.hasOwn(burg, "province")}] : [])
   };
 }
 
-function applyProvinceChanges(map, changes, key) {
+function applyProvinceChanges(map, changes, key, originalPackProvinces) {
   if (!map?.grid?.cells?.province) return;
   for (const change of changes) {
     const provinceId = normalizeProvinceId(change[key]);
+    const wasPreviewed = key === "after" && map.grid.cells.province[change.gridCell] === provinceId;
     map.grid.cells.province[change.gridCell] = provinceId;
     for (const packCell of getPackCellsForGrid(map, change.gridCell)) {
       if (map?.pack?.cells?.h?.[packCell] < 20) continue;
-      map.pack.cells.province[packCell] = provinceId;
+      if (originalPackProvinces && !originalPackProvinces.has(packCell)) {
+        originalPackProvinces.set(packCell, wasPreviewed ? change.before : map.pack.cells.province[packCell]);
+      }
+      map.pack.cells.province[packCell] = key === "before" ? originalPackProvinces?.get(packCell) ?? provinceId : provinceId;
     }
   }
 }
 
-function repairProvinceDerivatives(map, changes) {
+function repairProvinceDerivatives(map, changes, originalPackProvinces, summaryIds, memberIndex) {
   const affectedProvinces = new Set(changes.flatMap(change => [change.before, change.after]).filter(Boolean));
+  if (originalPackProvinces) for (const id of originalPackProvinces.values()) if (id) affectedProvinces.add(id);
   for (const packCell of uniquePackCellsForChanges(map, changes)) {
     const provinceId = normalizeProvinceId(map?.pack?.cells?.province?.[packCell]);
     if (provinceId) affectedProvinces.add(provinceId);
   }
   syncCityProvinces(map, changes);
-  refreshProvinceSummaries(map);
-  repairProvinceCenters(map, affectedProvinces);
-  refreshProvincePoles(map, affectedProvinces);
+  const targetIds = summaryIds && new Set(summaryIds);
+  const candidates = memberIndex && affectedProvinces.size
+    ? memberIndex.candidates(new Set([...targetIds, ...affectedProvinces]), originalPackProvinces) : null;
+  const groups = refreshProvinceSummaries(map, targetIds, affectedProvinces, candidates);
+  repairProvinceCenters(map, affectedProvinces, groups);
+  refreshProvincePoles(map, groups);
 }
 
 function syncCityProvinces(map, changes) {
@@ -332,7 +399,7 @@ function syncCityProvinces(map, changes) {
   }
 }
 
-function repairProvinceCenters(map, provinceIds) {
+function repairProvinceCenters(map, provinceIds, groups) {
   const provinces = map?.politics?.provinces || map?.pack?.provinces;
   const cells = map?.pack?.cells;
   if (!provinces || !cells?.province) return;
@@ -348,7 +415,7 @@ function repairProvinceCenters(map, provinceIds) {
       setProvinceCenter(map, province, city.packCell);
       continue;
     }
-    const fallback = (cells.i || []).find(cell => cells.h?.[cell] >= 20 && normalizeProvinceId(cells.province?.[cell]) === provinceId);
+    const fallback = groups?.get(provinceId)?.cells.find(cell => cells.h?.[cell] >= 20);
     if (fallback !== undefined) setProvinceCenter(map, province, fallback);
   }
 }
@@ -369,108 +436,81 @@ function restoreProvinceSnapshot(map, snapshot) {
     }
   }
   restoreProvinces(map, snapshot.provinces);
+  restoreProvinces(map, snapshot.mirrors, map.pack.provinces);
+  for (const {id, province, present} of snapshot.burgs) {
+    if (present) map.pack.burgs[id].province = province;
+    else delete map.pack.burgs[id].province;
+  }
 }
 
-function refreshProvinceSummaries(map) {
+function refreshProvinceSummaries(map, targetIds, poleIds, candidates) {
   const provinces = map?.politics?.provinces || map?.pack?.provinces;
   const cells = map?.pack?.cells;
   if (!provinces || !cells?.province) return;
-  const neighborSets = provinces.map(() => new Set());
+  const targets = targetIds ? [...targetIds].map(id => provinces[id]).filter(Boolean) : provinces;
+  const neighborSets = new Map(targets.filter(Boolean).map(item => [item.i ?? item.id, new Set()]));
+  const poles = poleIds.size ? poleIds : provinces.map(province => normalizeProvinceId(province?.i ?? province?.id)).filter(Boolean);
+  const groups = new Map([...poles].map(id => [id, {cells: [], boundary: []}]));
 
-  for (const province of provinces) {
+  for (const province of targets) {
     if (!province) continue;
     province.cells = 0;
     province.area = 0;
     province.neighbors = [];
   }
 
-  for (const cell of cells.i || []) {
+  for (const cell of candidates || cells.i || []) {
     if (cells.h?.[cell] < 20) continue;
     const provinceId = normalizeProvinceId(cells.province[cell]);
-    const province = provinces[provinceId];
-    if (!province) continue;
-    province.cells++;
-    province.area += cells.area?.[cell] || 0;
-
+    const province = (!targetIds || targetIds.has(provinceId)) && provinces[provinceId];
+    const group = groups.get(provinceId);
+    if (!province && !group) continue;
+    if (province) {
+      province.cells++;
+      province.area += cells.area?.[cell] || 0;
+    }
+    let boundary = false;
     for (const neighbor of cells.c?.[cell] || []) {
-      if (cells.h?.[neighbor] < 20) continue;
+      if (cells.h?.[neighbor] < 20) {
+        boundary = true;
+        continue;
+      }
       const neighborProvince = normalizeProvinceId(cells.province[neighbor]);
-      if (neighborProvince && neighborProvince !== provinceId && provinces[neighborProvince]) {
-        neighborSets[provinceId]?.add(neighborProvince);
+      if (neighborProvince !== provinceId) boundary = true;
+      if (province && neighborProvince && neighborProvince !== provinceId && provinces[neighborProvince]) {
+        neighborSets.get(provinceId)?.add(neighborProvince);
       }
     }
-  }
-
-  for (const province of provinces) {
-    if (!province) continue;
-    province.area = roundValue(province.area || 0, 2);
-    province.neighbors = Array.from(neighborSets[province.i ?? province.id] || []);
-  }
-}
-
-function refreshProvincePoles(map, targetProvinceIds = null) {
-  const provinces = map?.politics?.provinces || map?.pack?.provinces;
-  const cells = map?.pack?.cells;
-  if (!provinces || !cells?.province || !cells?.p) return;
-  const targets = targetProvinceIds?.size ? targetProvinceIds : new Set(provinces.map(province => normalizeProvinceId(province?.i ?? province?.id)).filter(Boolean));
-  const provinceCells = new Map();
-  const provinceBoundaryCells = new Map();
-
-  for (const cell of cells.i || []) {
-    if (cells.h?.[cell] < 20) continue;
-    const provinceId = normalizeProvinceId(cells.province[cell]);
-    if (!provinceId || !targets.has(provinceId)) continue;
-    if (!provinceCells.has(provinceId)) provinceCells.set(provinceId, []);
-    provinceCells.get(provinceId).push(cell);
-
-    const isBoundary = (cells.c?.[cell] || []).some(neighbor => cells.h?.[neighbor] < 20 || normalizeProvinceId(cells.province?.[neighbor]) !== provinceId);
-    if (isBoundary) {
-      if (!provinceBoundaryCells.has(provinceId)) provinceBoundaryCells.set(provinceId, []);
-      provinceBoundaryCells.get(provinceId).push(cell);
+    if (group) {
+      group.cells.push(cell);
+      if (boundary) group.boundary.push(cell);
     }
   }
 
-  for (const provinceId of targets) {
+  for (const province of targets) {
+    if (!province) continue;
+    province.area = roundValue(province.area || 0, 2);
+    province.neighbors = Array.from(neighborSets.get(province.i ?? province.id) || []);
+  }
+  return groups;
+}
+
+function refreshProvincePoles(map, groups) {
+  const provinces = map?.politics?.provinces || map?.pack?.provinces;
+  const cells = map?.pack?.cells;
+  if (!groups || !cells?.p) return;
+  for (const [provinceId, group] of groups) {
     const province = provinces[provinceId];
     if (!province || province.removed) continue;
-    const ownCells = provinceCells.get(provinceId) || [];
+    const ownCells = group.cells;
     if (!ownCells.length) {
       province.pole = null;
       continue;
     }
-    const boundaryCells = provinceBoundaryCells.get(provinceId) || ownCells;
+    const boundaryCells = group.boundary.length ? group.boundary : ownCells;
     const poleCell = findProvincePoleCell(cells, ownCells, boundaryCells, province.center);
     province.pole = cells.p[poleCell].map(value => roundValue(value, 2));
   }
-}
-
-function findProvincePoleCell(cells, ownCells, boundaryCells, fallbackCell) {
-  if (ownCells.length <= 2) return fallbackCell && ownCells.includes(fallbackCell) ? fallbackCell : ownCells[0];
-  let bestCell = ownCells[0];
-  let bestScore = -Infinity;
-  for (const cell of ownCells) {
-    const point = cells.p[cell];
-    if (!point) continue;
-    const minBoundaryDistance = getMinDistanceSquared(point, boundaryCells, cells);
-    const populationScore = cells.pop?.[cell] || cells.s?.[cell] || 0;
-    const burgScore = cells.burg?.[cell] ? 5 : 0;
-    const score = minBoundaryDistance + populationScore * 0.02 + burgScore;
-    if (score <= bestScore) continue;
-    bestCell = cell;
-    bestScore = score;
-  }
-  return bestCell;
-}
-
-function getMinDistanceSquared(point, boundaryCells, cells) {
-  let min = Infinity;
-  for (const cell of boundaryCells) {
-    const nextPoint = cells.p[cell];
-    if (!nextPoint) continue;
-    const next = (point[0] - nextPoint[0]) ** 2 + (point[1] - nextPoint[1]) ** 2;
-    if (next < min) min = next;
-  }
-  return Number.isFinite(min) ? min : 0;
 }
 
 function uniquePackCellsForChanges(map, changes) {
@@ -483,21 +523,10 @@ function uniquePackCellsForChanges(map, changes) {
 
 function getPackCellsForGrid(map, gridCell) {
   if (!map?.pack?.cells?.g || !map?.pack?.cells?.province) return [];
-  if (!map.__provinceEditorPackCellsByGrid) {
-    const byGrid = new Map();
-    for (let packCell = 0; packCell < map.pack.cells.g.length; packCell++) {
-      const mappedGrid = map.pack.cells.g[packCell];
-      if (!Number.isInteger(mappedGrid) || mappedGrid < 0) continue;
-      if (!byGrid.has(mappedGrid)) byGrid.set(mappedGrid, []);
-      byGrid.get(mappedGrid).push(packCell);
-    }
-    map.__provinceEditorPackCellsByGrid = byGrid;
-  }
-  return map.__provinceEditorPackCellsByGrid.get(gridCell) || [];
+  return packCellsByGrid(map, "__provinceEditorPackCellsByGrid").get(gridCell) || [];
 }
 
-function snapshotProvinces(map, provinceIds) {
-  const provinces = map?.politics?.provinces || map?.pack?.provinces || [];
+function snapshotProvinces(map, provinceIds, provinces = map?.politics?.provinces || map?.pack?.provinces || []) {
   return [...(provinceIds || [])].map(provinceId => {
     const province = provinces[provinceId];
     return province ? {
@@ -515,8 +544,7 @@ function snapshotProvinces(map, provinceIds) {
   }).filter(Boolean);
 }
 
-function restoreProvinces(map, snapshots = []) {
-  const provinces = map?.politics?.provinces || map?.pack?.provinces;
+function restoreProvinces(map, snapshots = [], provinces = map?.politics?.provinces || map?.pack?.provinces) {
   if (!provinces) return;
   for (const snapshot of snapshots) {
     const province = provinces[snapshot.provinceId];
@@ -581,12 +609,7 @@ function choosePackCellForGridCell(map, gridCell, {readOnly = false} = {}) {
 }
 
 function findPackCellsForGrid(map, gridCell) {
-  const mappedGridCells = map?.pack?.cells?.g || [];
-  const result = [];
-  for (let packCell = 0; packCell < mappedGridCells.length; packCell++) {
-    if (mappedGridCells[packCell] === gridCell) result.push(packCell);
-  }
-  return result;
+  return packCellsByGrid(map)?.get(gridCell) || [];
 }
 
 function initialProvinceCells(map, centerGridCell, stateId) {

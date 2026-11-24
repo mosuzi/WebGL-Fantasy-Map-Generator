@@ -21,8 +21,8 @@ import {
 const seed = "suitability-regression";
 const base = generatePlaceholderMap({seed, cellsTarget: 5000, heightmapTemplate: "continents"});
 normalizeSuitabilityMap(base);
-assert(base.pack.cells.suitabilityBase instanceof Int16Array, "缺少适居度基础值存储");
-assert(base.pack.cells.suitabilityOverride instanceof Int16Array, "缺少适居度 override 存储");
+assert(Array.isArray(base.pack.cells.suitabilityBase), "缺少适居度基础值存储");
+assert(Array.isArray(base.pack.cells.suitabilityOverride), "缺少适居度 override 存储");
 assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, -1), 1, "适居度画笔半径下界异常");
 assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, 999), 32, "适居度画笔半径上界异常");
 
@@ -49,10 +49,16 @@ const landPack = packCellsForGrid(map, landGrid);
 const originalBase = landPack.map(cell => map.pack.cells.suitabilityBase[cell]);
 const heightBefore = {grid: [...map.grid.cells.h], pack: [...map.pack.cells.h]};
 const before = fullSnapshot(map);
+const outside = map.pack.cells.i.find(id => !landPack.includes(id) && map.pack.cells.h[id] >= 20);
+const columns = [map.grid.cells.s, map.grid.cells.pop, map.pack.cells.s, map.pack.cells.pop];
+const outsidePopulation = map.pack.cells.pop[outside];
 const changes = buildSuitabilityChanges(map, [landGrid], {scope: "land", value: 80});
 const history = new EditHistory();
 const command = createApplySuitabilityCommand(changes);
 history.execute(command, {map});
+assert.equal(map.pack.cells.pop[outside], outsidePopulation);
+columns.forEach((column, i) => assert.equal(column, [map.grid.cells.s, map.grid.cells.pop, map.pack.cells.s, map.pack.cells.pop][i]));
+assert.deepEqual(command.getReplicaRows()["pack.cells.pop"], landPack);
 assert.equal(history.getStats().undo, 1, "一次适居度 stroke 必须只有一条历史");
 for (const packCell of landPack) {
   assert.equal(map.pack.cells.suitabilityOverride[packCell], 80, "陆地 override 未保存");
@@ -125,6 +131,13 @@ assert.equal(Object.prototype.hasOwnProperty.call(sparseLegacy, "settlements"), 
 sparseHistory.redo({map: sparseLegacy});
 assert(sparseLegacy.climate?.metadata, "旧图重做没有恢复适居度摘要");
 
+const manual = structuredClone(base);
+manual.pack.cells.pop[outside] = 76543;
+const manualCommand = createApplySuitabilityCommand(buildSuitabilityChanges(manual, [landGrid], {value: 73}));
+for (const action of ["apply", "revert", "apply"]) {
+  manualCommand[action]({map: manual});
+  assert.equal(manual.pack.cells.pop[outside], 76543, "笔圈外手输人口被覆盖");
+}
 const legacy = structuredClone(base);
 delete legacy.pack.cells.suitabilityBase;
 delete legacy.pack.cells.suitabilityOverride;

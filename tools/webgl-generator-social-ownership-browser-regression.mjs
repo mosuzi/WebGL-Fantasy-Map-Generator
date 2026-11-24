@@ -5,6 +5,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -25,7 +26,7 @@ try {
   page.on("console", message => message.type() === "error" && consoleErrors.push(message.text()));
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://${host}:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
-  await page.waitForFunction(() => window.webglGeneratorApi && window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2);
+  await waitForApiReady(page, 30000);
 
   const fixture = await page.evaluate(async () => {
     const api = window.webglGeneratorApi;
@@ -71,27 +72,46 @@ try {
   await culturePanel.waitFor({state: "visible"});
   await culturePanel.getByRole("button", {name: "编辑文化归属"}).click();
   assert.equal(await page.evaluate(() => window.__webglGeneratorApp.renderer.getStats().colorMode), "cultures");
-  const brushPoint = await page.evaluate(({cultureTarget, cultureCell}) => {
+  const brushPoints = await page.evaluate(({cultureTarget}) => {
     const app = window.__webglGeneratorApp;
     app.panels.culture.setSelectedCultureId(cultureTarget);
     const canvas = document.getElementById("map-canvas");
     const rect = canvas.getBoundingClientRect();
-    const pointIndex = app.map.grid.cells.p[cultureCell];
-    const [x, y] = app.map.grid.points[pointIndex];
-    const screen = app.renderer.worldToScreen(x, y, rect);
-    return {x: rect.left + screen.x, y: rect.top + screen.y};
+    const points = [];
+    for (let cell = 0; cell < app.map.grid.cells.h.length; cell++) {
+      const before = app.map.grid.cells.culture[cell];
+      if (app.map.grid.cells.h[cell] < 20 || before === cultureTarget) continue;
+      const center = app.map.grid.points[app.map.grid.cells.p[cell]];
+      const screen = app.renderer.worldToScreen(...center, rect);
+      const x = screen.x + rect.left, y = screen.y + rect.top;
+      if (document.elementFromPoint(x, y) !== canvas || app.renderer.pickCellClientPoint(x, y)?.gridCell !== cell) continue;
+      if (points.length && Math.hypot(center[0] - points[0].center[0], center[1] - points[0].center[1]) <= app.panels.culture.getBrush().radius * 2) continue;
+      points.push({cell, before, center, x, y});
+      if (points.length === 2) break;
+    }
+    window.socialFullRefreshes = 0;
+    const refresh = app.renderer.refreshCellSurface;
+    app.renderer.refreshCellSurface = function (...args) {
+      window.socialFullRefreshes++;
+      return refresh.apply(this, args);
+    };
+    return points;
   }, fixture);
-  await page.mouse.move(brushPoint.x, brushPoint.y);
+  assert.equal(brushPoints.length, 2, "画布上应有两个未被面板遮挡的陆格");
+  await page.mouse.move(brushPoints[0].x, brushPoints[0].y);
   await page.mouse.down();
+  await page.mouse.move(brushPoints[1].x, brushPoints[1].y, {steps: 3});
+  assert.ok(await page.evaluate(({points, target}) => points.every(({cell}) => window.__webglGeneratorApp.map.grid.cells.culture[cell] === target), {points: brushPoints, target: fixture.cultureTarget}));
   await page.mouse.up();
-  await page.waitForFunction(({cell, target}) => Number(window.__webglGeneratorApp.map.grid.cells.culture[cell]) === target, {cell: fixture.cultureCell, target: fixture.cultureTarget});
   const brushHistory = await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats());
   assert.equal(brushHistory.lastDomain, "culture");
   assert.equal((await page.evaluate(() => window.webglGeneratorApi.history.undo())).ok, true);
-  assert.equal(await page.evaluate(cell => Number(window.__webglGeneratorApp.map.grid.cells.culture[cell]), fixture.cultureCell), fixture.cultureId);
+  assert.ok(await page.evaluate(points => points.every(({cell, before}) => window.__webglGeneratorApp.map.grid.cells.culture[cell] === before), brushPoints));
+  assert.equal(await page.evaluate(() => window.socialFullRefreshes), 0, "文化落笔、提交及撤销不得重建整张地图表面");
   await culturePanel.getByRole("button", {name: "退出文化归属笔刷"}).click();
 
   await page.evaluate(id => window.__webglGeneratorApp.panels.culture.setSelectedCultureId(id), fixture.cultureId);
+  page.once("dialog", dialog => dialog.accept());
   await culturePanel.getByRole("button", {name: "删除文化并清除归属"}).click();
   await page.waitForFunction(id => window.__webglGeneratorApp.map.society.cultures[id]?.removed, fixture.cultureId);
   const cultureDeleted = await inspect(page, "culture", fixture.cultureId);
@@ -99,7 +119,7 @@ try {
   assert.equal((await page.evaluate(() => window.webglGeneratorApi.history.undo())).ok, true);
   assert.equal((await inspect(page, "culture", fixture.cultureId)).resolved, true);
 
-  const religionDeletedResult = await page.evaluate(id => window.webglGeneratorApi.edit.religions.delete(id), fixture.religionId);
+  const religionDeletedResult = await page.evaluate(id => window.webglGeneratorApi.edit.religions.delete(id, {confirm: true}), fixture.religionId);
   assert.equal(religionDeletedResult.ok, true, religionDeletedResult.error?.message);
   const religionDeleted = await inspect(page, "religion", fixture.religionId);
   assertDeletion(religionDeleted);

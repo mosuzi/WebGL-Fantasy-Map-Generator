@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
-import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, inspectMarketAssignment, restoreMarketAssignmentPreview} from "../app/webgl-generator/src/runtime/economy-edit-commands.js";
+import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, getMarketAssignmentBrushChanges, inspectMarketAssignment, restoreMarketAssignmentPreview} from "../app/webgl-generator/src/runtime/economy-edit-commands.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
 
-assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, -1), 2, "市场画笔半径下界异常");
-assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, 999), 120, "市场画笔半径上界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, -1), 1, "市场画笔半径下界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, 999), 32, "市场画笔半径上界异常");
 
 const map = generatePlaceholderMap({seed: "market-assignment-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
 const target = findCrossStateBurgTarget(map);
@@ -17,6 +17,18 @@ assert(target, "固定 seed 应存在可跨国改派的市场城市");
 
 const previewChanges = buildMarketAssignmentChanges(map, target.marketId, [target.packCell]);
 const beforePreview = economySnapshot(map);
+const originals = new Map();
+function paintTarget(marketId) {
+  const changes = getMarketAssignmentBrushChanges(map, null, {radius: 1, targetMarketId: marketId}, originals, target.packCell);
+  applyMarketAssignmentPreview(map, changes);
+  return changes.length;
+}
+assert.equal(paintTarget(target.beforeMarketId), 0);
+assert.equal(originals.size, 0, "重复涂抹原市场不能扩大高亮范围");
+assert.equal(paintTarget(target.marketId), 1);
+assert.equal(paintTarget(target.beforeMarketId), 1);
+assert.equal(originals.size, 0, "同一预览涂回原市场后应清除待改范围");
+assert.deepEqual(economySnapshot(map), beforePreview);
 applyMarketAssignmentPreview(map, previewChanges);
 assert.equal(map.pack.cells.market[target.packCell], target.marketId, "预览应写入工作中的 pack.cells.market");
 restoreMarketAssignmentPreview(map, previewChanges);
@@ -67,7 +79,7 @@ const panelSource = readFileSync(new URL("../app/webgl-generator/src/ui/vue/comp
 const consoleSource = readFileSync(new URL("../app/webgl-generator/src/runtime/console-api.js", import.meta.url), "utf8");
 const rendererSource = readFileSync(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8");
 assert.match(appSource, /MARKET_ASSIGN[\s\S]*applyPendingMarketAssignment[\s\S]*createApplyMarketAssignmentCommand/, "市场 UI 未共用市场归属命令");
-assert.match(panelSource, /市场归属预览[\s\S]*应用并重算[\s\S]*取消预览/, "经济面板缺少预览、应用或取消入口");
+assert.match(panelSource, /市场归属预览[\s\S]*应用并更新[\s\S]*取消预览/, "经济面板缺少预览、应用或取消入口");
 assert.match(panelSource, /function exportCsv[\s\S]*function exportJson[\s\S]*function exportRows\(\)[\s\S]*buildEconomyMetrics/, "经济 CSV/JSON 导出未读取当前重算结果");
 assert.match(rendererSource, /function topTradeFlowDeals\(map\)[\s\S]*map\?\.pack\?\.deals/, "静态贸易流数据未读取重算后的 pack.deals");
 assert.match(consoleSource, /economy\.inspectAssignment[\s\S]*economy\.assignCells[\s\S]*economy\.rebuild/, "控制台 API 缺少市场预检、应用或经济重算");

@@ -1,3 +1,6 @@
+import {captureLocalFields, localFieldPaths, restoreLocalFields} from "./local-edit-fields.js";
+import {invalidateSuitabilityStats, readEditedSuitabilityStats, touchSuitabilityStats} from "./suitability-stat-index.js";
+import {packCellsForGrid} from "./grid-pack-index.js";
 import {
   applySuitabilityOverrides,
   ensureSuitabilityStores,
@@ -14,13 +17,16 @@ import {systemAffected} from "./edit-command-effects.js";
 export const SUITABILITY_EDIT_MODE = Object.freeze({SET: "set", RESET: "reset"});
 export const SUITABILITY_EDIT_SCOPE = Object.freeze({LAND: "land", WATER: "water", ALL: "all"});
 export const SUITABILITY_PREVIEW_EFFECTS = Object.freeze({
+  reuseResourceBinding: true,
   render: "draw",
   selection: "none",
   runtimeStats: false,
   pickPanel: true,
+  cellAttributePatch: true,
   derived: Object.freeze(["suitability-cells", "population-carrying", "cell-colors"])
 });
 
+const meanAreas = new WeakMap();
 const STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
 const STALE_SECTIONS = Object.freeze(["settlements", "markers", "zones", "military", "economy", "diplomacy"]);
 
@@ -46,7 +52,8 @@ export function inspectSuitabilityEdit(map, gridCellIds, options = {}) {
   const mismatchedPack = packCells.filter(cell => !matchesScope(Number(map.pack.cells.h?.[cell]), request.scope));
   if (mismatchedPack.length) return invalidInspection("land-water-mismatch", `有 ${mismatchedPack.length} 个 pack cells 与作用范围不匹配`, request);
   const changedPackCells = packCells.filter(cell => desiredPackState(map, cell, request).changed);
-  const changedGridCells = gridCells.filter(gridCell => changedPackCells.some(packCell => Number(map.pack.cells.g?.[packCell]) === gridCell));
+  const changedGrid = new Set(changedPackCells.map(cell => Number(map.pack.cells.g[cell])));
+  const changedGridCells = gridCells.filter(cell => changedGrid.has(cell));
   return {
     valid: true,
     code: "ok",
@@ -67,7 +74,7 @@ export function inspectSuitabilityEdit(map, gridCellIds, options = {}) {
 export function buildSuitabilityChanges(map, gridCellIds, options = {}) {
   const inspection = inspectSuitabilityEdit(map, gridCellIds, options);
   if (!inspection.valid) throw inspectionError(inspection);
-  const meanArea = average(map.pack.cells.area) || 1;
+  const meanArea = meanCellArea(map.pack.cells.area);
   return inspection.changedGridCells.map(gridCell => createGridChange(map, gridCell, inspection, meanArea)).filter(change => change.packChanges.length);
 }
 
@@ -75,7 +82,7 @@ export function getSuitabilityBrushChanges(map, point, brush, originals, anchorG
   const request = normalizeRequest(brush);
   if (!request.valid) return [];
   const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, brush?.radius);
-  const meanArea = average(map?.pack?.cells?.area) || 1;
+  const meanArea = meanCellArea(map?.pack?.cells?.area);
   const changes = [];
   for (const {gridCell} of queryBrushCellsInRadius(map, point, radius, anchorGridCell)) {
     if (!matchesScope(Number(map.grid.cells.h?.[gridCell]), request.scope)) continue;
@@ -105,15 +112,21 @@ export function applySuitabilityPreview(map, changes) {
   applySuitabilityChanges(map, normalizeChanges(changes), "after");
 }
 
-export function restoreSuitabilityPreview(map, changes) {
+export function restoreSuitabilityPreview(map, changes, originals) {
   applySuitabilityChanges(map, normalizeChanges(changes), "before");
+  if (originals) for (const [id, {gridBefore}] of originals) {
+    map.grid.cells.s[id] = gridBefore.suitability;
+    map.grid.cells.pop[id] = gridBefore.population;
+  }
 }
 
 export function createApplySuitabilityCommand(changes, {label = "数值适居度笔刷", faultAt = null} = {}) {
   const normalized = normalizeChanges(changes);
-  let before = null;
-  let after = null;
-  let result = null;
+  const grid = normalized.map(change => change.gridCell);
+  const pack = normalized.flatMap(change => change.packChanges.map(entry => entry.packCell));
+  const rows = {"grid.cells.s": grid, "grid.cells.pop": grid, "pack.cells.s": pack,
+    "pack.cells.pop": pack, "pack.cells.suitabilityBase": pack, "pack.cells.suitabilityOverride": pack};
+  let before, after, fields, result;
   return {
     label: `${label} ${normalized.length} cells`,
     domain: "suitability",
@@ -123,19 +136,31 @@ export function createApplySuitabilityCommand(changes, {label = "数值适居度
       runtimeStats: true,
       pickPanel: true,
       affected: systemAffected("suitability-edit", [{kind: "grid-cells", id: normalized.length}]),
-      derived: ["suitability-cells", "population-carrying", "population-stats", "object-panels", "derived-stale"]
+      cellAttributePatch: true,
+      changedGridCells: grid,
+      derived: ["suitability-cells", "cell-colors", "population-carrying", "population-stats", "object-panels", "derived-stale"]
     },
     apply(context) {
       if (after) {
-        restoreSnapshot(context.map, after);
+        restoreSuitabilityEdit(context.map, after, rows);
         return;
       }
       ensureSuitabilityStores(context.map.pack);
-      before = captureSnapshot(context.map);
+      const owners = affectedRuralOwners(context.map, pack);
+      fields = localFieldPaths(context.map, [
+        ...["manualCells", "positiveSuitabilityCells", "positivePopulationCells", "maxSuitability", "maxPopulation", "manualSuitabilityCells"]
+          .map(key => "climate.metadata." + key),
+        ...(context.map.settlements?.metadata ? ["settlements.metadata.populationCells"] : []),
+        ...owners.flatMap(({paths}) => paths),
+        "metadata.derivedStale",
+        ...STALE_SECTIONS.filter(section => context.map[section]?.metadata).map(section => section + ".metadata.stale")
+      ]);
+      before = captureSuitabilityEdit(context.map, rows, fields);
       try {
         applySuitabilityChanges(context.map, normalized, "after");
         failAt(faultAt, "after-values");
-        const summary = refreshSuitabilityDerived(context.map, {markStale: true});
+        const summary = refreshEditedSuitabilityStats(context.map, grid, pack, owners);
+        markSuitabilityStale(context.map);
         failAt(faultAt, "after-derived");
         result = {
           gridCells: normalized.length,
@@ -144,16 +169,18 @@ export function createApplySuitabilityCommand(changes, {label = "数值适居度
           positiveSuitabilityCells: summary.positiveSuitabilityCells,
           positivePopulationCells: summary.positivePopulationCells
         };
-        after = captureSnapshot(context.map);
+        after = captureSuitabilityEdit(context.map, rows, fields);
       } catch (error) {
-        restoreSnapshot(context.map, before);
+        restoreSuitabilityEdit(context.map, before, rows);
         throw error;
       }
     },
     revert(context) {
       if (!before) throw new Error("缺少可撤销的适居度快照");
-      restoreSnapshot(context.map, before);
+      restoreSuitabilityEdit(context.map, before, rows);
     },
+    getReplicaRows: () => rows,
+    getReplicaFields: () => fields,
     isNoop() {
       return !normalized.length || normalized.every(change => change.packChanges.every(entry => samePackState(entry.before, entry.after)));
     },
@@ -167,6 +194,7 @@ export function createApplySuitabilityCommand(changes, {label = "数值适居度
 }
 
 export function refreshSuitabilityDerived(map, {markStale = true, preservePopulation = false} = {}) {
+  invalidateSuitabilityStats(map);
   const populationSnapshot = preservePopulation ? captureClimatePopulation(map) : null;
   const suitability = applySuitabilityOverrides(map.pack);
   if (populationSnapshot) restoreClimatePopulation(map, populationSnapshot);
@@ -201,7 +229,7 @@ function normalizeRequest(options) {
 }
 
 function createGridChange(map, gridCell, inspection, meanArea) {
-  const packCells = inspection.packCells.filter(packCell => Number(map.pack.cells.g?.[packCell]) === gridCell);
+  const packCells = packCellsForGrid(map, [gridCell]);
   const original = captureGridOriginal(map, gridCell, packCells);
   return createGridChangeFromOriginal(map, gridCell, original, inspection, meanArea);
 }
@@ -289,14 +317,13 @@ function applySuitabilityChanges(map, changes, side) {
       map.pack.cells.pop[entry.packCell] = value.population;
     }
   }
-  for (const gridCell of affectedGrid) refreshGridCell(map, gridCell);
+  for (const gridCell of affectedGrid) refreshSuitabilityGridCell(map, gridCell);
 }
 
-function refreshGridCell(map, gridCell) {
+export function refreshSuitabilityGridCell(map, gridCell) {
   let suitability = 0;
   let population = 0;
-  for (let packCell = 0; packCell < (map.pack.cells.g?.length || 0); packCell++) {
-    if (Number(map.pack.cells.g[packCell]) !== gridCell) continue;
+  for (const packCell of packCellsForGrid(map, [gridCell])) {
     suitability = Math.max(suitability, Number(map.pack.cells.s?.[packCell]) || 0);
     population = Math.max(population, Number(map.pack.cells.pop?.[packCell]) || 0);
   }
@@ -334,104 +361,63 @@ function markSuitabilityStale(map) {
   for (const section of STALE_SECTIONS) if (map[section]?.metadata) map[section].metadata.stale = true;
 }
 
-function captureSnapshot(map) {
-  return {
-    gridSuitability: cloneArray(map.grid.cells.s),
-    gridPopulation: cloneArray(map.grid.cells.pop),
-    packBase: cloneArray(map.pack.cells.suitabilityBase),
-    packOverride: cloneArray(map.pack.cells.suitabilityOverride),
-    packSuitability: cloneArray(map.pack.cells.s),
-    packPopulation: cloneArray(map.pack.cells.pop),
-    climateMetadata: captureSectionMetadata(map, "climate"),
-    settlementsMetadata: captureSectionMetadata(map, "settlements"),
-    ruralStores: captureRuralStores(map),
-    derivedStale: clone(map.metadata?.derivedStale),
-    sectionStale: Object.fromEntries(STALE_SECTIONS.map(section => [section, {
-      present: Object.prototype.hasOwnProperty.call(map[section]?.metadata || {}, "stale"),
-      value: map[section]?.metadata?.stale
-    }]))
-  };
+export function captureSuitabilityEdit(map, rows, fields) {
+  const values = Object.entries(rows).map(([path, ids]) => {
+    const [section, , field] = path.split(".");
+    const column = map[section].cells[field];
+    return ids.map(id => column[id]);
+  });
+  return {values, fields: captureLocalFields(map, fields)};
 }
 
-function restoreSnapshot(map, snapshot) {
-  map.metadata ||= {};
-  restoreField(map.grid.cells, "s", snapshot.gridSuitability);
-  restoreField(map.grid.cells, "pop", snapshot.gridPopulation);
-  restoreField(map.pack.cells, "suitabilityBase", snapshot.packBase);
-  restoreField(map.pack.cells, "suitabilityOverride", snapshot.packOverride);
-  restoreField(map.pack.cells, "s", snapshot.packSuitability);
-  restoreField(map.pack.cells, "pop", snapshot.packPopulation);
-  restoreSectionMetadata(map, "climate", snapshot.climateMetadata);
-  restoreSectionMetadata(map, "settlements", snapshot.settlementsMetadata);
-  restoreRuralStores(snapshot.ruralStores);
-  if (snapshot.derivedStale === undefined) delete map.metadata.derivedStale;
-  else map.metadata.derivedStale = clone(snapshot.derivedStale);
-  for (const [section, entry] of Object.entries(snapshot.sectionStale)) {
-    if (!map[section]?.metadata) continue;
-    if (entry.present) map[section].metadata.stale = entry.value;
-    else delete map[section].metadata.stale;
+export function restoreSuitabilityEdit(map, snapshot, rows) {
+  Object.entries(rows).forEach(([path, ids], index) => {
+    const [section, , field] = path.split(".");
+    const column = map[section].cells[field];
+    ids.forEach((id, i) => { column[id] = snapshot.values[index][i]; });
+  });
+  restoreLocalFields(map, snapshot.fields);
+  touchSuitabilityStats(map, rows["grid.cells.s"], rows["pack.cells.s"]);
+}
+
+function affectedRuralOwners(map, packIds) {
+  const owners = [];
+  for (const [field, section, table] of [
+    ["state", "politics", "states"], ["province", "politics", "provinces"],
+    ["culture", "society", "cultures"], ["religion", "society", "religions"]
+  ]) {
+    const ids = new Set(packIds.map(cell => Number(map.pack.cells[field]?.[cell]) || 0));
+    const totals = new Map();
+    const paths = [];
+    for (const id of ids) {
+      for (const parent of [section, "pack"]) {
+        const item = map[parent]?.[table]?.[id];
+        if (!item || item.removed) continue;
+        paths.push(`${parent}.${table}.${id}.rural`);
+        totals.set(id, 0);
+      }
+    }
+    owners.push({field, section, table, totals, paths});
   }
+  return owners;
 }
 
-function captureSectionMetadata(map, section) {
-  const value = map[section];
-  return {
-    sectionPresent: Boolean(value),
-    metadataPresent: Boolean(value && Object.prototype.hasOwnProperty.call(value, "metadata")),
-    value: clone(value?.metadata)
-  };
-}
-
-function restoreSectionMetadata(map, section, snapshot) {
-  if (!snapshot?.sectionPresent) {
-    delete map[section];
-    return;
-  }
-  map[section] ||= {};
-  if (snapshot.metadataPresent) map[section].metadata = clone(snapshot.value);
-  else delete map[section].metadata;
-}
-
-function captureRuralStores(map) {
-  return uniqueArrays([
-    map.politics?.states,
-    map.pack?.states,
-    map.politics?.provinces,
-    map.pack?.provinces,
-    map.society?.cultures,
-    map.pack?.cultures,
-    map.society?.religions,
-    map.pack?.religions
-  ]).map(store => ({store, values: store.map(item => item ? {
-    present: Object.prototype.hasOwnProperty.call(item, "rural"),
-    value: item.rural
-  } : null)}));
-}
-
-function restoreRuralStores(entries) {
-  for (const {store, values} of entries || []) {
-    for (let index = 0; index < values.length; index++) {
-      const item = store[index];
-      const saved = values[index];
-      if (!item || !saved) continue;
-      if (saved.present) item.rural = saved.value;
-      else delete item.rural;
+function refreshEditedSuitabilityStats(map, gridIds, packIds, owners) {
+  const {summary, gridPopulated} = readEditedSuitabilityStats(map, gridIds, packIds, owners);
+  for (const {section, table, totals} of owners) {
+    for (const [id, total] of totals) {
+      for (const parent of [section, "pack"]) {
+        const item = map[parent]?.[table]?.[id];
+        if (item && !item.removed) item.rural = round(total, 2);
+      }
     }
   }
-}
-
-function restoreField(owner, key, values) {
-  const current = owner[key];
-  if (Array.isArray(current)) owner[key] = [...values];
-  else if (current?.constructor?.from) owner[key] = current.constructor.from(values);
-  else owner[key] = [...values];
-}
-
-function packCellsForGrid(map, gridCellIds) {
-  const selected = new Set(gridCellIds);
-  const cells = [];
-  for (let packCell = 0; packCell < (map?.pack?.cells?.g?.length || 0); packCell++) if (selected.has(Number(map.pack.cells.g[packCell]))) cells.push(packCell);
-  return cells;
+  summary.maxPopulation = round(summary.maxPopulation, 3);
+  map.climate ??= {};
+  map.climate.metadata ??= {};
+  Object.assign(map.climate.metadata, summary, {manualSuitabilityCells: summary.manualCells});
+  if (map.settlements?.metadata) map.settlements.metadata.populationCells = gridPopulated;
+  return summary;
 }
 
 function matchesScope(height, scope) {
@@ -476,16 +462,20 @@ function maxValue(values = []) {
   return max;
 }
 
+function meanCellArea(values) {
+  if (!values?.length) return 1;
+  if (meanAreas.has(values)) return meanAreas.get(values);
+  const mean = average(values) || 1;
+  meanAreas.set(values, mean);
+  return mean;
+}
+
 function average(values = []) {
   const length = values?.length || 0;
   if (!length) return 0;
   let total = 0;
   for (const value of values) total += Number(value) || 0;
   return total / length;
-}
-
-function cloneArray(value) {
-  return value?.slice ? value.slice() : Array.from(value || []);
 }
 
 function clone(value) {

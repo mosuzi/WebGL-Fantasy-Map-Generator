@@ -27,8 +27,10 @@ export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
 }
 
 export function isLandCell(cellIndex, map) {
+  const height = map.grid.cells.h?.[cellIndex];
+  if (Number.isFinite(height)) return height >= 20;
   const featureId = map.grid.cells.f?.[cellIndex];
-  return Boolean(map.features.features[featureId]?.land);
+  return Boolean(map.features?.features?.[featureId]?.land);
 }
 
 export function colorForHeight(height, layers, viewOptions = {}) {

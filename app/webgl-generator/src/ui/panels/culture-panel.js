@@ -191,6 +191,9 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
         panelState.targetCultureId = normalized;
       }
     },
+    setLastAffected(count) {
+      panelState.lastAffected = count;
+    },
     setAssignmentActive(active) {
       panelState.assignmentActive = Boolean(active);
       panelState.version++;

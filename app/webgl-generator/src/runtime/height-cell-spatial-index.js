@@ -1,11 +1,32 @@
 const heightCellSpatialIndexCache = new WeakMap();
 
 export function queryHeightCellsInRadius(map, centerPoint, radiusValue) {
+  return queryIndexInRadius(getHeightCellSpatialIndex(map), centerPoint, radiusValue);
+}
+
+const packIndexes = new WeakMap();
+export function prewarmPackBrushIndex(map) {
+  const cells = map?.pack?.cells;
+  if (!cells?.p || !cells.i) return null;
+  let index = packIndexes.get(cells.p);
+  if (!index || index.cellPointIds !== cells.i || index.cellCount !== cells.i.length) {
+    index = buildHeightCellSpatialIndex(cells.p, cells.i, cells.i.length);
+    if (index) packIndexes.set(cells.p, index);
+  }
+  return index;
+}
+
+export function queryPackBrushCells(map, point, radius, anchor) {
+  const ids = queryIndexInRadius(prewarmPackBrushIndex(map), point, radius).map(match => map.pack.cells.i[match.gridCell]);
+  if (Number.isInteger(anchor) && map.pack.cells.p[anchor] && !ids.includes(anchor)) ids.push(anchor);
+  return ids;
+}
+
+function queryIndexInRadius(index, centerPoint, radiusValue) {
   const center = normalizePoint(centerPoint);
   const radius = Number(radiusValue);
   if (!center || !Number.isFinite(radius) || radius < 0) return [];
 
-  const index = getHeightCellSpatialIndex(map);
   if (!index) return [];
 
   const minBucketX = Math.max(index.minBucketX, bucketCoordinate(center.x - radius, index.originX, index.bucketSize));

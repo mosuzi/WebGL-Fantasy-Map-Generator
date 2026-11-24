@@ -9,6 +9,7 @@ import {compositeConnectorPoints, compositeConnectorSelectionColor} from "./comp
 import {sampleOceanCurrent} from "../generator/ocean-currents.js";
 import {drawLandMaskedTriangles} from "./surface-side-depth.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
+import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS} from "../runtime/persistent-highlights.js";
 
 const SELECTION_HIGHLIGHT_COLORS = Object.freeze({
   [OBJECT_KIND.STATE]: [1, 0.86, 0.28, 0.3],
@@ -40,14 +41,43 @@ const SELECTION_SMOOTHING = Object.freeze({
 
 const MULTI_HIGHLIGHT_COLOR = Object.freeze([1, 0.46, 0.12, 0.72]);
 
+// 和格子身份纹理共用 +1 编码；符号区分国家和省份，0 表示无目标。
+function areaKey(object) {
+  if (object?.kind === OBJECT_KIND.STATE && Number(object.id) > 0) return Number(object.id) + 1;
+  if (object?.kind === OBJECT_KIND.PROVINCE && Number(object.id) >= 0) return -(Number(object.id) + 1);
+  return 0;
+}
+
+export function surfaceAreaSelection(map, selection, locateFlash, highlights = []) {
+  let first = areaKey(selection), second = 0;
+  let color = first && (locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[selection.kind]);
+  if (selection?.kind === OBJECT_KIND.DIPLOMACY_RELATION && compositeConnectorPoints(map, selection)) {
+    const relation = parseDiplomacyRelationIdentity(selection);
+    if (relation) {
+      first = relation.subjectId + 1;
+      second = relation.objectId + 1;
+      const tint = locateFlashColor(selection, locateFlash) || compositeConnectorSelectionColor(selection);
+      color = [...tint.slice(0, 3), Math.min(0.22, tint[3])];
+    }
+  }
+  const keys = highlights.filter(item => !sameSelectionTarget(item, selection)).map(areaKey).filter(Boolean).sort((a, b) => a - b);
+  if (!first && !keys.length) return null;
+  const packed = new Int32Array(4 * Math.ceil(keys.length / 4));
+  packed.set(keys);
+  return {first, second, color: color || [0, 0, 0, 0], packed, count: keys.length, multiColor: MULTI_HIGHLIGHT_COLOR};
+}
+
+export const SURFACE_AREA_HIGHLIGHT_VECTORS = Math.ceil(MAX_PERSISTENT_OBJECT_HIGHLIGHTS / 4);
+
 export function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash, highlights = [], riverWaypointPreview = null) {
   return buildSelectionMeshBundle(map, camera, canvas, selection, locateFlash, highlights, riverWaypointPreview).vertices;
 }
 
-export function buildSelectionMeshBundle(map, camera, canvas, selection, locateFlash, highlights = [], riverWaypointPreview = null) {
+export function buildSelectionMeshBundle(map, camera, canvas, selection, locateFlash, highlights = [], riverWaypointPreview = null, surfaceAreas = false) {
   const ordinaryVertices = [];
   const landMaskedVertices = [];
   const context = createRenderContext(map, {camera, canvas});
+  context.surfaceAreas = surfaceAreas;
   pushSelectionTarget(selection?.kind === OBJECT_KIND.RIVER ? landMaskedVertices : ordinaryVertices, context, selection, locateFlash);
   for (const highlight of highlights) {
     if (sameSelectionTarget(selection, highlight)) continue;
@@ -326,6 +356,7 @@ function isNeutralStateSelection(selection) {
 }
 
 function pushPoliticalSelectionMesh(vertices, context, selection, locateFlash, overrideColor = null) {
+  if (context.surfaceAreas && areaKey(selection)) return;
   const {map} = context;
   const field = POLITICAL_OBJECT_FIELD[selection.kind] || POLITICAL_OBJECT_FIELD[OBJECT_KIND.REGION];
   const color = overrideColor || locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[selection.kind] || SELECTION_HIGHLIGHT_COLORS[OBJECT_KIND.REGION];

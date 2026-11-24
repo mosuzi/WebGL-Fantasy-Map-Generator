@@ -1,3 +1,4 @@
+import {queryPackBrushCells} from "./height-cell-spatial-index.js";
 import {rebuildEconomyFromMarketAssignments} from "../generator/economy.js";
 import {normalizeGoodDisplayPatch, normalizeGoodDisplayProperties, normalizeMarketDisplayPatch, normalizeMarketDisplayProperties} from "../generator/economy-display-properties.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
@@ -229,20 +230,14 @@ export function getMarketAssignmentBrushChanges(map, point, brush, originals, an
   const target = Number(brush?.targetMarketId);
   if (!Number.isInteger(target) || target <= 0 || !map?.pack?.markets?.[target]) return [];
   const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, brush?.radius);
-  const radiusSq = radius * radius;
   const changes = [];
-  for (const packCell of map.pack?.cells?.i || []) {
+  for (const packCell of queryPackBrushCells(map, point, radius, anchorPackCell)) {
     if ((map.pack.cells.h?.[packCell] || 0) < 20) continue;
-    const [x, y] = map.pack.cells.p?.[packCell] || [];
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    const dx = x - point.x;
-    const dy = y - point.y;
-    if (packCell !== anchorPackCell && dx * dx + dy * dy > radiusSq) continue;
     const current = Number(map.pack.cells.market?.[packCell] || 0);
-    if (!originals.has(packCell)) originals.set(packCell, current);
-    const before = Number(originals.get(packCell) || 0);
     if (current === target) continue;
-    changes.push({packCell, before, after: target});
+    if (!originals.has(packCell)) originals.set(packCell, current);
+    else if (originals.get(packCell) === target) originals.delete(packCell);
+    changes.push({packCell, before: current, after: target});
   }
   return changes;
 }
