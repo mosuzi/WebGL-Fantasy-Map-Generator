@@ -1,5 +1,5 @@
 import {homelandAnchorBands} from "./homeland-label-scan.js";
-import {horizontalHomelandCorridors} from "./state-label-footprint.js";
+import {homelandLabelSites, horizontalHomelandCorridors} from "./state-label-footprint.js";
 
 const STATE_MIN_LETTER_SPACING = 2.4;
 const PROVINCE_MIN_LETTER_SPACING = 0.7;
@@ -117,12 +117,19 @@ function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
   const axisScale = Math.hypot(dx, dy);
   const span = frame ? (Math.abs(dx) * width + Math.abs(dy) * height) / axisScale : Infinity;
   const horizontalSites = frame && item.rotation && Array.from(item.text).length > 1
-    ? horizontalHomelandCorridors(outline, item.x, item.y, item.rotation, sx, sy) : [];
+    ? horizontalHomelandCorridors(outline, item.x, item.y, item.rotation) : [];
+  const core = horizontalSites[0];
+  const horizontalCore = core && core === homelandLabelSites(outline, item.x, item.y, 0).corridors[0];
+  const fitsGlyphs = (layout, site, margin) => layout.glyphs.every(g => !g.character.trim() || fits(g.box, margin, site));
   let candidateIndex = 0;
   for (const name of new Set([item.text, short])) {
     const length = Array.from(name).length;
     const rows = splitHomelandName(name, short);
     const upright = /\p{Script=Han}/u.test(name);
+    if (horizontalCore && length > 1) {
+      const row = fitHorizontalCore({name, style: item.resolvedStyle, size, upright, core, outline, sx, sy, fitsGlyphs});
+      if (row) return {...row, candidateIndex: ++candidateIndex};
+    }
     const direction = (upright && Math.abs(dy) > Math.abs(dx) ? dy : dx) < 0 ? -1 : 1;
     const rotation = Math.atan2(direction * dy, direction * dx) * 180 / Math.PI;
     // Compact countries have room across the axis. An elongated country
@@ -134,7 +141,7 @@ function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
     for (const factor of factors) {
       const fontSize = size * factor;
       const margin = Math.max(2, fontSize * 0.12);
-      const inside = (layout, site, gap = margin) => layout.glyphs.every(glyph => !glyph.character.trim() || fits(glyph.box, gap, site));
+      const inside = (layout, site, gap = margin) => fitsGlyphs(layout, site, gap);
       if (horizontalSites.length && length > 1) {
         const layout = homelandLineLayout([name], item.resolvedStyle, fontSize, 0, upright);
         const site = horizontalSites.find(site => inside(layout, site));
@@ -173,15 +180,44 @@ function fitHomelandName({item, short, sx, sy, sites, banks, outline, fits}) {
   return null;
 }
 
-function inlandSite(outline, layout, fontSize, sx, sy, inside) {
-  if (!outline?.frame) return null;
-  for (const {left, right, y} of homelandAnchorBands(outline, layout, fontSize, sx, sy)) {
-    const site = {x: Math.max(left, Math.min(right, outline.frame.cx)), y};
+function inlandSite(outline, layout, fontSize, sx, sy, inside, region = outline?.frame) {
+  if (!region) return null;
+  for (const {left, right, y} of homelandAnchorBands(outline, layout, fontSize, sx, sy, region)) {
+    const site = {x: Math.max(left, Math.min(right, region.cx)), y};
     if (inside(layout, site)) return site;
     site.x = (left + right) / 2;
     if (inside(layout, site)) return site;
   }
   return null;
+}
+
+function fitHorizontalCore({name, style, size, upright, core, outline, sx, sy, fitsGlyphs}) {
+  // The midpoint of a wide transect can graze a cape. Search the rest of
+  // that lobe for a legal translation before changing direction or wrapping.
+  const region = {cx: core.x, cy: core.y, x0: core.x - core.span / 2, x1: core.x + core.span / 2,
+    y0: core.y - core.room, y1: core.y + core.room};
+  const atSize = fontSize => {
+    const layout = homelandLineLayout([name], style, fontSize, 0, upright);
+    const margin = Math.max(2, fontSize * 0.12);
+    const inside = (row, site) => fitsGlyphs(row, site, margin);
+    const site = inside(layout, core) ? core : inlandSite(outline, layout, fontSize, sx, sy, inside, region);
+    return site ? {site, layout, fontSize} : null;
+  };
+  const fullSize = atSize(size);
+  if (fullSize) return fullSize;
+  // Use the existing full-name reduction limit and retain the largest fit.
+  const minimum = Math.max(6, size * 0.66);
+  if (minimum >= size) return null;
+  let best = atSize(minimum);
+  if (!best) return null;
+  let upper = size;
+  for (let i = 0; i < 3; i++) {
+    const middle = (best.fontSize + upper) / 2;
+    const trial = atSize(middle);
+    if (trial) best = trial;
+    else upper = middle;
+  }
+  return best;
 }
 
 function splitHomelandName(name, short) {

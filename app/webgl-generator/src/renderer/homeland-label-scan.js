@@ -73,11 +73,10 @@ function exactLandBetween(outline, top, bottom) {
   return land;
 }
 
-export function* homelandAnchorBands(outline, layout, fontSize, sx, sy) {
-  const {frame} = outline;
+export function* homelandAnchorBands(outline, layout, fontSize, sx, sy, region = outline.frame) {
   const margin = Math.max(2, fontSize * 0.12);
   const pitch = Math.max(0.25, 1 / sy);
-  const steps = Math.ceil(frame.height / pitch);
+  const steps = Math.ceil(Math.max(region.cy - region.y0, region.y1 - region.cy) / pitch);
   const ink = layout.glyphs.filter(g => g.character.trim()).map(({box}) => ({
     left: (box.left - margin) / sx, right: (box.right + margin) / sx,
     top: (box.top - margin) / sy, bottom: (box.bottom + margin) / sy
@@ -85,9 +84,9 @@ export function* homelandAnchorBands(outline, layout, fontSize, sx, sy) {
   // Visit rows from the homeland centre out. Stop scanning as soon as
   // the caller accepts a position shared by every glyph of both lines.
   for (let k = 0; k <= 2 * steps; k++) {
-    const y = frame.cy + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * pitch;
-    if (y < frame.y0 || y > frame.y1) continue;
-    let ranges = [[frame.x0, frame.x1]];
+    const y = region.cy + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * pitch;
+    if (y < region.y0 || y > region.y1) continue;
+    let ranges = [[region.x0, region.x1]];
     for (const box of ink) {
       const spans = exactLandBetween(outline, y + box.top, y + box.bottom);
       ranges = intersect(ranges, spans.map(([a, b]) => [a - box.left, b - box.right]));

@@ -237,7 +237,7 @@ const inlandName = placeHomelandLabel({
 assert.equal(inlandName?.glyphs.map(g => g.character).join(""), ringLabel.text);
 assert.ok(Math.abs(inlandName.anchor.x - 40) < 5 && Math.abs(inlandName.anchor.y - 15) < 5);
 
-function labelInsidePolygon(vertices, center) {
+function labelInsidePolygon(vertices, center, sx = 1, sy = 1) {
   const map = {metadata: {graphHeight: 360}, pack: {
     cells: {i: [0], state: [1], h: [30], p: [center], v: [vertices.map((_, i) => i)]}, vertices: {p: vertices}
   }};
@@ -246,8 +246,8 @@ function labelInsidePolygon(vertices, center) {
   const outline = homelandOutline(map, placement.componentCellSet);
   const {sites, banks} = homelandLabelSites(outline, item.x, item.y, item.rotation);
   const fits = (box, margin, {x, y}) => homelandContainsBox(outline,
-    x + box.left - margin, y + box.top - margin, x + box.right + margin, y + box.bottom + margin);
-  const options = {item, screen: {x: item.x, y: item.y}, sx: 1, sy: 1, scale: 1, sites, banks, outline, fits,
+    x + (box.left - margin) / sx, y + (box.top - margin) / sy, x + (box.right + margin) / sx, y + (box.bottom + margin) / sy);
+  const options = {item, screen: {x: item.x * sx, y: item.y * sy}, sx, sy, scale: 1, sites, banks, outline, fits,
     obstacles: [], peers: [], padding: 0};
   const initial = placeHomelandLabel(options);
   assert.equal(initial.glyphs.map(g => g.character).join(""), item.text);
@@ -265,6 +265,15 @@ assert.equal(hooked.initial.lines, 1);
 assert.equal(hooked.initial.rotation, 0);
 assert.ok(hooked.initial.anchor.y < 62 && homelandContainsBox(hooked.outline, hooked.initial.box.left,
   hooked.initial.box.top, hooked.initial.box.right, hooked.initial.box.bottom));
+// The notch clips a glyph at the transect midpoint. Sliding the same
+// full-size row east keeps it inside the northern lobe on a wide canvas.
+const notched = labelInsidePolygon([[0,0],[40,0],[48,16],[58,0],[160,0],[160,330],[120,330],[120,60],[0,60]],
+  [140,165], 1754 / 1440, 831 / 960);
+assert.equal(notched.initial.rotation, 0);
+assert.equal(notched.initial.lines, 1);
+assert.ok(Math.abs(notched.initial.fontSize - 25.3) < 0.01);
+assert.ok(notched.initial.glyphs.every(g => homelandContainsBox(notched.outline, g.box.left * 1440 / 1754,
+  g.box.top * 960 / 831, g.box.right * 1440 / 1754, g.box.bottom * 960 / 831)));
 // This strip is wide enough for three small glyphs across, but its interior consistently runs north-south.
 const meridian = labelInsidePolygon([[0,0],[85,0],[85,340],[0,340]], [42.5,170]);
 assert.equal(meridian.initial.rotation, 90);

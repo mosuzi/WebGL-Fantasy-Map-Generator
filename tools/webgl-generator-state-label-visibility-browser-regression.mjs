@@ -14,7 +14,8 @@ const reports = [];
 const archive = process.env.FMG_REAL_ARCHIVE;
 try {
   for (const cellsTarget of archive ? [Number(process.env.FMG_ARCHIVE_CELLS || 100000)] : process.argv.includes("--large") ? [100000] : [10000, 100000]) {
-    const page = await browser.newPage({viewport: {width: 1440, height: 900}});
+    const [width, height] = (process.env.FMG_LABEL_VIEWPORT || "1440x900").split("x").map(Number);
+    const page = await browser.newPage({viewport: {width, height}});
     page.setDefaultTimeout(180000);
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -135,8 +136,21 @@ try {
         initial.checkedPixels = checked;
       }
       if (focus === "奄帝国" && initial.capital === "兰景") {
-        assert.ok(initial.centers.length > 1 && initial.centers.every((p, i, glyphs) =>
-          Math.abs(p.y - glyphs[0].y) * initial.sy < 0.5 && (!i || p.x > glyphs[i - 1].x)), JSON.stringify(initial));
+        initial.viewports = [];
+        for (const [w, h] of [[1754, 831], [1440, 900], [1280, 720], [800, 600], [877, 416], [390, 844], [width, height]]) {
+          await page.setViewportSize({width: w, height: h});
+          await page.waitForFunction(({w, h, id}) => {
+            const {renderer, map} = window.__webglGeneratorApp;
+            const label = renderer.labelItems.find(item => item.targetKind === "state" && item.targetId === id);
+            const key = label?.homelandLayout?.key?.split("|");
+            return renderer.canvas.clientWidth === w && renderer.canvas.clientHeight === h &&
+              Number(key?.[0]) === w / map.metadata.graphWidth && Number(key?.[1]) === h / map.metadata.graphHeight;
+          }, {w, h, id: initial.id});
+          const row = await sample();
+          assert.ok(row.visible && row.inkInside && row.hitGlyphs === 3 && row.text === focus && row.centers.every((p, i, glyphs) =>
+            Math.abs(p.y - glyphs[0].y) * row.sy < 0.5 && p.y < 330 && (!i || p.x > glyphs[i - 1].x)), JSON.stringify({w, h, row}));
+          initial.viewports.push({w, h, font: row.font, centers: row.centers});
+        }
       }
       const zoomStarted = await page.evaluate(() => performance.now());
       let previewError = 0;
@@ -257,7 +271,9 @@ try {
             const total = steps.reduce((sum, step) => sum + step, 0);
             return steps.map(step => step / total);
           };
-          const exported = proportions(calls.slice(start, start + chars.length));
+          const points = calls.slice(start, start + chars.length);
+          if (name === "奄帝国" && !points.every((p, i) => Math.abs(p.y - points[0].y) < 1 && (!i || p.x > points[i-1].x))) return false;
+          const exported = proportions(points);
           return proportions(dom).every((step, i) => Math.abs(exported[i] - step) < 0.01);
         } finally { CanvasRenderingContext2D.prototype.fillText = original; }
       }, initial.text);

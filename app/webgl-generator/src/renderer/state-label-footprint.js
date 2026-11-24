@@ -156,10 +156,9 @@ export function homelandLabelSites(outline, x, y, rotation) {
 // Compare uninterrupted land through the same point in both directions.
 // A long peninsula can dominate the principal axis without extending through
 // the part of the mainland where the name can actually be printed.
-export function horizontalHomelandCorridors(outline, x, y, rotation, sx, sy) {
+export function horizontalHomelandCorridors(outline, x, y, rotation) {
   const {corridors} = homelandLabelSites(outline, x, y, 0);
   const angle = rotation * Math.PI / 180, dx = Math.cos(angle), dy = Math.sin(angle);
-  const scale = Math.hypot(sx * dx, sy * dy);
   const boundaries = outline.grid ? [outline, outline.grid] : [outline];
   return corridors.filter(site => {
     let low = -Infinity, high = Infinity;
@@ -174,7 +173,7 @@ export function horizontalHomelandCorridors(outline, x, y, rotation, sx, sy) {
         else high = Math.min(high, along);
       }
     }
-    return site.span * sx > (high - low) * scale;
+    return site.span > high - low;
   });
 }
 
