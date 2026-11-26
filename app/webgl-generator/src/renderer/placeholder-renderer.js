@@ -7465,7 +7465,7 @@ function mergeSurfaceRanges(ranges) {
 }
 
 export function shouldDrawShoreVisualBands(colorMode) {
-  return colorMode === "height" || colorMode === "states" || colorMode === "provinces";
+  return Object.hasOwn(GPU_RESIDENT_COLOR_MODES, colorMode);
 }
 
 function combineVertexBuffers(primary, extra) {

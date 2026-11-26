@@ -684,11 +684,15 @@ function collectUnsafeProtectedSegments(source, render, protectedObjects, gates)
   for (const river of nearbyObjects.rivers) {
     const sourceRelation = inspectObjectShoreRelation(river, source, sourceIndex, gates.protectedDistanceWorld);
     if (!sourceRelation.near) continue;
-    const renderRelation = inspectObjectShoreRelation(river, render, renderIndex, 0);
+    const intersections = [];
+    const renderRelation = inspectObjectShoreRelation(river, render, renderIndex, 0, intersections);
     const sourceCrossings = sourceRelation.crossings;
     const renderCrossings = renderRelation.crossings;
     if (renderCrossings > sourceCrossings) {
-      markObjectNearSourceSegments(segments, river, source, sourceIndex, gates.protectedDistanceWorld, closed);
+      for (const point of intersections) {
+        const projection = nearestPathProjection(point, source, sourceIndex);
+        markLocalSegment(segments, projection.sourceIndex, segmentCount, closed);
+      }
       reasons["protected-river"] = (reasons["protected-river"] || 0) + 1;
     }
     const mouth = river.at(-1);
@@ -747,7 +751,7 @@ function queryProtectedObjects(objects, bounds) {
   };
 }
 
-function inspectObjectShoreRelation(objectPoints, shorePoints, shoreIndex, distance) {
+function inspectObjectShoreRelation(objectPoints, shorePoints, shoreIndex, distance, intersections) {
   let near = false;
   let crossings = 0;
   for (let objectIndex = 0; objectIndex < objectPoints.length - 1; objectIndex++) {
@@ -762,12 +766,26 @@ function inspectObjectShoreRelation(objectPoints, shorePoints, shoreIndex, dista
       if (intersects) {
         crossings++;
         near = true;
+        if (intersections) intersections.push(crossingPoint(a, b, c, d));
       } else if (!near && segmentSegmentDistance(a, b, c, d, true) <= distance + EPSILON) {
         near = true;
       }
     }
   }
   return {near, crossings};
+}
+
+function crossingPoint(a, b, c, d) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const sx = d[0] - c[0];
+  const sy = d[1] - c[1];
+  const denominator = dx * sy - dy * sx;
+  if (Math.abs(denominator) <= EPSILON) {
+    return [a, b, c, d].find(point => pointSegmentDistanceSquared(point, a, b) <= EPSILON
+      && pointSegmentDistanceSquared(point, c, d) <= EPSILON) || c;
+  }
+  return lerpPoint(a, b, clamp(((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / denominator, 0, 1));
 }
 
 function polylineBounds(points, padding = 0) {

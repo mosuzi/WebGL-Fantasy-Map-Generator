@@ -6,7 +6,8 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
+import {PlaceholderMapRenderer, shouldDrawShoreVisualBands} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
+import {segmentsIntersect} from "../app/webgl-generator/src/renderer/geometry.js";
 import {
   SHORE_TOPOLOGY_ALGORITHM,
   SHORE_TOPOLOGY_GATES,
@@ -127,7 +128,7 @@ try {
   const generation = await generateMap(page, {cells, seed, template, graphWidth, graphHeight});
 
   const cases = [];
-  for (const mode of ["height", "states", "provinces"]) {
+  for (const mode of ["height", "states", "provinces", "cultures"]) {
     cases.push(await collectCase(page, {
       mode,
       smoothCellBorders: true,
@@ -136,7 +137,7 @@ try {
       screenshotFile: `${mode}-smooth.png`
     }));
   }
-  for (const mode of ["height", "states", "provinces"]) {
+  for (const mode of ["height", "states", "provinces", "cultures"]) {
     cases.push(await collectCase(page, {
       mode,
       smoothCellBorders: false,
@@ -719,6 +720,20 @@ function runPureRegression() {
   );
   assert.ok(expandedMouthProtection.path.topologyLocalFallbackReasons["protected-mouth"] > 0, "距源海岸 10～18 单位的河口必须进入保护门禁");
 
+  const cape = [[261.73, 139.07], [264.73, 141.58], [268.63, 141.33], [272.34, 150.03],
+    [264.15, 155.61], [260.49, 156.17], [266.83, 169.88], [276.73, 163.86],
+    [282.94, 167.69], [289.28, 165.56], [299.64, 176.26], [302.23, 176.44]];
+  const river = [[279.3, 151.7], [279.78, 154.49], [282.42, 156.01], [283.33, 158.54], [282.61, 165.97]];
+  const crossesRiver = shore => shore.some((point, index) => index && river.some((end, segment) =>
+    segment && segmentsIntersect(shore[index - 1], point, river[segment - 1], end)));
+  assert.equal(crossesRiver(cape), false);
+  assert.equal(crossesRiver(transformRecommendedShoreArc(cape)), true, "未保护的曲线应命中真实旧图的河流反例");
+  const protectedCape = buildShoreArcSnapshot({points: cape}, {towns: [], roads: [], rivers: [river]});
+  assert.equal(crossesRiver(protectedCape.path.renderPoints), false);
+  assert.deepEqual(protectedCape.path.topologyLocalFallbackSegments, [7], "只应锁住会新增河流交点的岸段");
+  assert.ok(protectedCape.path.renderPoints.some(([x, y]) => x > 262 && x < 263 && y > 157 && y < 160),
+    "相邻岬角仍须生成连续曲线");
+
   const shoreLayerSource = readFileSync(join(rootDir, "app", "webgl-generator", "src", "renderer", "shore-layer.js"), "utf8");
   const rendererSource = readFileSync(join(rootDir, "app", "webgl-generator", "src", "renderer", "placeholder-renderer.js"), "utf8");
   assert.match(shoreLayerSource, /return cells\[Math\.min\(sourceIndex \+ 1, cells\.length - 1\)\]/, "平滑采样的源 cell 必须读取当前源段 i 对应的 cells[i+1]");
@@ -756,7 +771,10 @@ function runPureRegression() {
     ...Object.fromEntries(counts.map(key => [key, 3]))};
   PlaceholderMapRenderer.prototype.refreshGpuResidentShoreSurface.call(hardRenderer);
   assert.ok(counts.every(key => hardRenderer[key] === 0), "关闭平滑时四组海岸过渡面均不得绘制");
-  assert.match(rendererSource, /export function shouldDrawShoreVisualBands\(colorMode\) \{\s*return colorMode === "height" \|\| colorMode === "states" \|\| colorMode === "provinces";\s*\}/, "海岸窄带判定不得恒为 false");
+  for (const mode of ["height", "states", "provinces", "cultures", "religions", "biomes", "population",
+    "temperature", "precipitation", "regions", "governments", "diplomacy", "terrain"]) {
+    assert.ok(shouldDrawShoreVisualBands(mode), `${mode} 视图的填色须应用岸线曲线`);
+  }
   assert.match(shoreLayerSource, /if \(smoothCellBorders && paths\)[\s\S]*return;[\s\S]*sharedVoronoiEdge\(map, cell, neighbor\)/, "硬边模式必须完整回退共享 Voronoi 边");
 
   runFormalMapRegressionInChild();
