@@ -80,8 +80,8 @@ async function profileMap(browserInstance, requestedCells) {
       const brush = window.__webglGeneratorApp.panels.height.getBrush();
       return brush.active && brush.action === "lower" && !brush.preserveSurface && !brush.falloff && brush.strength === 5;
     });
-    // 跨水陆像素断言只观察地表及岸线。行政线在高程提交后独立更新。
-    for (const layer of ["stateBorders", "provinceBorders"]) {
+    // 行政线和海路有自己的刷新时序。像素断言观察地表及岸线。
+    for (const layer of ["stateBorders", "provinceBorders", "routes"]) {
       const result = await page.evaluate(layer => window.webglGeneratorApi.layers.setVisible(layer, false), layer);
       assert.ok(result.ok, result.error?.message);
     }
@@ -282,16 +282,22 @@ async function checkInterruptedAndQueuedStrokes(page, point) {
   const depth = await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo);
   await page.evaluate(() => {
     const app = window.__webglGeneratorApp;
+    const renderer = app.renderer;
     document.addEventListener("pointerdown", event => {
-      function cancelPending() {
-        const stroke = app.heightEdit.activeStroke;
-        if (!stroke) return;
-        if (!stroke.pendingShore) return requestAnimationFrame(cancelPending);
-        const pending = stroke.pendingShore;
-        app.renderer.canvas.dispatchEvent(new PointerEvent("pointercancel", {pointerId: event.pointerId, bubbles: true}));
-        pending.then(() => { window.shoreCancelSettled = true; });
-      }
-      requestAnimationFrame(cancelPending);
+      const prepare = renderer.prepareHeightBrushShore;
+      renderer.prepareHeightBrushShore = function (...args) {
+        const result = prepare.apply(this, args);
+        if (!result) return result;
+        renderer.prepareHeightBrushShore = prepare;
+        // 捕获任务创建当帧。两个动画帧之间也可能已经完成准备。
+        queueMicrotask(() => {
+          const pending = app.heightEdit.activeStroke?.pendingShore;
+          if (!pending) return;
+          renderer.canvas.dispatchEvent(new PointerEvent("pointercancel", {pointerId: event.pointerId, bubbles: true}));
+          pending.then(() => { window.shoreCancelSettled = true; });
+        });
+        return result;
+      };
     }, {once: true, capture: true});
   });
   await page.mouse.move(point.x, point.y);

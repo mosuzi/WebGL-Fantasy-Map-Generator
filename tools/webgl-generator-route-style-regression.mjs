@@ -11,6 +11,8 @@ import {
 import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 import {buildObjectPickingIndex, pickRoute} from "../app/webgl-generator/src/renderer/picking.js";
 import {routeCurveTolerance, routeVisualPath} from "../app/webgl-generator/src/geometry/route-visual-path.js";
+import {invalidateSeaRouteWater} from "../app/webgl-generator/src/geometry/sea-route-water.js";
+import {locateGridPoint} from "../app/webgl-generator/src/geometry/grid-point.js";
 import {listHoverGeometry} from "../app/webgl-generator/src/renderer/list-hover-geometry.js";
 
 // 玩家地图上主路的中间拐点与次级道路的末端共用这个坐标。
@@ -40,6 +42,55 @@ const duplicate = routeVisualPath({type: "trail", points: [trunk.points[0], junc
 assert.equal(duplicate.duplicates, 1);
 assert.equal(duplicate.spans[1], undefined);
 assert.deepEqual(duplicate.points[duplicate.spans[2][0]], junction);
+
+const waterColumns = 7, waterRows = 5, step = 10;
+const waterBounds = {columns: waterColumns, rows: waterRows, graphWidth: waterColumns * step, graphHeight: waterRows * step};
+const land = 2 * waterColumns + 3;
+const waterGrid = {metadata: waterBounds, points: [], vertices: {p: []}, cells: {c: [], v: [], h: []}};
+for (let row = 0; row <= waterRows; row++) {
+  for (let column = 0; column <= waterColumns; column++) waterGrid.vertices.p.push([column * step, row * step]);
+}
+for (let row = 0; row < waterRows; row++) {
+  for (let column = 0; column < waterColumns; column++) {
+    const cell = row * waterColumns + column;
+    const corner = row * (waterColumns + 1) + column;
+    waterGrid.points.push([(column + 0.5) * step, (row + 0.5) * step]);
+    waterGrid.cells.v.push([corner, corner + 1, corner + waterColumns + 2, corner + waterColumns + 1]);
+    waterGrid.cells.c.push([
+      ...(column > 0 ? [cell - 1] : []), ...(column < waterColumns - 1 ? [cell + 1] : []),
+      ...(row > 0 ? [cell - waterColumns] : []), ...(row < waterRows - 1 ? [cell + waterColumns] : [])
+    ]);
+    waterGrid.cells.h.push(cell === land ? 30 : 18);
+  }
+}
+const coastalRoute = {id: 71, type: "searoute", cells: [land - 2, land - 1, land + 2], points: [[15, 25], [35, 25], [55, 25]]};
+const coastMap = {metadata: waterBounds, grid: waterGrid, settlements: {routes: [coastalRoute], cities: []}};
+const coastalData = structuredClone(coastalRoute);
+const coastPicking = buildObjectPickingIndex(coastMap);
+const showCoast = routeVisualPath(coastalRoute, undefined, coastMap);
+for (const tolerance of [undefined, routeCurveTolerance(0.5)]) {
+  const {points} = routeVisualPath(coastalRoute, tolerance, coastMap);
+  assert.deepEqual([points[0], points.at(-1)], [coastalRoute.points[0], coastalRoute.points.at(-1)]);
+  for (let index = 1; index < points.length; index++) {
+    const [a, b] = points.slice(index - 1, index + 1);
+    for (let sample = 0; sample <= 32; sample++) {
+      const mix = sample / 32;
+      const [x, y] = a.map((coordinate, axis) => coordinate + mix * (b[axis] - coordinate));
+      assert.notEqual(locateGridPoint(waterGrid, x, y).cell, land, "旧水路中间点及各缩放曲线均不得穿岛");
+    }
+  }
+}
+const detour = showCoast.points.find(point => Math.abs(point[1] - 25) > 5.1);
+assert.ok(detour);
+assert.equal(pickRoute(coastMap, coastPicking, ...detour, 0.15)?.id, coastalRoute.id);
+assert.equal(pickRoute(coastMap, coastPicking, 35, 25, 0.15), null);
+assert.strictEqual(listHoverGeometry(coastMap, {kind: "route", id: coastalRoute.id})[0].points, showCoast.points);
+const portLeg = {type: "searoute", cells: [land, land + 2], points: [[35, 25], [55, 25]]};
+assert.deepEqual(routeVisualPath(portLeg, undefined, coastMap).points[0], portLeg.points[0], "陆上的港口端点应保留");
+waterGrid.cells.h[land] = 18;
+invalidateSeaRouteWater(coastMap);
+assert.deepEqual(routeVisualPath(coastalRoute, undefined, coastMap).points, coastalRoute.points, "海陆变化应刷新显示路径");
+assert.deepEqual(coastalRoute, coastalData);
 
 const theme = {
   lines: {

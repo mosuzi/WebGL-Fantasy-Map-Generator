@@ -3,7 +3,7 @@ import {riverShorePoints} from "../geometry/river-shores.js";
 import {riverDeltaBranches} from "../geometry/river-deltas.js";
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
-import {routeVisualPath, ROUTE_CURVE_MAX_OFFSET} from "../geometry/route-visual-path.js";
+import {routeVisualPath, ROUTE_CURVE_MAX_OFFSET, ROUTE_VISUAL_MAX_OFFSET} from "../geometry/route-visual-path.js";
 import {markerPresentationRecords} from "../domains/markers/presentation.js";
 
 export const CITY_PICK_RADIUS_CSS_PX = 18;
@@ -243,13 +243,14 @@ export function pickRoute(map, index, worldX, worldY, maxDistance) {
   if (!map?.settlements?.routes?.length) return null;
   let best = null;
   let candidateCount = 0;
-  const radius = maxDistance + ROUTE_CURVE_MAX_OFFSET;
+  const radius = maxDistance + ROUTE_VISUAL_MAX_OFFSET;
   const routeSegments = index ? queryIndexedItems(index, worldX, worldY, radius, "routeSegments", segment => `${segment.route.id}:${segment.index}`) : allRouteSegments(map);
 
   for (const segment of routeSegments) {
     candidateCount++;
     const route = segment.route;
-    const distance = routeSegmentDistance(segment, worldX, worldY, radius);
+    const allowance = route.type === "searoute" ? ROUTE_VISUAL_MAX_OFFSET : ROUTE_CURVE_MAX_OFFSET;
+    const distance = routeSegmentDistance(map, segment, worldX, worldY, maxDistance + allowance);
     if (distance > maxDistance || (best && distance >= best.distance)) continue;
     const from = map.settlements.cities[route.from];
     const to = map.settlements.cities[route.to];
@@ -269,10 +270,10 @@ export function pickRoute(map, index, worldX, worldY, maxDistance) {
   return best;
 }
 
-function routeSegmentDistance(segment, x, y, radius) {
+function routeSegmentDistance(map, segment, x, y, radius) {
   // 规范线段继续用于索引，只有候选命中曲线范围时才检查细分线段。
   if (distanceToSegment(x, y, segment.a, segment.b) > radius) return Infinity;
-  const {points, spans} = routeVisualPath(segment.route);
+  const {points, spans} = routeVisualPath(segment.route, undefined, map);
   const span = spans[segment.index];
   if (!span) return Infinity;
   let distance = Infinity;

@@ -109,7 +109,7 @@ export function listHoverGeometry(map, object, pointForObject) {
     }
   } else if (kind === "route") {
     const route = map.settlements.routes.find(item => item.id === id);
-    if (route) points = routeVisualPath(route).points;
+    if (route) points = routeVisualPath(route, undefined, map).points;
   } else if (kind === "ocean-current") {
     const current = map.oceanCurrents?.currents?.find(item => String(item.id) === String(id));
     if (current) {

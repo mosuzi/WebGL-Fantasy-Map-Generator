@@ -3,7 +3,8 @@ import {buildObjectPickingIndex, CITY_PICK_RADIUS_CSS_PX, pickCity, pickGridCell
 import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {manualLabelPlacement} from "./manual-label-path.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
-import {routeCurveTolerance, routeVisualPath, ROUTE_CURVE_MAX_OFFSET} from "../geometry/route-visual-path.js";
+import {routeCurveTolerance, routeVisualPath, ROUTE_CURVE_MAX_OFFSET, ROUTE_VISUAL_MAX_OFFSET} from "../geometry/route-visual-path.js";
+import {invalidateSeaRouteWater} from "../geometry/sea-route-water.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {colorForCell, colorForHeight, isLandCell} from "./color-modes.js";
@@ -2419,6 +2420,8 @@ export class PlaceholderMapRenderer {
         theme: this.viewOptions.visualTheme, coast: this.layerVisibility.coastline, lake: this.layerVisibility.lakeShore};
     }
     this.shoreVisualPaths = after;
+    invalidateSeaRouteWater(this.map);
+    if (this.layerVisibility.routes) this.scheduleRouteBufferRefresh();
     this.gpuResidentHardShoreLineVertices = new Float32Array();
     this.gpuResidentSmoothShoreLineVertices = new Float32Array();
     this.gpuResidentShoreSurfaceCache.clear();
@@ -8818,7 +8821,8 @@ function pushRouteMesh(build, route) {
     return true;
   }
   build.stats.sourcePoints += route.points.length;
-  if (!worldPathIntersectsBounds(route.points, build.viewportBounds, ROUTE_CURVE_MAX_OFFSET)) {
+  const margin = route.type === "searoute" ? ROUTE_VISUAL_MAX_OFFSET : ROUTE_CURVE_MAX_OFFSET;
+  if (!worldPathIntersectsBounds(route.points, build.viewportBounds, margin)) {
     build.stats.culledRoutes++;
     return true;
   }
@@ -8828,7 +8832,7 @@ function pushRouteMesh(build, route) {
     return false;
   }
   const {cssPerWorldX, cssPerWorldY} = build.projection;
-  const path = routeVisualPath(route, routeCurveTolerance(Math.max(cssPerWorldX, cssPerWorldY)));
+  const path = routeVisualPath(route, routeCurveTolerance(Math.max(cssPerWorldX, cssPerWorldY)), build.context.map);
   const points = path.points;
   build.stats.invalidPoints += path.invalid;
   build.stats.duplicatePoints += path.duplicates;

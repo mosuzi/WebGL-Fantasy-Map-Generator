@@ -1,7 +1,9 @@
 import {centripetalCatmullRomToBezier} from "./cubic-path.js";
+import {isSeaRouteCurveClear, SEA_ROUTE_MAX_DETOUR, seaRouteAnchor, seaRouteDetour, seaRouteLegLength, seaRouteWater} from "./sea-route-water.js";
 
 export const ROUTE_CURVE_MAX_OFFSET = 6;
 export const ROUTE_CURVE_FINE_TOLERANCE = 0.075;
+export const ROUTE_VISUAL_MAX_OFFSET = ROUTE_CURVE_MAX_OFFSET + SEA_ROUTE_MAX_DETOUR;
 const MAX_SPLITS = 5;
 const cache = new WeakMap();
 const emptyPath = {points: [], spans: [], anchors: 0, invalid: 0, duplicates: 0};
@@ -15,14 +17,16 @@ export function routeCurveTolerance(cssPerWorld) {
   return ROUTE_CURVE_FINE_TOLERANCE;
 }
 
-export function routeVisualPath(route, tolerance = ROUTE_CURVE_FINE_TOLERANCE) {
+export function routeVisualPath(route, tolerance = ROUTE_CURVE_FINE_TOLERANCE, map) {
   const source = route?.points;
   if (!Array.isArray(source)) return emptyPath;
   const sea = route.type === "searoute";
-  let entry = cache.get(source);
-  if (entry?.sea !== sea) {
-    entry = createRouteCurve(source, sea);
-    cache.set(source, entry);
+  const water = sea ? seaRouteWater(map) : null;
+  const key = water ? route : source;
+  let entry = cache.get(key);
+  if (entry?.sea !== sea || entry.source !== source || entry.water !== water || (water && entry.cells !== route.cells)) {
+    entry = createRouteCurve(source, sea, water, route);
+    cache.set(key, entry);
   }
   const previous = entry.paths.get(tolerance);
   if (previous) return previous;
@@ -32,16 +36,18 @@ export function routeVisualPath(route, tolerance = ROUTE_CURVE_FINE_TOLERANCE) {
   for (const {startIndex: index, p0, p1, p2, p3} of cubics) {
     const start = points.length - 1;
     appendCurve(points, p0, p1, p2, p3, tolerance ** 2, MAX_SPLITS);
-    spans[indexes[index]] = [start, points.length - 1];
+    for (const sourceIndex of indexes[index]) {
+      spans[sourceIndex] = [spans[sourceIndex]?.[0] ?? start, points.length - 1];
+    }
   }
   const path = {points, spans, anchors, invalid, duplicates};
   entry.paths.set(tolerance, path);
   return path;
 }
 
-function createRouteCurve(source, sea) {
-  const knots = [];
-  const indexes = [];
+function createRouteCurve(source, sea, water, route) {
+  let knots = [];
+  let indexes = [];
   let invalid = 0;
   let duplicates = 0;
   for (let index = 0; index < source.length; index++) {
@@ -60,6 +66,54 @@ function createRouteCurve(source, sea) {
     indexes.push(index);
   }
 
+  const anchors = knots.length;
+  let wet = [];
+  if (water && knots.length) {
+    const resolved = knots.map((point, index) => seaRouteAnchor(water, route, indexes[index], point));
+    const navigation = [resolved[0]];
+    const spans = [];
+    let previous = 0;
+    for (let index = 1; index < resolved.length; index++) {
+      const a = resolved[previous], next = resolved[index + 1];
+      let b = resolved[index];
+      let detour = null;
+      // 旧水路被陆角占用的中间点无需贴着岸边绕回原位。两端、会合点与接岸段仍保留。
+      if (b.originalDry && !b.junction && a.water && next?.water) {
+        detour = seaRouteDetour(water, a, next, knots[previous], knots[index + 1]);
+        if (detour) {
+          b = next;
+          index++;
+          const following = resolved[index + 1];
+          // 绕过陆角后紧接着折返的旁侧水点，可以随这次绕岸一起略过。
+          if (detour.length && following?.water && !water.junctions.has(knots[index].join(","))) {
+            const shorter = seaRouteDetour(water, a, following, knots[previous], knots[index + 1]);
+            const withReturn = seaRouteLegLength(a, detour, b) + seaRouteLegLength(b, [], following);
+            if (shorter && seaRouteLegLength(a, shorter, following) + 4 < withReturn) {
+              detour = shorter;
+              b = following;
+              index++;
+            }
+          }
+        }
+      }
+      const sourceIndexes = indexes.slice(previous, index);
+      if (a.water && b.water) {
+        detour ??= seaRouteDetour(water, a, b, knots[previous], knots[index]);
+        for (const point of detour || []) {
+          navigation.push({point, water: true});
+          spans.push(sourceIndexes);
+        }
+      }
+      navigation.push(b);
+      spans.push(sourceIndexes);
+      previous = index;
+    }
+    knots = navigation.map(({point}) => point);
+    wet = navigation.map(({water}) => water);
+    indexes = spans;
+  } else {
+    indexes = indexes.map(index => [index]);
+  }
   const cubics = centripetalCatmullRomToBezier(knots, {alpha: sea ? 0.5 : 0.1});
   const scales = new Float64Array(knots.length).fill(1);
   // 一个节点两侧共用切线缩放，避免限制外扩时产生新的折角。
@@ -71,8 +125,18 @@ function createRouteCurve(source, sea) {
     const {startIndex: index, p0, p1, p2, p3} = segment;
     segment.p1 = towards(p0, p1, scales[index]);
     segment.p2 = towards(p3, p2, scales[index + 1]);
+    if (wet[index] && wet[index + 1] && !isSeaRouteCurveClear(water, p0, segment.p1, segment.p2, p3)) {
+      let low = 0, high = 1;
+      for (let test = 0; test < 5; test++) {
+        const scale = (low + high) / 2;
+        if (isSeaRouteCurveClear(water, p0, towards(p0, segment.p1, scale), towards(p3, segment.p2, scale), p3)) low = scale;
+        else high = scale;
+      }
+      segment.p1 = towards(p0, segment.p1, low);
+      segment.p2 = towards(p3, segment.p2, low);
+    }
   }
-  return {sea, cubics, indexes, first: knots[0], anchors: knots.length, invalid, duplicates, paths: new Map()};
+  return {sea, source, water, cells: route.cells, cubics, indexes, first: knots[0], anchors, invalid, duplicates, paths: new Map()};
 }
 
 function handleScale(start, handle, end) {
