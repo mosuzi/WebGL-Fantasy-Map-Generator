@@ -1,5 +1,6 @@
 import {sampleOceanCurrent} from "../generator/ocean-currents.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
+import {routeVisualPath} from "../geometry/route-visual-path.js";
 import {measurementDisplayPoints} from "../runtime/measurement-objects.js";
 import {POLITICAL_OBJECT_FIELD} from "../runtime/object-kinds.js";
 import {compositeConnectorPoints} from "./composite-connectors.js";
@@ -108,7 +109,7 @@ export function listHoverGeometry(map, object, pointForObject) {
     }
   } else if (kind === "route") {
     const route = map.settlements.routes.find(item => item.id === id);
-    if (route) points = smoothWorldPath(route.points, {iterations: 1, factor: 0.16});
+    if (route) points = routeVisualPath(route).points;
   } else if (kind === "ocean-current") {
     const current = map.oceanCurrents?.currents?.find(item => String(item.id) === String(id));
     if (current) {

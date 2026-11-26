@@ -3,6 +3,7 @@ import {buildObjectPickingIndex, CITY_PICK_RADIUS_CSS_PX, pickCity, pickGridCell
 import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {manualLabelPlacement} from "./manual-label-path.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
+import {routeCurveTolerance, routeVisualPath, ROUTE_CURVE_MAX_OFFSET} from "../geometry/route-visual-path.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {colorForCell, colorForHeight, isLandCell} from "./color-modes.js";
@@ -22,7 +23,6 @@ import {
   clamp,
   isWorldPoint,
   mix,
-  smoothWorldPath,
   smoothWorldPathWithValues,
 } from "./geometry.js";
 import {
@@ -205,7 +205,6 @@ const MAX_OVERLAY_COLLISION_BOXES = 900;
 const ROUTE_BUILD_SLICE_MS = 5;
 const RIVER_BUILD_SLICE_MS = 5;
 const DEBUG_CONTEXT_RESTORE_TIMEOUT_MS = 120_000;
-const MAX_ROUTE_RENDER_POINTS_PER_ROUTE = 4096;
 const MAX_ROUTE_RENDER_POINTS_TOTAL = 90000;
 const MAX_ROUTE_RENDER_VERTICES = 900000;
 const MAX_ROUTE_DASH_PIECES = 20000;
@@ -8224,7 +8223,6 @@ function pushGradientTriangle(vertices, context, a, b, c, colorA, colorB, colorC
 
 const LINE_SMOOTHING = Object.freeze({
   river: Object.freeze({iterations: 1, factor: 0.2}),
-  route: Object.freeze({iterations: 1, factor: 0.16}),
   riverSelection: Object.freeze({iterations: 1, factor: 0.18})
 });
 
@@ -8268,7 +8266,7 @@ function screenPixelToWorldPoint(map, camera, width, height, x, y) {
   ];
 }
 
-function worldPathIntersectsBounds(points, bounds) {
+function worldPathIntersectsBounds(points, bounds, padding = 0) {
   if (!bounds || !Array.isArray(points) || points.length < 2) return true;
   let minX = Infinity;
   let minY = Infinity;
@@ -8282,7 +8280,8 @@ function worldPathIntersectsBounds(points, bounds) {
     maxY = Math.max(maxY, point[1]);
   }
   if (minX === Infinity) return false;
-  return maxX >= bounds.minX && minX <= bounds.maxX && maxY >= bounds.minY && minY <= bounds.maxY;
+  return maxX + padding >= bounds.minX && minX - padding <= bounds.maxX
+    && maxY + padding >= bounds.minY && minY - padding <= bounds.maxY;
 }
 
 export function riverVisualPolicyForRendering(map, riverOrId) {
@@ -8810,15 +8809,31 @@ function createRouteMeshBuild(map, camera, canvas, selection, objectHighlights, 
 function pushRouteMesh(build, route) {
   if (build.stats.vertexBudgetExceeded || build.stats.pointBudgetExceeded) return false;
   build.stats.routes++;
-  const points = normalizeRouteRenderPath(route.points, build.stats);
+  if (!Array.isArray(route?.points) || route.points.length < 2) {
+    build.stats.skippedRoutes++;
+    return true;
+  }
+  build.stats.sourcePoints += route.points.length;
+  if (!worldPathIntersectsBounds(route.points, build.viewportBounds, ROUTE_CURVE_MAX_OFFSET)) {
+    build.stats.culledRoutes++;
+    return true;
+  }
+  if (build.stats.renderPoints + route.points.length > MAX_ROUTE_RENDER_POINTS_TOTAL) {
+    build.stats.pointBudgetExceeded = true;
+    build.stats.truncatedRoutes++;
+    return false;
+  }
+  const {cssPerWorldX, cssPerWorldY} = build.projection;
+  const path = routeVisualPath(route, routeCurveTolerance(Math.max(cssPerWorldX, cssPerWorldY)));
+  const points = path.points;
+  build.stats.invalidPoints += path.invalid;
+  build.stats.duplicatePoints += path.duplicates;
   if (points.length < 2) {
     build.stats.skippedRoutes++;
     return true;
   }
-  if (!worldPathIntersectsBounds(points, build.viewportBounds)) {
-    build.stats.culledRoutes++;
-    return true;
-  }
+  build.stats.renderPoints += path.anchors;
+  build.stats.smoothedPoints += points.length;
   const selected = isSelectedOrHighlighted(build.selection, build.objectHighlights, OBJECT_KIND.ROUTE, route.id);
   const style = resolveRouteStyle(route, build.visualTheme);
   const baseProjection = projectWorldLineWidth(style.worldWidth, build.projection);
@@ -8834,18 +8849,18 @@ function pushRouteMesh(build, route) {
     gapPx: style.dash[1] * build.projection.backingPerCss,
     maxPieces: MAX_ROUTE_DASH_PIECES
   } : null;
-  const smoothed = smoothWorldPath(points, LINE_SMOOTHING.route);
-  build.stats.smoothedPoints += smoothed.length;
   const isMaskedSeaRoute = route.type === "searoute" && !selected;
   const target = isMaskedSeaRoute ? build.seaLandVertices : build.vertices;
   const before = target.length;
-  pushScreenPolyline(target, build.context, smoothed, color, widthPx, dash);
+  pushScreenPolyline(target, build.context, points, color, widthPx, dash, 0);
   let addedVertices = (target.length - before) / 6;
   if (isMaskedSeaRoute && addedVertices > 0) {
-    const seaBefore = build.seaWaterVertices.length;
-    const seaColor = withProjectedLineAlpha(style.seaColor, baseProjection.alpha);
-    pushScreenPolyline(build.seaWaterVertices, build.context, smoothed, seaColor, widthPx, dash);
-    addedVertices += (build.seaWaterVertices.length - seaBefore) / 6;
+    const [red, green, blue, alpha] = withProjectedLineAlpha(style.seaColor, baseProjection.alpha);
+    // 水陆颜色由同一组位置顶点生成，避免跨岸时两次细分产生不同轮廓。
+    for (let index = before; index < target.length; index += 6) {
+      build.seaWaterVertices.push(target[index], target[index + 1], red, green, blue, alpha);
+    }
+    addedVertices *= 2;
     build.stats.maskedSeaRoutes++;
   }
   if (addedVertices <= 0) return true;
@@ -8904,54 +8919,6 @@ async function finalizeRouteMeshBuildAsync(build, {yieldToBrowser, sliceMs, shou
     },
     stats: normalizeRouteRenderStats(build.stats)
   };
-}
-
-function normalizeRouteRenderPath(points, stats) {
-  if (!Array.isArray(points) || points.length < 2) return [];
-  stats.sourcePoints += points.length;
-  const normalized = [];
-  let previous = null;
-  for (const point of points) {
-    if (!isWorldPoint(point)) {
-      stats.invalidPoints++;
-      continue;
-    }
-    if (previous && Math.hypot(point[0] - previous[0], point[1] - previous[1]) <= 0.001) {
-      stats.duplicatePoints++;
-      continue;
-    }
-    normalized.push(point);
-    previous = point;
-  }
-  if (normalized.length < 2) return [];
-
-  const remaining = MAX_ROUTE_RENDER_POINTS_TOTAL - stats.renderPoints;
-  if (remaining < 2) {
-    stats.pointBudgetExceeded = true;
-    stats.truncatedRoutes++;
-    return [];
-  }
-
-  const limit = Math.min(MAX_ROUTE_RENDER_POINTS_PER_ROUTE, remaining);
-  const result = normalized.length > limit ? decimateRoutePath(normalized, limit) : normalized;
-  if (result.length < normalized.length) {
-    stats.decimatedRoutes++;
-    stats.decimatedPoints += normalized.length - result.length;
-    if (remaining <= MAX_ROUTE_RENDER_POINTS_PER_ROUTE) stats.pointBudgetExceeded = true;
-  }
-  stats.renderPoints += result.length;
-  return result;
-}
-
-function decimateRoutePath(points, limit) {
-  if (points.length <= limit) return points;
-  const count = Math.max(2, Math.round(limit));
-  const result = [];
-  const last = points.length - 1;
-  for (let index = 0; index < count; index++) {
-    result.push(points[Math.round((index / (count - 1)) * last)]);
-  }
-  return result;
 }
 
 function emptyRouteRenderStats(projection = null) {

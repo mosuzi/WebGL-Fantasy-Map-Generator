@@ -133,10 +133,10 @@ function pushWorldCircle(vertices, context, center, radius, color, segments = 10
   }
 }
 
-export function pushScreenPolyline(vertices, context, points, color, widthPx, dash = null) {
+export function pushScreenPolyline(vertices, context, points, color, widthPx, dash = null, minimumSpacing = 0.5) {
   const screenPoints = points
     .map(point => worldToScreenPixel(context, point))
-    .filter((point, index, list) => index === 0 || Math.hypot(point.x - list[index - 1].x, point.y - list[index - 1].y) > 0.5);
+    .filter((point, index, list) => index === 0 || Math.hypot(point.x - list[index - 1].x, point.y - list[index - 1].y) > minimumSpacing);
   if (screenPoints.length < 2) return;
   if (dash) {
     pushDashedScreenPolyline(vertices, context, screenPoints, color, widthPx, dash);

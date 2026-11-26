@@ -10,6 +10,36 @@ import {
 } from "../app/webgl-generator/src/renderer/route-style.js";
 import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 import {buildObjectPickingIndex, pickRoute} from "../app/webgl-generator/src/renderer/picking.js";
+import {routeCurveTolerance, routeVisualPath} from "../app/webgl-generator/src/geometry/route-visual-path.js";
+import {listHoverGeometry} from "../app/webgl-generator/src/renderer/list-hover-geometry.js";
+
+// 玩家地图上主路的中间拐点与次级道路的末端共用这个坐标。
+const junction = [255.75, 661.59];
+const trunk = {id: 37, type: "road", points: [[241.45, 661.65], junction, [247.69, 677.23]]};
+const branch = {id: 26, type: "road", points: [[268.54, 642.69], [262.44, 650.62], junction]};
+const path = routeVisualPath(trunk);
+const crossing = path.spans[0][1];
+assert.deepEqual(path.points[crossing], junction);
+assert.deepEqual(routeVisualPath(branch).points.at(-1), junction);
+const pointsAroundJunction = path.points.slice(crossing - 1, crossing + 2);
+assert.equal(pointsAroundJunction.length, 3);
+assert.ok(path.points.length > trunk.points.length, "路口两侧应生成平滑曲线");
+const distant = routeVisualPath(trunk, routeCurveTolerance(0.5));
+assert.deepEqual(distant.points[distant.spans[0][1]], junction);
+assert.ok(distant.points.length < path.points.length, "远景应减少采样并保留路口");
+
+const offsetPoint = path.points.slice(1, crossing).find(point => Math.abs(point[1] - junction[1]) > 0.45);
+assert.ok(offsetPoint, "夹具应命中偏离旧折线的可见曲线");
+const routeMap = {metadata: {graphWidth: 1024, graphHeight: 768}, settlements: {routes: [trunk, branch], cities: []}};
+const picking = buildObjectPickingIndex(routeMap, {components: ["routeSegments"]});
+assert.equal(picking.routeSegmentCount, 4);
+assert.equal(pickRoute(routeMap, picking, ...offsetPoint, 0.2)?.id, trunk.id);
+assert.equal(pickRoute(routeMap, null, ...offsetPoint, 0.2)?.id, trunk.id);
+assert.strictEqual(listHoverGeometry(routeMap, {kind: "route", id: trunk.id})[0].points, path.points);
+const duplicate = routeVisualPath({type: "trail", points: [trunk.points[0], junction, junction, trunk.points[2]]});
+assert.equal(duplicate.duplicates, 1);
+assert.equal(duplicate.spans[1], undefined);
+assert.deepEqual(duplicate.points[duplicate.spans[2][0]], junction);
 
 const theme = {
   lines: {
