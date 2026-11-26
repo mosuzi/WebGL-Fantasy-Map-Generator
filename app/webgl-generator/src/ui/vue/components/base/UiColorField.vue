@@ -4,25 +4,24 @@
       <span>{{ label }}</span>
       <i class="ui-hsl-color-swatch" :style="{backgroundColor: value}"></i>
       <strong>{{ value }}</strong>
+      <div class="ui-color-modes" role="group" aria-label="颜色模式">
+        <button v-for="option in ['RGB', 'HSL']" :key="option" type="button"
+          :aria-pressed="mode === option" @click="mode = option">{{ option }}</button>
+      </div>
     </div>
 
-    <label class="ui-hsl-channel ui-hsl-channel-hue">
-      <span>H</span>
-      <input type="range" min="0" max="360" step="1" :value="hsl.hue" @input="event => setChannel('hue', event.target.value)" @change="commitColor" />
-      <input type="number" min="0" max="360" step="1" :value="hsl.hue" @input="event => setChannel('hue', event.target.value)" @change="commitColor" @keydown.enter.prevent="commitColor" />
-    </label>
+    <UiColorPickerPanel v-if="mode === 'RGB'" :color="value" @preview="setColor" @apply="chooseColor" />
 
-    <label class="ui-hsl-channel">
-      <span>S</span>
-      <input type="range" min="0" max="100" step="1" :value="hsl.saturation" :style="{background: saturationGradient}" @input="event => setChannel('saturation', event.target.value)" @change="commitColor" />
-      <input type="number" min="0" max="100" step="1" :value="hsl.saturation" @input="event => setChannel('saturation', event.target.value)" @change="commitColor" @keydown.enter.prevent="commitColor" />
-    </label>
-
-    <label class="ui-hsl-channel">
-      <span>L</span>
-      <input type="range" min="0" max="100" step="1" :value="hsl.lightness" :style="{background: lightnessGradient}" @input="event => setChannel('lightness', event.target.value)" @change="commitColor" />
-      <input type="number" min="0" max="100" step="1" :value="hsl.lightness" @input="event => setChannel('lightness', event.target.value)" @change="commitColor" @keydown.enter.prevent="commitColor" />
-    </label>
+    <div class="ui-color-channels" :class="{'is-rgb': mode === 'RGB'}">
+      <div v-for="channel in channels" :key="channel.key" class="ui-hsl-channel">
+        <span :title="channel.name">{{ channel.short }}</span>
+        <input v-if="mode === 'HSL'" type="range" min="0" :max="channel.max" step="1" :value="channel.value" :aria-label="channel.name + '滑块'"
+          :style="{background: channel.gradient}" @input="setChannel(channel, $event.target.valueAsNumber)" @change="commitColor" />
+        <input type="number" min="0" :max="channel.max" step="1" :value="channel.value" :aria-label="channel.name"
+          @input="previewNumber(channel, $event.target)"
+          @change="commitNumber(channel, $event.target)" @keydown.enter.prevent="commitNumber(channel, $event.target)" />
+      </div>
+    </div>
 
     <label class="ui-hsl-hex-field">
       <span>HEX</span>
@@ -47,6 +46,7 @@
 
 <script setup>
 import {computed, reactive, ref, watch} from "vue";
+import UiColorPickerPanel from "./UiColorPickerPanel.vue";
 
 defineOptions({
   name: "UiColorField"
@@ -69,9 +69,16 @@ const props = defineProps({
 
 const emit = defineEmits(["apply"]);
 
+const mode = ref("RGB");
+const rgbChannels = [
+  {key: "red", short: "R", name: "红色"},
+  {key: "green", short: "G", name: "绿色"},
+  {key: "blue", short: "B", name: "蓝色"}
+];
 const value = ref(normalizeHexColor(props.modelValue) || "#ffffff");
 const hexDraft = ref(value.value);
 const hsl = reactive(hexToHsl(value.value));
+const rgb = computed(() => hexToRgb(value.value));
 let lastEmittedColor = null;
 const predefinedColors = [
   "#c94c4c",
@@ -95,17 +102,47 @@ const lightnessGradient = computed(() => {
   return `linear-gradient(to right, #000000, ${middle}, #ffffff)`;
 });
 
+const channels = computed(() => {
+  if (mode.value === "HSL") return [
+    {key: "hue", short: "H", name: "色相", max: 360, value: hsl.hue,
+      gradient: "linear-gradient(to right, red, yellow, lime, cyan, blue, magenta, red)"},
+    {key: "saturation", short: "S", name: "饱和度", max: 100, value: hsl.saturation, gradient: saturationGradient.value},
+    {key: "lightness", short: "L", name: "亮度", max: 100, value: hsl.lightness, gradient: lightnessGradient.value}
+  ];
+  return rgbChannels.map(channel => ({...channel, max: 255, value: rgb.value[channel.key]}));
+});
+
 watch(() => props.modelValue, next => {
-  setColor(next || "#ffffff");
+  if (normalizeHexColor(next) !== value.value) setColor(next);
   lastEmittedColor = null;
 });
 
-function setChannel(channel, rawValue) {
-  const limits = channel === "hue" ? [0, 360] : [0, 100];
-  hsl[channel] = clamp(Math.round(Number(rawValue) || 0), limits[0], limits[1]);
+function setChannel(channel, next) {
+  if (next === channel.value) return;
+  if (mode.value === "RGB") {
+    setColor(rgbToHex({...rgb.value, [channel.key]: next}));
+    return;
+  }
+  hsl[channel.key] = next;
   value.value = hslToHex(hsl.hue, hsl.saturation, hsl.lightness);
   hexDraft.value = value.value;
   lastEmittedColor = null;
+}
+
+function previewNumber(channel, input) {
+  if (input.validity.valid && Number.isFinite(input.valueAsNumber)) setChannel(channel, input.valueAsNumber);
+}
+
+function commitNumber(channel, input) {
+  if (Number.isFinite(input.valueAsNumber)) {
+    const next = clamp(Math.round(input.valueAsNumber), 0, channel.max);
+    input.value = String(next);
+    setChannel(channel, next);
+    commitColor();
+  } else {
+    setColor(props.modelValue);
+    input.value = String(channels.value.find(item => item.key === channel.key).value);
+  }
 }
 
 function setColor(color) {
@@ -153,11 +190,17 @@ function normalizeHexColor(color) {
   return full ? `#${full[1].toLowerCase()}` : null;
 }
 
+function hexToRgb(color) {
+  return {red: parseInt(color.slice(1, 3), 16), green: parseInt(color.slice(3, 5), 16), blue: parseInt(color.slice(5), 16)};
+}
+
+function rgbToHex({red, green, blue}) {
+  return `#${hexByte(red)}${hexByte(green)}${hexByte(blue)}`;
+}
+
 function hexToHsl(color) {
-  const normalized = normalizeHexColor(color) || "#ffffff";
-  const red = Number.parseInt(normalized.slice(1, 3), 16) / 255;
-  const green = Number.parseInt(normalized.slice(3, 5), 16) / 255;
-  const blue = Number.parseInt(normalized.slice(5, 7), 16) / 255;
+  const bytes = hexToRgb(color);
+  const red = bytes.red / 255, green = bytes.green / 255, blue = bytes.blue / 255;
   const max = Math.max(red, green, blue);
   const min = Math.min(red, green, blue);
   const lightness = (max + min) / 2;

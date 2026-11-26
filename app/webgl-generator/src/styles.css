@@ -3175,12 +3175,48 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .ui-hsl-color-header {
-  display: grid;
-  grid-template-columns: minmax(40px, auto) 38px minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   color: var(--panel-text);
   font-size: 12px;
+}
+
+.ui-color-modes {
+  display: inline-flex;
+  margin-inline-start: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+}
+
+.ui-color-modes button {
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--panel-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ui-color-modes button[aria-pressed="true"] {
+  background: var(--panel-accent-soft);
+  color: var(--panel-accent);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--panel-accent);
+}
+
+.ui-key-value-item:has(.ui-inline-color) {
+  grid-column: 1 / -1;
+}
+
+.ui-key-value-item .ui-inline-field:has(.ui-inline-color) {
+  width: min(100%, 24rem);
+}
+
+.ui-inline-color .ui-hsl-color-header > span {
+  display: none;
 }
 
 .ui-hsl-color-header strong {
@@ -3205,11 +3241,25 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 
 .ui-hsl-channel {
   display: grid;
-  grid-template-columns: 18px minmax(120px, 1fr) 58px;
+  grid-template-columns: 18px minmax(0, 1fr) 58px;
   align-items: center;
   gap: 8px;
   color: var(--panel-text);
   font-size: 12px;
+}
+
+.ui-color-channels {
+  display: grid;
+  gap: 8px;
+}
+
+.ui-color-channels.is-rgb {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ui-color-channels.is-rgb .ui-hsl-channel {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px;
 }
 
 .ui-hsl-channel span,
@@ -3290,14 +3340,15 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .ui-hsl-predefined {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .ui-hsl-predefined button {
-  width: 100%;
+  width: 24px;
   height: 24px;
+  padding: 0;
   border: 1px solid var(--panel-border);
   border-radius: 5px;
   cursor: pointer;

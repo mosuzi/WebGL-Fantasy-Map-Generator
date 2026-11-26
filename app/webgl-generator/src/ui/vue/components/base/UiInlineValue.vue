@@ -46,7 +46,7 @@ function start() {
   editing.value = true;
   const field = trigger.value?.parentElement;
   nextTick(() => {
-    if (props.editor.type === "color") field?.querySelector("input")?.focus();
+    if (props.editor.type === "color") field?.querySelector('.ui-color-modes [aria-pressed="true"]')?.focus();
     else {input.value?.focus(); input.value?.select();}
   });
 }
