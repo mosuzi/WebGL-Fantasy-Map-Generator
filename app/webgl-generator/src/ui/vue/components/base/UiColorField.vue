@@ -14,7 +14,7 @@
         <i class="ui-hsl-color-swatch" :style="{backgroundColor: value}"></i>
         <strong>{{ value }}</strong>
         <div class="ui-color-modes" role="group" aria-label="颜色模式">
-          <button v-for="option in ['RGB', 'HSL']" :key="option" type="button"
+          <button v-for="option in ['HSL', 'RGB']" :key="option" type="button"
             :aria-pressed="mode === option" @click="mode = option">{{ option }}</button>
         </div>
       </div>
@@ -53,8 +53,14 @@
   </ElPopover>
 </template>
 
+<script>
+import {ref} from "vue";
+
+const mode = ref("HSL");
+</script>
+
 <script setup>
-import {computed, reactive, ref, useId, watch} from "vue";
+import {computed, reactive, useId, watch} from "vue";
 import UiColorPickerPanel from "./UiColorPickerPanel.vue";
 
 defineOptions({
@@ -101,7 +107,6 @@ function openPicker() {
   if (!props.disabled && !open.value) trigger.value?.click();
 }
 defineExpose({openPicker});
-const mode = ref("RGB");
 const rgbChannels = [
   {key: "red", short: "R", name: "红色"},
   {key: "green", short: "G", name: "绿色"},
