@@ -80,6 +80,11 @@ async function profileMap(browserInstance, requestedCells) {
       const brush = window.__webglGeneratorApp.panels.height.getBrush();
       return brush.active && brush.action === "lower" && !brush.preserveSurface && !brush.falloff && brush.strength === 5;
     });
+    // 跨水陆像素断言只观察地表及岸线。行政线在高程提交后独立更新。
+    for (const layer of ["stateBorders", "provinceBorders"]) {
+      const result = await page.evaluate(layer => window.webglGeneratorApi.layers.setVisible(layer, false), layer);
+      assert.ok(result.ok, result.error?.message);
+    }
     const topologySamples = [];
     if (requestedCells === 100000) {
       const other = await page.evaluate(findVisibleShoreCellPoint, crossingCenter);

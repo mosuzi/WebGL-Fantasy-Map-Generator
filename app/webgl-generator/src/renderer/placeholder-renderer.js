@@ -1932,6 +1932,25 @@ export class PlaceholderMapRenderer {
     ].every(([key, vertices]) => this.shoreSurfaceCellRanges?.[key] instanceof Map && vertices instanceof Float32Array);
   }
 
+  async prewarmGpuResidentShoreSurfaceByRecolor(mode, viewOptions = this.viewOptions, {yieldToMain = defaultRendererYield} = {}) {
+    if (!this.needsGpuResidentShoreSurfacePrewarm(mode, viewOptions)) return true;
+    if (!this.canRecolorGpuResidentShoreSurface()) return false;
+    const map = this.map;
+    const binding = this.surfaceResourceOwner;
+    const paths = this.shoreVisualPaths;
+    const recolored = await recolorShoreSurfaceVertexLayers({
+      landCorrections: this.landCorrectionVertices,
+      waterCorrections: this.waterCorrectionVertices,
+      landCovers: this.landCoverVertices,
+      waterCovers: this.waterCoverVertices,
+      cellRanges: this.shoreSurfaceCellRanges,
+      shorePathEnds: this.shorePathEnds
+    }, map, mode, viewOptions, {yieldToMain});
+    if (!recolored || this.map !== map || this.shoreVisualPaths !== paths) return false;
+    const key = gpuResidentShoreSurfaceKey(mode, viewOptions);
+    return this.installGpuResidentShoreSurfacePrewarm({entries: [{...recolored, key, mode}]}, binding);
+  }
+
   installGpuResidentShoreSurfacePrewarm(prepared, binding) {
     const normalized = normalizeRenderResourceBinding(binding, "renderer.gpuShorePrewarm.binding");
     if (!sameRenderResourceBinding(normalized, this.surfaceResourceOwner)) return false;
@@ -1974,23 +1993,8 @@ export class PlaceholderMapRenderer {
     const map = this.map;
     const previousTheme = this.visualTheme;
     const targetViewOptions = {...this.viewOptions, visualTheme: theme};
-    if (this.needsGpuResidentShoreSurfacePrewarm(this.colorMode, targetViewOptions)) {
-      if (!this.canRecolorGpuResidentShoreSurface()) throw new Error("当前海岸显示不能复用既有形状");
-      const recolored = await recolorShoreSurfaceVertexLayers({
-        landCorrections: this.landCorrectionVertices,
-        waterCorrections: this.waterCorrectionVertices,
-        landCovers: this.landCoverVertices,
-        waterCovers: this.waterCoverVertices,
-        cellRanges: this.shoreSurfaceCellRanges
-      }, map, this.colorMode, targetViewOptions, {yieldToMain});
-      if (!recolored || this.map !== map || this.visualTheme !== previousTheme) throw new Error("海岸显示已变化，请重新选择主题");
-      const ownerKey = gpuResidentShoreSurfaceOwnerKey(this.surfaceResourceOwner);
-      if (this.gpuResidentShoreSurfaceCacheOwnerKey !== ownerKey) {
-        this.gpuResidentShoreSurfaceCache.clear();
-        this.gpuResidentShoreSurfaceCacheOwnerKey = ownerKey;
-      }
-      cacheGpuResidentShoreSurface(this, gpuResidentShoreSurfaceKey(this.colorMode, targetViewOptions), recolored);
-    }
+    if (!await this.prewarmGpuResidentShoreSurfaceByRecolor(this.colorMode, targetViewOptions, {yieldToMain})
+      || this.map !== map || this.visualTheme !== previousTheme) throw new Error("海岸显示已变化，请重新选择主题");
     this.visualTheme = theme;
     this.viewOptions = targetViewOptions;
     applyMapStageBackground(this.stage, map, theme);

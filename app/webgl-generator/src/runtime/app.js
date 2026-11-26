@@ -3594,11 +3594,18 @@ function createRuntimeActions(state, documentRef, options = {}) {
       setViewMode: mode => {
         return runDisplayMutation(
           "layers.setViewMode",
-          () => setRuntimeViewMode(state, documentRef, mode),
+          async useGpuResident => {
+            const renderer = state.renderer;
+            if (useGpuResident && renderer?.needsGpuResidentShoreSurfacePrewarm?.(mode)) {
+              const ready = await renderer.prewarmGpuResidentShoreSurfaceByRecolor(mode);
+              if (!ready) throw new Error("海岸显示已变化，请重新选择视图");
+            }
+            return setRuntimeViewMode(state, documentRef, mode);
+          },
           previous => setRuntimeViewMode(state, documentRef, previous),
           {intentKey: "view-mode", capturePrevious: () => state.renderer?.colorMode || "height",
             gpuResident: () => state.renderer?.canPresentGpuResidentColorMode?.(mode) === true
-              && !state.renderer?.needsGpuResidentShoreSurfacePrewarm?.(mode)}
+              && (!state.renderer?.needsGpuResidentShoreSurfacePrewarm?.(mode) || state.renderer?.canRecolorGpuResidentShoreSurface?.())}
         );
       },
       setVisible: (layer, visible) => {

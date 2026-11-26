@@ -63,8 +63,8 @@ const outPath = resolve(args.out || join(rootDir, "docs", "generated", "reports"
 const markdownPath = resolve(args.markdown || join(rootDir, "docs", "generated", "reports", "shoreline-regression-results.md"));
 const screenshotDir = resolve(args["screenshot-dir"] || join(rootDir, "docs", "generated", "reports", "shoreline-regression"));
 const viewport = parseViewport(args.viewport || "1280x820");
-const minSmoothLineTriangles = Number(args["min-smooth-line-triangles"] || 30000);
-const minHardLineTriangles = Number(args["min-hard-line-triangles"] || 25000);
+const minSmoothLineTriangles = Number(args["min-smooth-line-triangles"] || 0);
+const minHardLineTriangles = Number(args["min-hard-line-triangles"] || 0);
 const maxSwitchMs = Number(args["max-switch-ms"] || 1500);
 const maxShoreCacheMs = Number(args["max-shore-cache-ms"] || 1400);
 
@@ -245,23 +245,36 @@ async function collectCase(page, {mode, smoothCellBorders, expectedBoundaryLineM
   const stats = await page.evaluate(async ({mode, smoothCellBorders}) => {
     const app = window.__webglGeneratorApp;
     const renderer = app.renderer;
+    const longTasks = [];
+    const observer = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => entry.duration)));
+    observer.observe({type: "longtask"});
     const started = performance.now();
-    renderer.setViewOptions({smoothCellBorders});
-    renderer.setColorMode(mode);
-    renderer.draw();
-    renderer.gl.finish();
-    await new Promise(resolve => requestAnimationFrame(resolve));
+    try {
+      const boundary = await window.webglGeneratorApi.layers.setSmoothCellBorders(smoothCellBorders);
+      if (!boundary.ok) throw new Error(boundary.error.message);
+      const view = await window.webglGeneratorApi.layers.setViewMode(mode);
+      if (!view.ok) throw new Error(view.error.message);
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      longTasks.push(...observer.takeRecords().map(entry => entry.duration));
+    } finally {
+      observer.disconnect();
+    }
     const switchMs = Math.round((performance.now() - started) * 10) / 10;
     const stats = renderer.getStats();
+    const boundary = renderer.getDisplayState().boundaryPresentation;
     return {
       mode,
       smoothCellBorders,
       switchMs,
+      longestTaskMs: Math.max(0, ...longTasks),
       cellSurfaceMode: stats.cellSurfaceMode,
       boundaryLineMode: stats.boundaryLineMode,
       vertexCount: stats.vertexCount,
       lineVertexCount: stats.lineVertexCount,
       lineTriangleCount: stats.lineTriangleCount,
+      boundaryCanonical: boundary.canonical,
+      shoreLineVertexCount: boundary.shoreLineVertexCount,
+      expectedShoreLineVertexCount: smoothCellBorders ? boundary.smoothShoreLineVertexCount : boundary.hardShoreLineVertexCount,
       cellVisualMesh: stats.cellVisualMesh || null,
       coastlineVisible: stats.layerVisibility.coastline !== false,
       lakeShoreVisible: stats.layerVisibility.lakeShore !== false,
@@ -293,6 +306,11 @@ function validateCase(stats, {expectedBoundaryLineMode, minLineTriangles}) {
   if (stats.boundaryLineMode !== expectedBoundaryLineMode) failures.push(`boundaryLineMode expected ${expectedBoundaryLineMode}, got ${stats.boundaryLineMode}`);
   if (stats.lineTriangleCount < minLineTriangles) failures.push(`lineTriangleCount expected >= ${minLineTriangles}, got ${stats.lineTriangleCount}`);
   if (stats.lineVertexCount % 3 !== 0) failures.push(`lineVertexCount should be divisible by 3, got ${stats.lineVertexCount}`);
+  if (!stats.boundaryCanonical) failures.push("显示模式必须使用对应的规范岸线与表面");
+  if (!(stats.shoreLineVertexCount > 0) || stats.shoreLineVertexCount % 3 !== 0
+    || stats.shoreLineVertexCount !== stats.expectedShoreLineVertexCount) {
+    failures.push(`岸线顶点应来自当前岸线网格，期望 ${stats.expectedShoreLineVertexCount}，实际 ${stats.shoreLineVertexCount}`);
+  }
   if (!stats.coastlineVisible || !stats.lakeShoreVisible) failures.push("coastline/lakeShore layer should stay visible");
   if (stats.loadingState === "error" || !stats.loadingHidden) failures.push(`loading screen should stay hidden and non-error, got ${stats.loadingState}/${stats.loadingHidden}`);
   if (stats.smoothCellBorders) {
@@ -331,6 +349,7 @@ function validateCase(stats, {expectedBoundaryLineMode, minLineTriangles}) {
   }
   if (stats.vertexCount <= 0) failures.push(`vertexCount should be positive, got ${stats.vertexCount}`);
   if (stats.switchMs > maxSwitchMs) failures.push(`switchMs expected <= ${maxSwitchMs}ms, got ${stats.switchMs}ms`);
+  if (stats.longestTaskMs > 200) failures.push(`岸线视图切换最长任务超过 200ms，实测 ${stats.longestTaskMs}ms`);
   return failures;
 }
 
@@ -351,7 +370,7 @@ function renderMarkdown(report) {
   lines.push(`- 生成耗时：\`${report.generation.elapsedMs}ms\``);
   lines.push("");
   lines.push("## 判定结果", "");
-  lines.push("| 模式 | 平滑 | 边界线来源 | surface | cell 三角化 | 回退 cell | 切换耗时 | GPU 顶点 | 轮廓三角形 | WebGL error | 截图 | 结果 |");
+  lines.push("| 模式 | 平滑 | 边界线来源 | surface | cell 三角化 | 回退 cell | 切换耗时 | GPU 顶点 | 岸线三角形 | WebGL error | 截图 | 结果 |");
   lines.push("|---|---:|---|---|---|---:|---:|---:|---:|---:|---|---|");
   for (const item of report.cases) {
     lines.push([
@@ -363,7 +382,7 @@ function renderMarkdown(report) {
       item.cellVisualMesh?.triangulationFallbackCells ?? "—",
       `${item.switchMs}ms`,
       item.vertexCount,
-      item.lineTriangleCount,
+      item.shoreLineVertexCount / 3,
       item.glError,
       `\`${item.screenshotFile}\``,
       item.passed ? "通过" : `失败：${item.failures.join("；")}`
@@ -518,6 +537,32 @@ function runPureRegression() {
   );
   assert.deepEqual(snapshot.paths[0].renderPoints[0], openPath.points[0], "开放 arc 起点必须锁定");
   assert.deepEqual(snapshot.paths[0].renderPoints.at(-1), openPath.points.at(-1), "开放 arc 终点必须锁定");
+
+  const corner = transformRecommendedShoreArc([[0, 0], [20, 0], [20, 20]], {threshold: 0});
+  assert.deepEqual(corner[0], [0, 0]);
+  assert.deepEqual(corner[1], [11, 0]);
+  assert.deepEqual(corner.at(-2), [20, 9]);
+  assert.deepEqual(corner.at(-1), [20, 20]);
+  assert.ok(corner.some(([x, y]) => x === 17.75 && y === 2.25), "二次曲线应采到圆角中点");
+  assert.ok(!corner.some(([x, y]) => x === 20 && y === 0), "圆角不得保留原直角尖点");
+
+  const windingCoast = [[0, 0], [5, 4], [10, -4], [15, 0]];
+  const openCoast = {
+    closed: false,
+    points: windingCoast,
+    renderPoints: transformRecommendedShoreArc(windingCoast, {threshold: 0}),
+    sideVectors: windingCoast.map(() => ({x: 0, y: 1})),
+    landCells: [1, 1, 1, 1],
+    waterCells: [2, 2, 2, 2]
+  };
+  const openStroke = buildShoreRenderPoints(openCoast, null);
+  assert.deepEqual(openStroke[0], windingCoast[0]);
+  assert.deepEqual(openStroke.at(-1), windingCoast.at(-1), "填色辅助闭合边不得进入描边");
+  assert.notDeepEqual(openStroke, windingCoast);
+  const openCoastTriangles = buildShoreSurfaceCorrectionTriangles(openCoast, null);
+  assert.deepEqual(new Set(openCoastTriangles.map(triangle => triangle.side)), new Set(["land", "water"]));
+  assert.ok(openCoastTriangles.every(triangle => triangle.points.every(([x, y]) => x >= 0 && x <= 15 && Math.abs(y) <= 4)),
+    "填色三角形不得延伸到辅助闭合边");
 
   const closed = [[0, 0], [8, 0], [9, 6], [4, 9], [-1, 5], [0, 0]];
   const closedRender = transformRecommendedShoreArc(closed);
@@ -1340,11 +1385,11 @@ function replayFormalFallbackCovers(formalPackets, map, cellVisualMesh) {
   };
   const graphWidth = map.metadata.graphWidth;
   const graphHeight = map.metadata.graphHeight;
+  const rasterPadding = 4 * Math.max(...viewports.flatMap(([width, height]) => [graphWidth / width, graphHeight / height]));
   for (const item of formalPackets) {
     if (!item.packet.boundaryCoverFallbacks.length) continue;
     summary.affectedPathCount++;
-    const sourceRing = item.path.points;
-    const renderRing = buildShoreRenderPoints(item.path, map);
+    const {sourceRing, renderRing} = item.packet;
     const landInside = typeof item.packet.landInside === "boolean" ? item.packet.landInside : inferTestLandInside(item.path);
     const affectedPath = {
       kind: item.kind,
@@ -1364,6 +1409,11 @@ function replayFormalFallbackCovers(formalPackets, map, cellVisualMesh) {
         maxY: Math.max(...ys) + margin
       };
       const basePacket = buildFormalLocalBasePacket(cellVisualMesh, map, bounds);
+      // 重放还会覆盖取整和偏移产生的边缘像素，保留足够覆盖全部像素相位的余量。
+      const commands = item.packet.commands.filter(({positions: [ax, ay, bx, by, cx, cy]}) =>
+        Math.max(ax, bx, cx) >= bounds.minX - rasterPadding && Math.min(ax, bx, cx) <= bounds.maxX + rasterPadding
+        && Math.max(ay, by, cy) >= bounds.minY - rasterPadding && Math.min(ay, by, cy) <= bounds.maxY + rasterPadding);
+      const fastCommands = commands.filter(command => command.coverMode !== "subdivided" && command.coverMode !== "vertex");
       const edgeSummary = {
         side: fallback.side,
         landCell: fallback.landCell,
@@ -1405,12 +1455,10 @@ function replayFormalFallbackCovers(formalPackets, map, cellVisualMesh) {
                 ...common,
                 packet: {
                   ...item.packet,
-                  commands: item.packet.commands.filter(command =>
-                    command.coverMode !== "subdivided" && command.coverMode !== "vertex"
-                  )
+                  commands: fastCommands
                 }
               });
-              const final = rasterDrawPacketPhase({...common, packet: item.packet});
+              const final = rasterDrawPacketPhase({...common, packet: {...item.packet, commands}});
               edgeSummary.phaseCount++;
               edgeSummary.baselineWrongPixels += baseline.wrongSidePixels;
               edgeSummary.wrongSidePixels += final.wrongSidePixels;

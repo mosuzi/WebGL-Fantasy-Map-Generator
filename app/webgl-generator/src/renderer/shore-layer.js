@@ -460,7 +460,7 @@ export function buildShoreSurfaceDrawPacket(path, map) {
         landCell: triangle.landCell,
         waterCell: triangle.waterCell,
         insidePoint: triangleCentroid(triangle.points),
-        targetRings: [model.renderPoints],
+        targetRings: [model.renderRing],
         landInside: model.landInside
       });
     }
@@ -503,6 +503,8 @@ export function buildShoreSurfaceDrawPacket(path, map) {
     fallbackBoundaryCoverCount,
     boundaryCoverFallbacks: Object.freeze(boundaryCoverFallbacks),
     landInside: typeof model.landInside === "boolean" ? model.landInside : null,
+    sourceRing: model.sourceRing,
+    renderRing: model.renderRing,
     surfaceFallbackReason: model.fallbackReason,
     surfaceFallbackDetail: model.fallbackDetail,
     surfaceFallbackLocation: model.fallbackReason === "surface-triangulation-fallback"
@@ -846,32 +848,39 @@ export function buildShoreRenderPoints(path, map) {
 }
 
 function buildShoreSurfaceModel(path, map) {
+  if (!path) return {renderPoints: [], triangles: [], fallbackReason: null, fallbackDetail: null};
   const cached = shoreSurfaceCorrectionCache.get(path);
   if (cached?.map === map) return cached.model;
-  if (!path?.closed) {
-    const model = {renderPoints: [...(path?.points || [])], triangles: [], fallbackReason: "open-arc-shared-source", fallbackDetail: null};
-    if (path) shoreSurfaceCorrectionCache.set(path, {map, model});
-    return model;
-  }
-  const sourcePoints = normalizeClosedShoreRing(path?.points || []);
+  const sourcePoints = normalizeShoreSurfacePath(path.points, path.closed);
   const raw = path.renderPoints || path.points;
   const followsSource = raw.length === path.points.length
     && raw.every((point, index) => point[0] === path.points[index][0] && point[1] === path.points[index][1]);
-  const candidateRenderPoints = (followsSource ? filterShoreRenderSpikes(raw.map(point => ({point}))) : clampedShoreRenderPoints(path)).map(entry => entry.point);
-  const renderPoints = normalizeClosedShoreRing(candidateRenderPoints);
+  let candidate = raw;
+  if (!followsSource) candidate = clampedShoreRenderPoints(path).map(entry => entry.point);
+  else if (path.closed) candidate = filterShoreRenderSpikes(raw.map(point => ({point}))).map(entry => entry.point);
+  const renderPoints = normalizeShoreSurfacePath(candidate, path.closed);
   let model = {
-    renderPoints,
+    renderPoints: renderPoints.length >= 3 ? renderPoints : sourcePoints,
     triangles: [],
     fallbackReason: null,
     fallbackDetail: null
   };
-  if (sourcePoints.length >= 4 && renderPoints.length >= 4) {
+  const unchanged = followsSource && sourcePoints.length === renderPoints.length;
+  if (!unchanged && sourcePoints.length >= 3 && renderPoints.length >= 3) {
     try {
-      const landInside = resolveShoreLandInside(path, sourcePoints);
-      const difference = followsSource && sourcePoints.length === renderPoints.length ? [] : shoreRingDifference(sourcePoints, renderPoints);
-      const triangles = triangulateShoreDifference(difference, sourcePoints, renderPoints, path, landInside);
+      // 裁切、描边和封边使用同一组可写入 Float32 的坐标，避免交界像素两侧采用不同精度。
+      const source = sourcePoints.map(float32ShorePoint);
+      const stroke = renderPoints.map(float32ShorePoint);
+      const closure = path.closed ? [] : openShoreClosure(source, stroke);
+      if (!closure) throw new Error("open-shore-closure-ambiguous");
+      const sourceRing = path.closed ? source : [...source, ...closure];
+      const renderRing = path.closed ? stroke : [...stroke, ...closure];
+      if (Math.sign(polygonArea(sourceRing)) !== Math.sign(polygonArea(renderRing))) throw new Error("shore-interior-side-changed");
+      const landInside = resolveShoreLandInside(path, sourceRing, sourcePoints.length - 1);
+      const difference = shoreRingDifference(sourceRing, renderRing);
+      const triangles = triangulateShoreDifference(difference, sourceRing, renderRing, path, landInside);
       if (!validateShoreDifferenceArea(difference, triangles)) throw new Error("shore-difference-area-mismatch");
-      model = {renderPoints, triangles, landInside, fallbackReason: null, fallbackDetail: null};
+      model = {renderPoints: stroke, sourceRing, renderRing, triangles, landInside, fallbackReason: null, fallbackDetail: null};
     } catch (error) {
       model = {
         renderPoints: [...sourcePoints],
@@ -883,6 +892,79 @@ function buildShoreSurfaceModel(path, map) {
   }
   shoreSurfaceCorrectionCache.set(path, {map, model});
   return model;
+}
+
+function float32ShorePoint([x, y]) {
+  return [Math.fround(x), Math.fround(y)];
+}
+
+// 给裁切器补一条共用闭合边。它避开两条岸线，只参与填色区域的计算。
+function openShoreClosure(source, render) {
+  const start = source[0];
+  const end = source.at(-1);
+  if (!pointsNear(start, render[0]) || !pointsNear(end, render.at(-1))) return null;
+  render[0] = start;
+  render[render.length - 1] = end;
+  const paths = [source, render];
+  if (clearShoreClosureLeg(end, start, paths)) return [start];
+
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const points of paths) {
+    for (const [x, y] of points) {
+      left = Math.min(left, x - 1);
+      top = Math.min(top, y - 1);
+      right = Math.max(right, x + 1);
+      bottom = Math.max(bottom, y + 1);
+    }
+  }
+  const corners = [[left, top], [right, top], [right, bottom], [left, bottom]];
+  const exits = ([x, y]) => [[x, top], [right, y], [x, bottom], [left, y]]
+    .map((point, edge) => ({point, edge}));
+  const departures = exits(end).filter(({point}) => clearShoreClosureLeg(end, point, paths));
+  const arrivals = exits(start).filter(({point}) => clearShoreClosureLeg(start, point, paths));
+  let shortest = null;
+  let bestLength = Infinity;
+  for (const from of departures) {
+    for (const to of arrivals) {
+      if (segmentsIntersect(end, from.point, to.point, start)) continue;
+      for (const direction of [1, -1]) {
+        const perimeter = [from.point];
+        for (let edge = from.edge; edge !== to.edge; edge = (edge + direction + 4) % 4) {
+          perimeter.push(corners[(edge + (direction === 1 ? 1 : 0)) % 4]);
+        }
+        const closure = [...perimeter, to.point, start];
+        const length = closure.reduce((length, point, index) => length + worldDistance(point, index ? closure[index - 1] : end), 0);
+        if (length < bestLength) {
+          bestLength = length;
+          shortest = closure;
+        }
+      }
+    }
+  }
+  return shortest;
+}
+
+function clearShoreClosureLeg(start, end, paths) {
+  const x = end[0] - start[0];
+  const y = end[1] - start[1];
+  for (const path of paths) {
+    for (let index = 1; index < path.length; index++) {
+      const a = path[index - 1];
+      const b = path[index];
+      if (!segmentsIntersect(start, end, a, b)) continue;
+      const endpoint = [start, end].find(point => point === a || point === b);
+      if (!endpoint) return false;
+      const other = endpoint === a ? b : a;
+      const dx = other[0] - endpoint[0];
+      const dy = other[1] - endpoint[1];
+      const sameDirection = (dx * x + dy * y) * (endpoint === start ? 1 : -1) > 0;
+      if (sameDirection && Math.abs(dx * y - dy * x) <= 0.000001) return false;
+    }
+  }
+  return true;
 }
 
 function shoreRingDifference(source, render) {
@@ -905,13 +987,13 @@ function shoreSurfaceFallbackLocation(path, model) {
   });
 }
 
-function normalizeClosedShoreRing(points) {
+function normalizeShoreSurfacePath(points, closed) {
   const result = [];
   for (const point of points || []) {
     if (!isWorldPoint(point)) continue;
     if (!result.length || !pointsNear(result.at(-1), point)) result.push([point[0], point[1]]);
   }
-  if (result.length >= 3 && !pointsNear(result[0], result.at(-1))) result.push([...result[0]]);
+  if (closed && result.length >= 3 && !pointsNear(result[0], result.at(-1))) result.push([...result[0]]);
   return result;
 }
 
@@ -1014,11 +1096,11 @@ function pointKey(point) {
   return `${Number(point[0]).toFixed(6)}:${Number(point[1]).toFixed(6)}`;
 }
 
-function resolveShoreLandInside(path, sourceRing) {
+function resolveShoreLandInside(path, sourceRing, segmentCount) {
   let insideVotes = 0;
   let outsideVotes = 0;
   const orientation = polygonArea(sourceRing) >= 0 ? 1 : -1;
-  for (let index = 0; index < sourceRing.length - 1; index++) {
+  for (let index = 0; index < segmentCount; index++) {
     const side = path.sideVectors?.[index];
     if (!side || Math.hypot(side.x, side.y) <= 0.000001) continue;
     const a = sourceRing[index];

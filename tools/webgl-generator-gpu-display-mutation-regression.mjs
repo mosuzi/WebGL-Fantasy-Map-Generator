@@ -83,6 +83,7 @@ assert.deepEqual(deferredEdgeDrawOptions, {updateDynamicBuffers: false, updateOv
 const calls = [], themeRenderer = {map: {layers: {background: [0, 0, 0, 1]}}, stage: {style: {backgroundColor: "", setProperty() {}, removeProperty() {}}},
   visualTheme: {id: "default"}, viewOptions: {smoothCellBorders: false}, layerVisibility: {routes: false}, dynamicBuffersDirty: {routes: false},
   canApplyGpuResidentVisualTheme: () => true, needsGpuResidentShoreSurfacePrewarm: () => false,
+  prewarmGpuResidentShoreSurfaceByRecolor: prototype.prewarmGpuResidentShoreSurfaceByRecolor,
   refreshVisualThemeLineColors: () => calls.push(["lines"]),
   refreshLabelThemeStyles: async () => calls.push(["labels"]), draw: options => calls.push(["draw", options])};
 await prototype.setVisualThemeGpuResident.call(themeRenderer, "ancient", {yieldToMain: async () => {}});

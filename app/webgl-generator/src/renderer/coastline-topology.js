@@ -3,8 +3,8 @@ import {isWorldPoint, pointsNear, segmentsIntersect, worldDistance} from "./geom
 const EPSILON = 1e-9;
 
 export const SHORE_TOPOLOGY_ALGORITHM = Object.freeze({
-  id: "visvalingam-limited-chaikin",
-  name: "Visvalingam + 有限 Chaikin",
+  id: "visvalingam-quadratic-bezier",
+  name: "Visvalingam + 二次贝塞尔岸线",
   threshold: 6,
   smoothness: 0.25,
   iterations: 2,
@@ -344,12 +344,39 @@ function transformAnchoredTriangleShoreArc(points, anchor, options = {}) {
 }
 
 function smoothShoreArc(points, smoothness, iterations, closed) {
-  let smoothed = points;
-  const iterationCount = Math.max(1, Math.min(3, Math.floor(iterations || 1)));
-  for (let iteration = 0; iteration < iterationCount; iteration++) {
-    smoothed = limitedChaikin(smoothed, smoothness, closed);
+  const trim = clamp(smoothness * 1.8, 0, 0.45);
+  if (trim <= EPSILON || points.length < 3) return points.map(copyPoint);
+  const unique = closed ? stripClosure(points) : points;
+  const count = unique.length;
+  const result = closed ? [] : [copyPoint(unique[0])];
+  const maxSamples = 2 ** (Math.max(1, Math.min(3, Math.floor(iterations || 1))) + 1);
+  for (let index = closed ? 0 : 1; index < (closed ? count : count - 1); index++) {
+    const corner = unique[index];
+    const start = lerpPoint(corner, unique[(index + count - 1) % count], trim);
+    const end = lerpPoint(corner, unique[(index + 1) % count], trim);
+    appendShoreCurveSpan(result, start);
+    // 与 SVG 的 Q 段相同：两端分别沿入岸边和出岸边相切。
+    const bow = Math.sqrt(pointSegmentDistanceSquared(corner, start, end)) / 2;
+    const samples = clamp(Math.ceil(Math.sqrt(bow / 0.1)), 1, maxSamples);
+    for (let sample = 1; sample < samples; sample++) {
+      const progress = sample / samples;
+      const a = lerpPoint(start, corner, progress);
+      const b = lerpPoint(corner, end, progress);
+      appendPointIfDistinct(result, lerpPoint(a, b, progress));
+    }
+    appendPointIfDistinct(result, end);
   }
-  return smoothed;
+  appendShoreCurveSpan(result, closed ? result[0] : unique.at(-1));
+  return closed ? closeRing(result) : result;
+}
+
+function appendShoreCurveSpan(points, end) {
+  const start = points.at(-1);
+  if (start) {
+    const count = Math.ceil(worldDistance(start, end) / SHORE_TOPOLOGY_GATES.maxSegmentWorld);
+    for (let index = 1; index < count; index++) points.push(lerpPoint(start, end, index / count));
+  }
+  appendPointIfDistinct(points, end);
 }
 
 export function maxShoreDisplacement(points, source) {
@@ -868,22 +895,6 @@ function simplifyClosed(points, threshold) {
   return simplified.length >= 4 ? closeRing(stripClosure(simplified)) : closeRing(unique.slice(0, 3));
 }
 
-function limitedChaikin(points, coefficient, closed) {
-  const ratio = clamp(coefficient, 0, 0.25);
-  if (ratio <= EPSILON || points.length < 3) return points.map(copyPoint);
-  const unique = closed ? stripClosure(points) : points;
-  const result = [];
-  if (!closed) result.push(copyPoint(unique[0]));
-  const edgeCount = closed ? unique.length : unique.length - 1;
-  for (let index = 0; index < edgeCount; index++) {
-    const a = unique[index];
-    const b = unique[(index + 1) % unique.length];
-    result.push(lerpPoint(a, b, ratio), lerpPoint(a, b, 1 - ratio));
-  }
-  if (!closed) result.push(copyPoint(unique.at(-1)));
-  return closed ? closeRing(result) : result;
-}
-
 function limitDisplacement(points, source, maxDisplacement) {
   if (!Number.isFinite(maxDisplacement) || maxDisplacement < 0) return points.map(copyPoint);
   const spatialIndex = createSegmentSpatialIndex(source, Math.max(1, maxDisplacement));
@@ -916,6 +927,12 @@ function hasHardSpike(points, threshold, closed) {
     const cosine = ((previous[0] - current[0]) * (next[0] - current[0]) +
       (previous[1] - current[1]) * (next[1] - current[1])) / (aLength * bLength);
     if (cosine > threshold) return true;
+    // 两段圆角间过短的连接也可能把一个尖角拆成两个通过单点检查的转折。
+    if (aLength > 0.03 || (!closed && index < 2)) continue;
+    const before = unique[(index - 2 + unique.length) % unique.length];
+    const alignment = (before[0] - previous[0]) * (next[0] - current[0])
+      + (before[1] - previous[1]) * (next[1] - current[1]);
+    if (alignment > threshold * worldDistance(before, previous) * bLength) return true;
   }
   return false;
 }
