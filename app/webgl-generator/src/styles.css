@@ -3207,16 +3207,38 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
   box-shadow: inset 0 0 0 1px var(--panel-accent);
 }
 
-.ui-key-value-item:has(.ui-inline-color) {
-  grid-column: 1 / -1;
+.ui-color-trigger {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--panel-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
 
-.ui-key-value-item .ui-inline-field:has(.ui-inline-color) {
-  width: min(100%, 24rem);
+.ui-color-trigger i {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
 }
 
-.ui-inline-color .ui-hsl-color-header > span {
-  display: none;
+.ui-color-trigger span { font-family: "Cascadia Mono", Consolas, monospace; }
+.ui-color-trigger:focus-visible { outline: 2px solid var(--panel-accent); }
+.ui-color-trigger:disabled { opacity: .55; cursor: default; }
+
+.el-popper.ui-color-popover {
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  background: var(--panel-surface);
+  border-color: var(--panel-border);
 }
 
 .ui-hsl-color-header strong {
@@ -3254,12 +3276,32 @@ body:has(.label-path-editor[open]) .floating-panel { visibility: hidden; }
 }
 
 .ui-color-channels.is-rgb {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 16px;
 }
 
 .ui-color-channels.is-rgb .ui-hsl-channel {
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px;
+  grid-template-columns: 1em auto;
+  column-gap: 10px;
+}
+
+.ui-color-channels.is-rgb .ui-hsl-channel > span {
+  justify-self: end;
+}
+
+.ui-color-channels.is-rgb .ui-hsl-channel input[type="number"] {
+  box-sizing: border-box;
+  width: calc(3ch + 16px);
+  min-width: 0;
+  padding-inline: 6px;
+  appearance: textfield;
+}
+
+.ui-color-channels.is-rgb input[type="number"]::-webkit-inner-spin-button,
+.ui-color-channels.is-rgb input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 .ui-hsl-channel span,

@@ -6,10 +6,8 @@
         <option v-for="option in visibleOptions" :key="option.value" :value="option.value" :disabled="option.disabled">{{ option.label }}</option>
       </select>
     </label>
-    <div v-else-if="editing && editor.type === 'color'" class="ui-inline-color" @keydown.esc.stop.prevent="close(true)"
-      @focusout="event => {if (!event.currentTarget.contains(event.relatedTarget)) close(false);}">
-      <UiColorField :model-value="editor.value" :label="label" @apply="apply" />
-    </div>
+    <UiColorField v-else-if="editor.type === 'color'" ref="colorField" :model-value="editor.value"
+      :label="label" :trigger-label="accessibleLabel" :disabled="editor.disabled" @apply="apply" @close="emit('end')" />
     <template v-else-if="editing">
       <component :is="editor.type === 'note' ? 'textarea' : 'input'" ref="input" :value="draft" @input="draft = $event.target.value" class="ui-inline-input"
         :type="editor.type === 'number' ? 'number' : 'text'" :aria-label="accessibleLabel" :maxlength="editor.maxLength"
@@ -17,7 +15,7 @@
         @keydown="keyDown" @blur="finish(false)" @compositionstart="composing = true" @compositionend="compositionEnded" />
     </template>
     <button v-else ref="trigger" type="button" class="ui-inline-trigger" data-layout-multiline="对象名称和备注可换行"
-      :title="accessibleLabel" :aria-label="accessibleLabel" :disabled="editor.disabled" @click="start"><i v-if="editor.type === 'color'" class="ui-inline-swatch" :style="{backgroundColor: editor.value}" />{{ display }}</button>
+      :title="accessibleLabel" :aria-label="accessibleLabel" :disabled="editor.disabled" @click="start">{{ display }}</button>
     <button v-if="editor.reset" type="button" class="ui-inline-reset ui-icon-action" :aria-label="editor.resetLabel" :title="editor.resetLabel"
       :disabled="editor.disabled" @click="editor.reset()">↺</button>
     <small v-if="error" role="alert">{{ error }}</small>
@@ -31,7 +29,7 @@ const props = defineProps({label: String, display: [String, Number], editor: {ty
 const emit = defineEmits(["end"]);
 const accessibleLabel = computed(() => props.editor.label || `编辑${props.label}`);
 const editing = ref(false), draft = ref(""), composing = ref(false), error = ref("");
-const input = ref(null), trigger = ref(null);
+const input = ref(null), trigger = ref(null), colorField = ref(null);
 const choosing = ref(false);
 const visibleOptions = computed(() => choosing.value || props.editor.options?.length <= 100
   ? props.editor.options : [{value: props.editor.value, label: props.display}]);
@@ -39,15 +37,14 @@ let initial = "";
 let pending = false;
 function start() {
   if (props.editor.disabled || editing.value) return;
+  if (props.editor.type === "color") {colorField.value?.openPicker(); return;}
   if (props.editor.type === "action") {apply(props.editor.value); return;}
   initial = String(props.editor.value ?? "");
   draft.value = initial;
   error.value = "";
   editing.value = true;
-  const field = trigger.value?.parentElement;
   nextTick(() => {
-    if (props.editor.type === "color") field?.querySelector('.ui-color-modes [aria-pressed="true"]')?.focus();
-    else {input.value?.focus(); input.value?.select();}
+    input.value?.focus(); input.value?.select();
   });
 }
 function close(returnFocus) {
@@ -118,8 +115,6 @@ defineExpose({start});
 }
 .ui-inline-field .ui-inline-trigger, .ui-inline-choice { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-inline-choice { display: inline-block; }
-.ui-inline-color { width: 100%; min-width: 0; font-weight: normal; }
-.ui-inline-swatch { display: inline-block; width: .85em; height: .85em; margin-right: .4em; border: 1px solid var(--panel-border); }
 .ui-inline-choice select, .ui-inline-choice input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .ui-inline-field .ui-inline-trigger:hover, .ui-inline-choice:hover { text-decoration-style: solid; }
 .ui-inline-field :focus-visible, .ui-inline-choice:focus-within { outline: 2px solid var(--ui-accent, #34666a); outline-offset: 2px; }

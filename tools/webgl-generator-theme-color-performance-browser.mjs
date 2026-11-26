@@ -50,7 +50,8 @@ try {
   assert.ok(before.shoreVertices > 0, "性能场景缺少实际海岸修正面");
 
   await page.locator('[data-action-id="ControlPanel:color"]').click();
-  const field = page.getByRole("dialog", {name: "编辑主题颜色"}).locator(".visual-theme-shared-color-field .ui-hsl-hex-field input");
+  await page.getByRole("dialog", {name: "编辑主题颜色"}).getByRole("button", {name: "编辑颜色"}).click();
+  const field = page.getByRole("dialog", {name: "调色板"}).locator(".ui-hsl-hex-field input");
   errors.length = 0;
   await page.evaluate(() => {
     window.__themePerformanceLongTasks = [];

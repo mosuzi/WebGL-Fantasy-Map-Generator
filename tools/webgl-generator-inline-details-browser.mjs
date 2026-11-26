@@ -60,8 +60,14 @@ try {
   await open("state");
   await changeChoice("政体");
   await changeChoice("首都");
-  const color = field("颜色");
-  await color.getByRole("button").click();
+  const colorTrigger = field("颜色").getByRole("button", {name: "编辑颜色"});
+  const geometry = async () => Promise.all([field("颜色"), field("全称"), panel].map(item => item.boundingBox()));
+  const closedGeometry = await geometry();
+  await colorTrigger.click();
+  const color = page.getByRole("dialog", {name: "调色板"});
+  await color.waitFor();
+  assert.equal(await panel.locator(".ui-hsl-color-field").count(), 0);
+  assert.deepEqual(await geometry(), closedGeometry);
   const hex = color.getByRole("textbox", {name: "HEX"});
   const originalColor = await hex.inputValue();
   const beforeColor = await history();
@@ -95,6 +101,8 @@ try {
   await hue.fill(String((Number(await hue.inputValue()) + 90) % 360));
   await hue.press("Enter");
   await hue.press("Escape");
+  await color.waitFor({state: "hidden"});
+  assert.deepEqual(await geometry(), closedGeometry);
   await undo(beforeColor);
   checked.push("颜色");
   await open("city");

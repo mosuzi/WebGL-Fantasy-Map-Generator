@@ -1,51 +1,60 @@
 <template>
-  <div :class="[className, 'ui-hsl-color-field']">
-    <div class="ui-hsl-color-header">
-      <span>{{ label }}</span>
-      <i class="ui-hsl-color-swatch" :style="{backgroundColor: value}"></i>
-      <strong>{{ value }}</strong>
-      <div class="ui-color-modes" role="group" aria-label="颜色模式">
-        <button v-for="option in ['RGB', 'HSL']" :key="option" type="button"
-          :aria-pressed="mode === option" @click="mode = option">{{ option }}</button>
+  <ElPopover v-model:visible="open" trigger="click" placement="bottom-start" :width="300" :popper-options="placementOptions"
+    :persistent="false" :disabled="disabled" :show-arrow="false" :hide-after="0" popper-class="ui-color-popover"
+    @after-enter="focusPicker" @before-leave="onClose">
+    <template #reference>
+      <button ref="trigger" class="ui-color-trigger" type="button" :aria-label="triggerLabel || `编辑${label}`"
+        :aria-controls="popupId" :aria-expanded="open" aria-haspopup="dialog" :disabled="disabled">
+        <i :style="{backgroundColor: modelValue}" aria-hidden="true"></i><span>{{ modelValue }}</span>
+      </button>
+    </template>
+    <div ref="picker" :id="popupId" :class="[className, 'ui-hsl-color-field']" role="dialog" aria-label="调色板">
+      <div class="ui-hsl-color-header">
+        <span>{{ label }}</span>
+        <i class="ui-hsl-color-swatch" :style="{backgroundColor: value}"></i>
+        <strong>{{ value }}</strong>
+        <div class="ui-color-modes" role="group" aria-label="颜色模式">
+          <button v-for="option in ['RGB', 'HSL']" :key="option" type="button"
+            :aria-pressed="mode === option" @click="mode = option">{{ option }}</button>
+        </div>
+      </div>
+
+      <UiColorPickerPanel v-if="mode === 'RGB'" :color="value" @preview="setColor" @apply="chooseColor" />
+
+      <div class="ui-color-channels" :class="{'is-rgb': mode === 'RGB'}">
+        <div v-for="channel in channels" :key="channel.key" class="ui-hsl-channel">
+          <span :title="channel.name">{{ channel.short }}</span>
+          <input v-if="mode === 'HSL'" type="range" min="0" :max="channel.max" step="1" :value="channel.value" :aria-label="channel.name + '滑块'"
+            :style="{background: channel.gradient}" @input="setChannel(channel, $event.target.valueAsNumber)" @change="commitColor" />
+          <input type="number" min="0" :max="channel.max" step="1" :value="channel.value" :aria-label="channel.name"
+            @input="previewNumber(channel, $event.target)"
+            @change="commitNumber(channel, $event.target)" @keydown.enter.prevent="commitNumber(channel, $event.target)" />
+        </div>
+      </div>
+
+      <label class="ui-hsl-hex-field">
+        <span>HEX</span>
+        <input v-model="hexDraft" type="text" spellcheck="false" :class="{invalid: !hexDraftValid}" @input="lastEmittedColor = null" @blur="commitHexDraft" @keydown.enter.prevent="commitHexDraft" />
+      </label>
+
+      <div class="ui-hsl-predefined" aria-label="预设颜色">
+        <button
+          v-for="color in predefinedColors"
+          :key="color"
+          type="button"
+          :class="{active: color.toLowerCase() === value.toLowerCase()}"
+          :style="{backgroundColor: color}"
+          :aria-label="`选择 ${color}`"
+          @pointerdown.prevent
+          @click="chooseColor(color)"
+        ></button>
       </div>
     </div>
-
-    <UiColorPickerPanel v-if="mode === 'RGB'" :color="value" @preview="setColor" @apply="chooseColor" />
-
-    <div class="ui-color-channels" :class="{'is-rgb': mode === 'RGB'}">
-      <div v-for="channel in channels" :key="channel.key" class="ui-hsl-channel">
-        <span :title="channel.name">{{ channel.short }}</span>
-        <input v-if="mode === 'HSL'" type="range" min="0" :max="channel.max" step="1" :value="channel.value" :aria-label="channel.name + '滑块'"
-          :style="{background: channel.gradient}" @input="setChannel(channel, $event.target.valueAsNumber)" @change="commitColor" />
-        <input type="number" min="0" :max="channel.max" step="1" :value="channel.value" :aria-label="channel.name"
-          @input="previewNumber(channel, $event.target)"
-          @change="commitNumber(channel, $event.target)" @keydown.enter.prevent="commitNumber(channel, $event.target)" />
-      </div>
-    </div>
-
-    <label class="ui-hsl-hex-field">
-      <span>HEX</span>
-      <input v-model="hexDraft" type="text" spellcheck="false" :class="{invalid: !hexDraftValid}" @input="lastEmittedColor = null" @blur="commitHexDraft" @keydown.enter.prevent="commitHexDraft" />
-    </label>
-
-    <div class="ui-hsl-predefined" aria-label="预设颜色">
-      <button
-        v-for="color in predefinedColors"
-        :key="color"
-        type="button"
-        :class="{active: color.toLowerCase() === value.toLowerCase()}"
-        :style="{backgroundColor: color}"
-        :aria-label="`选择 ${color}`"
-        @pointerdown.prevent
-        @click="chooseColor(color)"
-      ></button>
-    </div>
-
-  </div>
+  </ElPopover>
 </template>
 
 <script setup>
-import {computed, reactive, ref, watch} from "vue";
+import {computed, reactive, ref, useId, watch} from "vue";
 import UiColorPickerPanel from "./UiColorPickerPanel.vue";
 
 defineOptions({
@@ -53,6 +62,8 @@ defineOptions({
 });
 
 const props = defineProps({
+  disabled: Boolean,
+  triggerLabel: String,
   modelValue: {
     type: String,
     default: "#ffffff"
@@ -67,8 +78,29 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(["apply"]);
+const emit = defineEmits(["apply", "close"]);
 
+const open = ref(false), trigger = ref(null), picker = ref(null);
+const popupId = useId();
+const placementOptions = {
+  strategy: "fixed",
+  modifiers: [
+    {name: "flip", options: {fallbackPlacements: ["top-start", "right-start", "left-start"], padding: 8}},
+    {name: "preventOverflow", options: {altAxis: true, tether: false, padding: 8}}
+  ]
+};
+function focusPicker() {
+  if (open.value && document.activeElement === trigger.value) picker.value?.querySelector('[aria-pressed="true"]')?.focus({preventScroll: true});
+}
+function onClose() {
+  if (picker.value?.contains(document.activeElement)) trigger.value?.focus({preventScroll: true});
+  setColor(props.modelValue);
+  emit("close");
+}
+function openPicker() {
+  if (!props.disabled && !open.value) trigger.value?.click();
+}
+defineExpose({openPicker});
 const mode = ref("RGB");
 const rgbChannels = [
   {key: "red", short: "R", name: "红色"},

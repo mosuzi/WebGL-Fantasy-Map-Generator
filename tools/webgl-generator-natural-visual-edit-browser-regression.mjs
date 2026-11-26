@@ -294,7 +294,8 @@ try {
   const themeBeforeFourthPixels = await canvasHash("before-fourth");
   await page.locator('[data-action-id="ControlPanel:color"]').click();
   const themeDialog = page.getByRole("dialog", {name: "编辑主题颜色"});
-  const themeField = themeDialog.locator(".visual-theme-shared-color-field");
+  await themeDialog.getByRole("button", {name: "编辑颜色"}).click();
+  const themeField = page.getByRole("dialog", {name: "调色板"});
   assert.equal(await themeField.getByRole("button", {name: "应用颜色"}).count(), 0);
   const themeBefore = await history();
   await markPhase("theme:color");
@@ -479,6 +480,7 @@ try {
       color: app.map.visualTheme.userThemes.find(theme => theme.id === app.renderer.visualTheme.id).colors.land.toLowerCase()};
   });
   await page.locator('[data-action-id="ControlPanel:color"]').click();
+  await themeDialog.getByRole("button", {name: "编辑颜色"}).click();
   await injectDisplayFailureOnce();
   await markPhase("theme:cross-preset-failure");
   await themeField.locator(".ui-hsl-hex-field input").fill("#ad4c21");

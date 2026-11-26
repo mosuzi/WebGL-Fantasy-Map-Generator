@@ -131,6 +131,7 @@ export function isEditableShortcutTarget(target) {
 }
 
 const FRAMEWORK_POPUP_SELECTOR = [
+  ".ui-color-popover",
   ".el-select__popper",
   ".el-dropdown__popper",
   ".el-picker__popper",
