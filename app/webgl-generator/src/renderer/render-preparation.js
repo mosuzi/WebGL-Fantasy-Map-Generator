@@ -1,3 +1,4 @@
+import {setSeaRouteShoreSurface} from "../geometry/sea-route-water.js";
 import {
   buildLineVertices,
   buildGpuResidentShoreSurfacePrewarm,
@@ -150,6 +151,13 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
     checkpoint(context, requested[index], index, requested.length);
     const layer = requested[index];
     if (layer === "route") {
+      if (payload.routeShoreVertices instanceof Float32Array) {
+        setSeaRouteShoreSurface(map, null, payload.routeShoreVertices);
+      } else if (map.settlements?.routes?.some(route => route?.type === "searoute")) {
+        const shore = ensureShoreCache(map, binding, payload.caches, cache);
+        const surface = result.layers.shoreSurface;
+        setSeaRouteShoreSurface(map, shore, surface?.landCorrections, surface?.shorePathEnds?.landCorrections);
+      }
       result.layers.route = buildRouteMeshVertices(
         map,
         camera,

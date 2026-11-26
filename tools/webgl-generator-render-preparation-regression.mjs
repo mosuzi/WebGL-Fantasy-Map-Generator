@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {setSeaRouteShoreSurface} from "../app/webgl-generator/src/geometry/sea-route-water.js";
 import {
   buildLineVertices,
   buildPlaceholderSurfaceBundle,
@@ -13,7 +14,8 @@ import {
 } from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
 import {buildLabelLayoutDescriptors, unpackLabelLayoutDescriptors} from "../app/webgl-generator/src/renderer/label-layout-descriptor.js";
 import {buildCellVisualMesh, refreshCellVisualMeshCells, summarizeCellVisualMesh} from "../app/webgl-generator/src/renderer/cell-visual-layer.js";
-import {buildShoreVisualPaths, summarizeShoreVisualPaths} from "../app/webgl-generator/src/renderer/shore-layer.js";
+import {buildShoreSurfaceVertexLayers, buildShoreVisualPaths, summarizeShoreVisualPaths} from "../app/webgl-generator/src/renderer/shore-layer.js";
+import {createRenderContext} from "../app/webgl-generator/src/renderer/render-context.js";
 import {
   PROVINCE_VISUAL_STYLE,
   STATE_VISUAL_STYLE,
@@ -122,6 +124,8 @@ assert.ok(
   "政治网格调试开启时不得复用旧政治 mesh"
 );
 
+const routeShore = buildShoreVisualPaths(map);
+setSeaRouteShoreSurface(map, routeShore);
 const expected = {
   route: buildRouteMeshVertices(map, camera, canvas, null, [], visualTheme),
   river: buildRiverMeshVertices(map, camera, canvas),
@@ -153,6 +157,11 @@ const transfers = collectRenderPreparationTransfers(actual);
 assert.equal(transfers.length, 3, "route / river / point 各自只应暴露一个可 transfer buffer");
 assert.equal(new Set(transfers).size, transfers.length, "transfer list 不得包含重复 buffer");
 assertNoFormalMapBuffers(transfers, map);
+const {landCorrections: routeShoreVertices} = buildShoreSurfaceVertexLayers(createRenderContext(map), "height", {}, routeShore);
+const partialRoute = await executeRenderPreparationTask({map, binding, camera, canvas, visualTheme, layers: ["route"], routeShoreVertices});
+assert.equal(partialRoute.cache.shore, false, "路线单独更新应使用当前岸线，省去岸线构建");
+assert.equal(byteChecksum(partialRoute.layers.route.vertices), byteChecksum(expected.route.vertices));
+assert.ok(!collectRenderPreparationTransfers(partialRoute).includes(routeShoreVertices.buffer), "路线更新不得转移正式岸线顶点");
 assert.throws(() => assertRenderPreparationBinding(actual, nextResourceBinding(binding, {mapRevision: 8, renderPreparationId: "stale-revision"})), error => error?.code === "render-result-stale");
 assert.throws(() => assertRenderPreparationBinding(actual, nextResourceBinding(binding, {topologyRevision: 4, renderPreparationId: "stale-topology"})), error => error?.code === "render-result-stale");
 for (const incomplete of [

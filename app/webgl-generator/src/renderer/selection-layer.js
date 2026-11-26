@@ -41,11 +41,16 @@ const SELECTION_SMOOTHING = Object.freeze({
 
 const MULTI_HIGHLIGHT_COLOR = Object.freeze([1, 0.46, 0.12, 0.72]);
 
-// 和格子身份纹理共用 +1 编码；符号区分国家和省份，0 表示无目标。
+const surfaceAreaKinds = [
+  OBJECT_KIND.STATE, OBJECT_KIND.PROVINCE, OBJECT_KIND.CULTURE, OBJECT_KIND.RELIGION, OBJECT_KIND.REGION
+];
+
+// 低位区分身份通道，0 表示无目标。国家 0 是中立背景。
 function areaKey(object) {
-  if (object?.kind === OBJECT_KIND.STATE && Number(object.id) > 0) return Number(object.id) + 1;
-  if (object?.kind === OBJECT_KIND.PROVINCE && Number(object.id) >= 0) return -(Number(object.id) + 1);
-  return 0;
+  const channel = surfaceAreaKinds.indexOf(object?.kind);
+  const id = Number(object?.id);
+  if (channel < 0 || !Number.isInteger(id) || id < 0 || id >= 0xfffffff || (channel === 0 && id === 0)) return 0;
+  return (id + 1) * 8 + channel + 1;
 }
 
 export function surfaceAreaSelection(map, selection, locateFlash, highlights = []) {
@@ -54,8 +59,8 @@ export function surfaceAreaSelection(map, selection, locateFlash, highlights = [
   if (selection?.kind === OBJECT_KIND.DIPLOMACY_RELATION && compositeConnectorPoints(map, selection)) {
     const relation = parseDiplomacyRelationIdentity(selection);
     if (relation) {
-      first = relation.subjectId + 1;
-      second = relation.objectId + 1;
+      first = areaKey({kind: OBJECT_KIND.STATE, id: relation.subjectId});
+      second = areaKey({kind: OBJECT_KIND.STATE, id: relation.objectId});
       const tint = locateFlashColor(selection, locateFlash) || compositeConnectorSelectionColor(selection);
       color = [...tint.slice(0, 3), Math.min(0.22, tint[3])];
     }
@@ -64,7 +69,9 @@ export function surfaceAreaSelection(map, selection, locateFlash, highlights = [
   if (!first && !keys.length) return null;
   const packed = new Int32Array(4 * Math.ceil(keys.length / 4));
   packed.set(keys);
-  return {first, second, color: color || [0, 0, 0, 0], packed, count: keys.length, multiColor: MULTI_HIGHLIGHT_COLOR};
+  let channels = 0;
+  for (const key of [first, second, ...keys]) if (key) channels |= 1 << ((key % 8) - 1);
+  return {first, second, color: color || [0, 0, 0, 0], packed, count: keys.length, channels, multiColor: MULTI_HIGHLIGHT_COLOR};
 }
 
 export const SURFACE_AREA_HIGHLIGHT_VECTORS = Math.ceil(MAX_PERSISTENT_OBJECT_HIGHLIGHTS / 4);

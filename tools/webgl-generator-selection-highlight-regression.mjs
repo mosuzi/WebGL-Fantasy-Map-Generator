@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {buildSelectionMeshVertices, selectionHighlightMode} from "../app/webgl-generator/src/renderer/selection-layer.js";
+import {buildSelectionMeshBundle, buildSelectionMeshVertices, selectionHighlightMode, surfaceAreaSelection} from "../app/webgl-generator/src/renderer/selection-layer.js";
 
 const map = createSyntheticMap();
 const camera = {scale: 1, offsetX: 0, offsetY: 0};
@@ -22,6 +22,16 @@ assert(deduplicated.length / 6 === combined.length / 6, "当前 selection 与持
 assert(selectionHighlightMode(null, null, highlights) === "multi-object highlight (3)", "多对象高亮模式摘要异常");
 assert(selectionHighlightMode(state, null, []) === "state translucent cells", "单对象 selection 模式发生回归");
 assert(cubicOceanCurrent.length > 0, "正式 cubic 洋流必须生成非空 selection mesh");
+
+const areas = ["state", "province", "culture", "religion", "region"].map(kind => ({kind, id: 1}));
+const areaSelection = surfaceAreaSelection(map, areas[2], null, areas);
+assert(areaSelection.count === 4, "同一编号的不同区域身份应独立保留，单选应去重");
+assert(new Set([areaSelection.first, ...areaSelection.packed]).size === 5, "身份通道必须无冲突");
+const noCellScan = {metadata: map.metadata, grid: {cells: {get v() { throw Error("高亮读取了原始格面"); }}}};
+for (const area of areas) {
+  const bundle = buildSelectionMeshBundle(noCellScan, camera, canvas, area, null, areas, null, true);
+  assert(bundle.vertices.length === 0, `${area.kind} 高亮应由实际底图绘制`);
+}
 
 console.log(JSON.stringify({
   ok: true,

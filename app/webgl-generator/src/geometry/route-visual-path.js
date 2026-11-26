@@ -24,9 +24,16 @@ export function routeVisualPath(route, tolerance = ROUTE_CURVE_FINE_TOLERANCE, m
   const water = sea ? seaRouteWater(map) : null;
   const key = water ? route : source;
   let entry = cache.get(key);
-  if (entry?.sea !== sea || entry.source !== source || entry.water !== water || (water && entry.cells !== route.cells)) {
-    entry = createRouteCurve(source, sea, water, route);
-    cache.set(key, entry);
+  if (entry?.sea !== sea || entry.source !== source || entry.water !== water || (water && (entry.cells !== route.cells || shoreChanged(entry, water)))) {
+    if (water) water.visited = new Set();
+    try {
+      entry = createRouteCurve(source, sea, water, route);
+      entry.shoreBuckets = water?.visited;
+      entry.shoreRevision = water?.revision;
+      cache.set(key, entry);
+    } finally {
+      if (water) water.visited = null;
+    }
   }
   const previous = entry.paths.get(tolerance);
   if (previous) return previous;
@@ -43,6 +50,16 @@ export function routeVisualPath(route, tolerance = ROUTE_CURVE_FINE_TOLERANCE, m
   const path = {points, spans, anchors, invalid, duplicates};
   entry.paths.set(tolerance, path);
   return path;
+}
+
+function shoreChanged(entry, water) {
+  if (entry.shoreRevision === water.revision) return false;
+  // 只检查上次绕行和曲线检测访问过的岸区。
+  for (const key of entry.shoreBuckets) {
+    if (water.changed.get(key) > entry.shoreRevision) return true;
+  }
+  entry.shoreRevision = water.revision;
+  return false;
 }
 
 function createRouteCurve(source, sea, water, route) {

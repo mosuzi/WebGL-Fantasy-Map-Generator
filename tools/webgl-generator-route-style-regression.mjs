@@ -11,7 +11,7 @@ import {
 import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 import {buildObjectPickingIndex, pickRoute} from "../app/webgl-generator/src/renderer/picking.js";
 import {routeCurveTolerance, routeVisualPath} from "../app/webgl-generator/src/geometry/route-visual-path.js";
-import {invalidateSeaRouteWater} from "../app/webgl-generator/src/geometry/sea-route-water.js";
+import {invalidateSeaRouteWater, seaRouteWater, setSeaRouteShoreSurface} from "../app/webgl-generator/src/geometry/sea-route-water.js";
 import {locateGridPoint} from "../app/webgl-generator/src/geometry/grid-point.js";
 import {listHoverGeometry} from "../app/webgl-generator/src/renderer/list-hover-geometry.js";
 
@@ -87,8 +87,29 @@ assert.equal(pickRoute(coastMap, coastPicking, 35, 25, 0.15), null);
 assert.strictEqual(listHoverGeometry(coastMap, {kind: "route", id: coastalRoute.id})[0].points, showCoast.points);
 const portLeg = {type: "searoute", cells: [land, land + 2], points: [[35, 25], [55, 25]]};
 assert.deepEqual(routeVisualPath(portLeg, undefined, coastMap).points[0], portLeg.points[0], "陆上的港口端点应保留");
+const unaffected = {id: 72, type: "searoute", points: [[5, 45], [15, 45]]};
+const atlas = seaRouteWater(coastMap);
+const unaffectedPath = routeVisualPath(unaffected, undefined, coastMap);
+const shorePath = {};
+const shore = {topology: {}, coastline: [shorePath], lakeShore: []};
+const patch = new Float32Array(18);
+[[35, 20], [30, 15], [40, 15]].forEach(([x, y], index) => {
+  patch.set([x / waterBounds.graphWidth * 2 - 1, 1 - y / waterBounds.graphHeight * 2], index * 6);
+});
+const smoothWater = {id: 73, type: "searoute", points: [[25, 17], [45, 17]]};
+const rawPath = routeVisualPath(smoothWater, undefined, coastMap);
+setSeaRouteShoreSurface(coastMap, shore, patch, [patch.length]);
+const smoothPath = routeVisualPath(smoothWater, undefined, coastMap);
+assert.ok(!atlas.clear(...rawPath.points, 0), "平滑岸线新增的陆面应挡住旧水路");
+assert.ok(smoothPath.points.length > rawPath.points.length);
+assert.ok(smoothPath.points.slice(1).every((point, index) => atlas.clear(smoothPath.points[index], point, 0)));
+assert.strictEqual(routeVisualPath(unaffected, undefined, coastMap), unaffectedPath, "远处水路必须复用原路径");
+setSeaRouteShoreSurface(coastMap, {...shore, coastline: []}, new Float32Array(), []);
+assert.deepEqual(routeVisualPath(smoothWater, undefined, coastMap).points, rawPath.points);
+
 waterGrid.cells.h[land] = 18;
-invalidateSeaRouteWater(coastMap);
+invalidateSeaRouteWater(coastMap, [land]);
+assert.strictEqual(seaRouteWater(coastMap), atlas, "局部地形修改应复用岸段索引");
 assert.deepEqual(routeVisualPath(coastalRoute, undefined, coastMap).points, coastalRoute.points, "海陆变化应刷新显示路径");
 assert.deepEqual(coastalRoute, coastalData);
 

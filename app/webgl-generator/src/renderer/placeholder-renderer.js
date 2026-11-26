@@ -4,7 +4,7 @@ import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {manualLabelPlacement} from "./manual-label-path.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {routeCurveTolerance, routeVisualPath, ROUTE_CURVE_MAX_OFFSET, ROUTE_VISUAL_MAX_OFFSET} from "../geometry/route-visual-path.js";
-import {invalidateSeaRouteWater} from "../geometry/sea-route-water.js";
+import {invalidateSeaRouteWater, setSeaRouteShoreSurface} from "../geometry/sea-route-water.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {colorForCell, colorForHeight, isLandCell} from "./color-modes.js";
@@ -451,6 +451,7 @@ function initializeWebGlBindingsAndBuffers(renderer) {
     areaSelected: gl.getUniformLocation(renderer.surfaceProgram, "u_areaSelected"),
     areaColor: gl.getUniformLocation(renderer.surfaceProgram, "u_areaColor"),
     areaHighlightCount: gl.getUniformLocation(renderer.surfaceProgram, "u_areaHighlightCount"),
+    areaChannels: gl.getUniformLocation(renderer.surfaceProgram, "u_areaChannels"),
     areaHighlights: gl.getUniformLocation(renderer.surfaceProgram, "u_areaHighlights[0]"),
     areaMultiColor: gl.getUniformLocation(renderer.surfaceProgram, "u_areaMultiColor"),
     surfaceSideMode: gl.getUniformLocation(renderer.surfaceProgram, "u_surfaceSideMode"), cellColorMode: gl.getUniformLocation(renderer.surfaceProgram, "u_cellColorMode"),
@@ -2420,8 +2421,7 @@ export class PlaceholderMapRenderer {
         theme: this.viewOptions.visualTheme, coast: this.layerVisibility.coastline, lake: this.layerVisibility.lakeShore};
     }
     this.shoreVisualPaths = after;
-    invalidateSeaRouteWater(this.map);
-    if (this.layerVisibility.routes) this.scheduleRouteBufferRefresh();
+    invalidateSeaRouteWater(this.map, crossings);
     this.gpuResidentHardShoreLineVertices = new Float32Array();
     this.gpuResidentSmoothShoreLineVertices = new Float32Array();
     this.gpuResidentShoreSurfaceCache.clear();
@@ -2439,6 +2439,8 @@ export class PlaceholderMapRenderer {
       this.refreshGpuResidentShoreSurface();
     }
     const surfaceBuilt = performance.now();
+    this.bindSeaRouteShore();
+    if (this.layerVisibility.routes) this.scheduleRouteBufferRefresh();
     if (shouldDrawShoreVisualBands(this.colorMode)) refreshShoreSurfaceCellColors(this, normalizedCells);
     this.refreshShoreLineLayer({draw: false});
     if (binding) rebindEditedRendererResources(this, binding, null, this.surfaceResourceOwner);
@@ -3800,6 +3802,7 @@ export class PlaceholderMapRenderer {
         throw error;
       }
       this.lastSurfaceResourceOwnerError = null;
+    this.bindSeaRouteShore();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.updateRouteBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.tradeFlows && this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.rivers && this.layerVisibility.rivers) this.updateRiverBuffer();
@@ -4347,10 +4350,15 @@ export class PlaceholderMapRenderer {
     return {x: mapX, y: mapY};
   }
 
+  bindSeaRouteShore() {
+    setSeaRouteShoreSurface(this.map, this.shoreVisualPaths, this.landCorrectionVertices, this.shorePathEnds?.landCorrections);
+  }
+
   updateRouteBuffer(binding = null) {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("routeMesh", {mode: "sync"}, startedAt);
     try {
+      this.bindSeaRouteShore();
       const camera = snapshotCamera(this.camera);
       const {vertices: routeVertices, stats, drawRanges} = buildRouteMeshVertices(this.map, camera, this.canvas, this.selection, this.objectHighlights, this.visualTheme);
       this.routeVertexCount = routeVertices.length / 6;
@@ -4375,6 +4383,7 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("routeMesh", {mode: "async", sliceMs}, startedAt);
     try {
+      this.bindSeaRouteShore();
       const camera = snapshotCamera(this.camera);
       const resourceBinding = currentRendererRenderCacheBinding(this, binding);
       const selection = this.selection ? {...this.selection} : null;
@@ -7965,6 +7974,7 @@ function configureGpuResidentSurfaceColors(gl, renderer) {
   const loc = renderer.surfaceLocations;
   gl.uniform2i(loc.areaSelected, area?.first || 0, area?.second || 0);
   gl.uniform1i(loc.areaHighlightCount, area?.count || 0);
+  gl.uniform1i(loc.areaChannels, area?.channels || 0);
   if (area) {
     const ancient = isAncientTheme(renderer.visualTheme);
     gl.uniform4fv(loc.areaColor, ancient ? ancientDisplayColor(area.color) : area.color);
@@ -9578,6 +9588,7 @@ uniform bool u_iceOverlay;
 uniform ivec2 u_areaSelected;
 uniform vec4 u_areaColor;
 uniform int u_areaHighlightCount;
+uniform int u_areaChannels;
 uniform ivec4 u_areaHighlights[${SURFACE_AREA_HIGHLIGHT_VECTORS}];
 uniform vec4 u_areaMultiColor;
 uniform int u_cellColorMode;
@@ -9656,20 +9667,28 @@ void main() {
   v_color = u_ancientPalette ? projectAncientColor(color) : color;
   gl_PointSize = 4.0;
   bool water = (a_packedCellIdAndSide & 1u) == 1u;
-  if (!water && cellId < u_cellCount && (u_areaSelected.x != 0 || u_areaHighlightCount > 0)) {
-    ivec2 ids = ivec2(texelFetch(u_identityTexture, attributeCoord(cellId), 0).rg);
-    ids.y = -ids.y;
-    if ((u_areaSelected.x != 0 && any(equal(ids, u_areaSelected.xx))) || (u_areaSelected.y != 0 && any(equal(ids, u_areaSelected.yy)))) {
+  if (!water && cellId < u_cellCount && u_areaChannels != 0) {
+    ivec2 coord = attributeCoord(cellId);
+    ivec4 identities = (u_areaChannels & 15) != 0 ? ivec4(texelFetch(u_identityTexture, coord, 0)) : ivec4(0);
+    int region = (u_areaChannels & 16) != 0 ? int(round(texelFetch(u_numericTexture, coord, 0).a)) + 1 : 0;
+    int keys[5] = int[5](identities.r * 8 + 1, identities.g * 8 + 2, identities.b * 8 + 3, identities.a * 8 + 4, region * 8 + 5);
+    bool selected = false;
+    for (int channel = 0; channel < 5; ++channel) {
+      if ((u_areaChannels & (1 << channel)) == 0) continue;
+      selected = selected || keys[channel] == u_areaSelected.x || keys[channel] == u_areaSelected.y;
+    }
+    if (selected) {
       v_color.rgb = mix(v_color.rgb, u_areaColor.rgb, u_areaColor.a);
     }
-    for (int channel = 0; channel < 2 && u_areaHighlightCount > 0; ++channel) {
+    for (int channel = 0; channel < 5 && u_areaHighlightCount > 0; ++channel) {
+      if ((u_areaChannels & (1 << channel)) == 0) continue;
       int low = 0, high = u_areaHighlightCount;
       while (low < high) {
         int mid = (low + high) / 2;
-        if (u_areaHighlights[mid / 4][mid % 4] < ids[channel]) low = mid + 1;
+        if (u_areaHighlights[mid / 4][mid % 4] < keys[channel]) low = mid + 1;
         else high = mid;
       }
-      if (low < u_areaHighlightCount && u_areaHighlights[low / 4][low % 4] == ids[channel]) {
+      if (low < u_areaHighlightCount && u_areaHighlights[low / 4][low % 4] == keys[channel]) {
         v_color.rgb = mix(v_color.rgb, u_areaMultiColor.rgb, u_areaMultiColor.a);
       }
     }

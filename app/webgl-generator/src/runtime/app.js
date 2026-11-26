@@ -6348,13 +6348,13 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
   });
   const primaryRender = {
     ...render,
-    layers: ["shore", "shore-surface", "line"],
+    layers: ["shore", "shore-surface", "line", "route"],
     surfaceTransferMode: "gpu-resident-compact",
     lineComposition: "shore"
   };
   const secondaryRender = {
     ...render,
-    layers: ["state-paths", "province-paths", "surface", "line", "picking", "labels", "route", "river", "point",
+    layers: ["state-paths", "province-paths", "surface", "line", "picking", "labels", "river", "point",
       ...(render.politicalMeshDebugMode !== "none" ? ["political"] : [])],
     lineComposition: "core",
     surfaceComposition: "core",
@@ -14565,6 +14565,8 @@ function createWorkerRegenerationRenderRequest(state, targetKind, binding, layer
   return {
     binding: renderBinding,
     layers: requestedLayers,
+    ...(targetKind !== "generation" && requestedLayers.includes("route") && !requestedLayers.includes("shore")
+      && renderer?.landCorrectionVertices instanceof Float32Array ? {routeShoreVertices: renderer.landCorrectionVertices} : {}),
     ...(targetKind === "generation" ? {cellVisualTransferMode: "runtime-compact"} : {}),
     ...(pickingComponents.length ? {pickingComponents} : {}),
     ...(surfacePatchScope ? {surfacePatchScope} : {}),
