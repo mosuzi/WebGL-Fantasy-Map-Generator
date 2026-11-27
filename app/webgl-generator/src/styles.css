@@ -7703,8 +7703,13 @@ input.ui-switch-native {
 
 .namebase-binding-fields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  gap: 8px 18px;
+}
+
+.namebase-binding-editor .ui-select-field {
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px;
 }
 
 .namebase-culture-select {

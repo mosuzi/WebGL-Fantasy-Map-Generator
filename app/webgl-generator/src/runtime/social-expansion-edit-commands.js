@@ -1,6 +1,7 @@
 import {rebuildInheritanceTree, summarizeInheritanceTree} from "../generator/inheritance.js";
 import {reexpandSocietyCultures, reexpandSocietyReligions} from "../generator/society.js";
 import {objectAffected, systemAffected} from "./edit-command-effects.js";
+import {captureLocalFields, restoreLocalFields} from "./local-edit-fields.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {
   assertLockedRegenerationSnapshots,
@@ -164,6 +165,53 @@ export function createApplySocialExpansionCommand(request, {label = null} = {}) 
     },
     getResult() {
       return result ? {...result, parameterChanges: [...result.parameterChanges]} : null;
+    }
+  };
+}
+
+// 在原地保存参数。重新分配地块和移动中心仍由扩张事务处理。
+export function createSaveCultureParametersCommand(map, inspection) {
+  const {id, request, next} = inspection;
+  const locked = isSocialObjectLocked(map, "culture", id);
+  const fields = locked ? [] : ["type", "expansionism"].filter(key => Object.hasOwn(request, key));
+  const writes = [];
+  for (const owner of ["society", "pack"]) {
+    const item = map[owner]?.cultures?.[id];
+    if (!item || item.removed) continue;
+    for (const key of fields) {
+      if (item[key] !== next[key]) writes.push({path: `${owner}.cultures.${id}.${key}`, exists: true, value: next[key]});
+    }
+  }
+  const paths = writes.map(entry => entry.path);
+  const affected = objectAffected("culture", id);
+  let before;
+  return {
+    label: "文化中心与参数",
+    domain: "culture-expansion",
+    effects: {render: "none", selection: "refresh", runtimeStats: false, pickPanel: true, derived: ["culture-parameters"], affected},
+    isNoop: () => !writes.length,
+    getReplicaFields: () => paths,
+    apply({map}) {
+      before ??= captureLocalFields(map, paths);
+      try {
+        restoreLocalFields(map, writes);
+        failAt(request, "after-parameters");
+      } catch (error) {
+        restoreLocalFields(map, before);
+        throw error;
+      }
+    },
+    revert({map}) {
+      restoreLocalFields(map, before);
+    },
+    getResult() {
+      return {
+        kind: "culture", id, mode: "save", includeReligions: false, executed: Boolean(writes.length),
+        ...(!writes.length ? {reason: locked ? "regeneration-locked-noop" : "no-op"} : {}),
+        parameterChanges: fields.filter(key => inspection.parameterChanges.includes(key)), centerChanged: false,
+        changedPackCells: 0, changedGridCells: 0, linkedReligionPackCells: 0,
+        affected: {objects: writes.length ? affected : [], packCells: {culture: []}, gridCells: {culture: []}, changedPaths: paths}
+      };
     }
   };
 }

@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {captureCommandMapReplicaWrites} from "../app/webgl-generator/src/runtime/map-replica-command-patch.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {
   createApplyCultureExpansionCommand,
+  createSaveCultureParametersCommand,
   createApplyReligionExpansionCommand,
   inspectCultureExpansion,
   inspectReligionExpansion,
@@ -15,6 +17,8 @@ const base = createMap();
 const culture = activeItems(base.society.cultures)[0];
 const cultureAlternate = ownedLandCell(base, "culture", culture.i, new Set(activeItems(base.society.cultures).map(item => item.center)), culture.center);
 assert(Number.isInteger(cultureAlternate), "缺少文化中心迁移样本");
+
+checkLocalCultureSave(structuredClone(base), culture.i);
 
 const saveMap = structuredClone(base);
 const saveBeforeCulture = [...saveMap.pack.cells.culture];
@@ -157,6 +161,35 @@ console.log(JSON.stringify({
   religion: {folk: folk.i, nonFolk: nonFolk.i, scopes: ["culture", "state", "global"]},
   compatibility: {legacyDefaults: true, packOnlyStores: true, faultStages: 3, undoRedo: true, fullMapRoundtrip: true, namebaseBindings: true}
 }, null, 2));
+
+function checkLocalCultureSave(map, id) {
+  // 旧图的两份记录可能彼此独立，其中一份可能缺失参数。
+  map.pack.cultures = structuredClone(map.society.cultures);
+  const primary = map.society.cultures[id];
+  const mirror = map.pack.cultures[id];
+  delete mirror.expansionism;
+  const oldValue = primary.expansionism;
+  const expansionism = oldValue === 2.4 ? 3.1 : 2.4;
+  const makeCommand = options => createSaveCultureParametersCommand(map, inspectCultureExpansion(map, id, {expansionism, ...options}));
+  const history = new EditHistory();
+  const run = command => history.execute(command, {map});
+  assertThrows(() => run(makeCommand({faultAt: "after-parameters"})), "after-parameters", "局部保存失败没有抛错");
+  assert(primary.expansionism === oldValue && !Object.hasOwn(mirror, "expansionism") && !history.getStats().undo, "局部保存失败没有精确回滚");
+  const command = makeCommand();
+  run(command);
+  const affectedFields = captureCommandMapReplicaWrites({map, command});
+  assertDeepEqual(affectedFields, ["society", "pack"].map(owner => ({
+    path: `${owner}.cultures.${id}.expansionism`, mode: "field", value: expansionism
+  })), "局部保存应只同步选中文化变化的参数");
+  assert(makeCommand().isNoop(), "相同参数应跳过");
+  history.undo({map});
+  assert(primary.expansionism === oldValue && !Object.hasOwn(mirror, "expansionism"), "局部撤销没有恢复两份原始记录");
+  history.redo({map});
+  assert(primary.expansionism === expansionism && mirror.expansionism === expansionism, "局部重做没有同步参数");
+  map.regenerationLocks = {entries: [{kind: "culture", id}]};
+  const locked = makeCommand({expansionism: oldValue});
+  assert(locked.isNoop() && !locked.getReplicaFields().length, "锁定文化应跳过保存");
+}
 
 function createMap() {
   return generatePlaceholderMap({seed, cellsTarget: 10000, heightmapTemplate: "continents", culturesNumber: 10, religionsNumber: 6});

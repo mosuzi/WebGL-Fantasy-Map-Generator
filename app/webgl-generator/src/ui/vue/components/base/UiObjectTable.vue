@@ -87,7 +87,7 @@
             <span v-else aria-label="不可锁定">—</span>
           </td>
           <td v-if="showLocateAction" class="object-table-action-cell">
-            <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="emit('locate', row)" @dblclick.stop>
+            <button v-if="row.locatable !== false" class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="emit('locate', row)" @dblclick.stop>
               <ElIcon aria-hidden="true"><Location /></ElIcon>
             </button>
           </td>

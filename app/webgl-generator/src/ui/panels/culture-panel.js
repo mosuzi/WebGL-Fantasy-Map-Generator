@@ -36,7 +36,6 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedCultureId: null,
-    targetCultureId: null,
     assignmentActive: false,
     assignmentRadius: readBrushRadiusContract(BRUSH_RADIUS_ID.CULTURE).defaultValue,
     centerPickActive: false,
@@ -78,11 +77,10 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => {
       panelState.selectedCultureId = row.id;
-      panelState.targetCultureId = row.id;
       callbacks.onSelect?.(cultureObject(row));
     },
     onLocate: row => callbacks.onLocate?.(cultureObject(row)),
-    onHover: row => callbacks.onHover?.(cultureObject(row)),
+    onHover: row => callbacks.onHover?.(row?.id ? cultureObject(row) : null),
     onAdd: () => callbacks.onAdd?.(),
     onDelete: row => callbacks.onDelete?.(cultureObject(row)),
     onRename: (cultureId, name) => callbacks.onRename?.(cultureId, name),
@@ -93,10 +91,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     onNamebaseBinding: cultureId => callbacks.onNamebaseBinding?.(cultureId),
     onAssignmentActive: active => {
       panelState.assignmentActive = Boolean(active);
-      callbacks.onAssignmentActive?.(panelState.assignmentActive, panelState.targetCultureId);
-    },
-    onTargetCultureId: cultureId => {
-      panelState.targetCultureId = normalizeCultureId(cultureId) ?? 0;
+      callbacks.onAssignmentActive?.(panelState.assignmentActive);
     },
     onAssignmentRadius: radius => {
       panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.CULTURE, radius);
@@ -141,7 +136,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.open = false;
       panelState.assignmentActive = false;
       panelState.centerPickActive = false;
-      callbacks.onAssignmentActive?.(false, panelState.targetCultureId);
+      callbacks.onAssignmentActive?.(false);
       callbacks.onCenterPickActive?.(false, panelState.selectedCultureId);
     }
   });
@@ -167,7 +162,6 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
-      if (!cultureExists(map, panelState.targetCultureId)) panelState.targetCultureId = panelState.selectedCultureId;
       panelState.open = true;
       panelState.version++;
       manager.open("culture-panel");
@@ -181,14 +175,12 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
       if (assignment.active !== undefined) panelState.assignmentActive = Boolean(assignment.active);
       if (assignment.lastAffected !== undefined) panelState.lastAffected = Number(assignment.lastAffected) || 0;
-      if (!cultureExists(map, panelState.targetCultureId)) panelState.targetCultureId = panelState.selectedCultureId;
       panelState.version++;
     },
     setSelectedCultureId(cultureId) {
       const normalized = normalizeCultureId(cultureId);
       if (cultureExists(panelState.map, normalized)) {
         panelState.selectedCultureId = normalized;
-        panelState.targetCultureId = normalized;
       }
     },
     setLastAffected(count) {
@@ -209,8 +201,8 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     },
     getBrush() {
       return {
-        active: panelState.assignmentActive,
-        targetId: panelState.targetCultureId ?? 0,
+        active: panelState.assignmentActive && panelState.selectedCultureId !== null,
+        targetId: panelState.selectedCultureId ?? -1,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.CULTURE, panelState.assignmentRadius)
       };
     },

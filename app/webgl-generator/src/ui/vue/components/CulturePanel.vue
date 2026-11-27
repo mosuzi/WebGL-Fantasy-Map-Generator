@@ -31,7 +31,7 @@
     v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
-    :rows="visibleRows"
+    :rows="brushRows"
     :hover-row="state.open ? callbacks.onHover : null"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -60,15 +60,8 @@
     @action="handleListAction"
   />
 
-  <UiDetailGrid ref="detailGrid" :key="selected?.id" class-name="culture-panel-details" empty-text="未选中文化" :rows="detailRows" />
+  <UiDetailGrid v-if="state.selectedCultureId !== 0" ref="detailGrid" :key="selected?.id" class-name="culture-panel-details" empty-text="未选中文化" :rows="detailRows" />
 
-  <UiSelectField
-    input-id="culture-assignment-target"
-    label="归属笔刷目标"
-    :model-value="state.targetCultureId ?? 0"
-    :options="assignmentOptions"
-    @update:model-value="callbacks.onTargetCultureId"
-  />
   <UiSliderField
     label="画笔大小"
     :model-value="state.assignmentRadius"
@@ -78,7 +71,7 @@
     @input="callbacks.onAssignmentRadius"
   />
 
-  <UiActionDock v-if="selected" host-id="CulturePanel" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
+  <UiActionDock v-if="brushRow" host-id="CulturePanel" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
 
 
 
@@ -135,7 +128,6 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
-import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiTreeDisplayPanel from "./base/UiTreeDisplayPanel.vue";
 import {formatListCount, formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
@@ -198,6 +190,17 @@ const metrics = computed(() => {
 });
 const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根文化"));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const unassigned = Object.freeze({id: 0, name: "无文化", locatable: false});
+const brushRows = computed(() => {
+  const filter = props.state.filter.trim();
+  return props.state.map && (!filter || unassigned.name.includes(filter) || filter === "0")
+    ? [...visibleRows.value, unassigned]
+    : visibleRows.value;
+});
+const brushRow = computed(() => findByObjectId(brushRows.value, props.state.selectedCultureId));
+watch(brushRow, row => {
+  if (!row && props.state.assignmentActive) props.callbacks.onAssignmentActive?.(false);
+});
 const regenerationLocks = useRegenerationLockSelection({panelId: "culture-panel", kind: "culture", rows: visibleRows});
 const {selectedRowIds: selectedCultureIds} = useVisibleRowSelection(visibleRows);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCultureId));
@@ -207,12 +210,10 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   : null);
 const cultureActions = computed(() => [
   {key: "assign", resultClass: "toggle-canvas-mode", label: props.state.assignmentActive ? "退出文化归属笔刷" : "编辑文化归属", icon: Brush, panel: false, active: props.state.assignmentActive},
-  {key: "expansion", resultClass: "open-secondary", label: "中心与扩张", icon: Aim},
-  {key: "namebase", resultClass: "open-other-panel", label: "名称库绑定", icon: Reading},
-]);
-const assignmentOptions = computed(() => [
-  {value: 0, label: "无文化"},
-  ...metrics.value.rows.map(row => ({value: row.id, label: row.name}))
+  ...(selected.value ? [
+    {key: "expansion", resultClass: "open-secondary", label: "中心与扩张", icon: Aim},
+    {key: "namebase", resultClass: "open-other-panel", label: "名称库绑定", icon: Reading}
+  ] : [])
 ]);
 const cultureTypeOptions = Object.freeze(["Generic", "Hunting", "Highland", "River", "Lake", "Naval", "Nomadic"]);
 const expansionDraft = ref({center: 0, type: "Generic", expansionism: 1, mode: "save", includeReligions: false});
@@ -331,6 +332,7 @@ function handleActionSelect(actionKey) {
 }
 
 function openRenameEditor(row) {
+  if (!row?.id) return;
   renameRequestId.value = row?.id ?? null;
   if (!sameObjectId(selected.value?.id, row?.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {

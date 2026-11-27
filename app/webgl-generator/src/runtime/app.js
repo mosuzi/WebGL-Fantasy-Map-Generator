@@ -120,7 +120,7 @@ import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesF
 import {createMoveCityCommand, importCityMovePreflight, inspectCityMoveFast} from "./city-relocation.js";
 import {bindCityRelocationDrag, resolveCityRelocationPointerCityId} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
-import {createApplySocialExpansionCommand, inspectSocialExpansion} from "./social-expansion-edit-commands.js";
+import {createApplySocialExpansionCommand, createSaveCultureParametersCommand, inspectSocialExpansion} from "./social-expansion-edit-commands.js";
 import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment, inspectClimateWarnings} from "./biome-edit-commands.js";
 import {applySuitabilityPreview, buildSuitabilityChanges, buildSuitabilityStrokeChanges, createApplySuitabilityCommand, getSuitabilityBrushChanges, inspectSuitabilityEdit, restoreSuitabilityPreview, SUITABILITY_PREVIEW_EFFECTS} from "./suitability-edit-commands.js";
 import {invalidateSuitabilityStats} from "./suitability-stat-index.js";
@@ -12741,8 +12741,11 @@ export function applySocialExpansionViaApi(state, documentRef, kind, objectId, o
   const inspection = inspectSocialExpansion(state.map, {...semanticOptions, kind, id});
   if (!inspection.valid) throw new Error(inspection.reason);
   const request = {...semanticOptions, kind, id};
-  const command = createApplySocialExpansionCommand(request, {label: `${label}${semanticOptions.mode === "reexpand" ? "重新扩张" : "中心与参数"}`});
-  if (operationContext) {
+  const localSave = kind === "culture" && inspection.mode === "save" && !inspection.centerChanged;
+  const command = localSave
+    ? createSaveCultureParametersCommand(state.map, inspection)
+    : createApplySocialExpansionCommand(request, {label: `${label}${semanticOptions.mode === "reexpand" ? "重新扩张" : "中心与参数"}`});
+  if (operationContext && !localSave) {
     return applySocialExpansionViaWorker(state, documentRef, {
       kind,
       label,
@@ -12762,10 +12765,11 @@ export function applySocialExpansionViaApi(state, documentRef, kind, objectId, o
         : `已保存${label}中心与扩张参数。`;
     },
     noopStatus: `${label}中心、参数和覆盖均未变化。`,
-    throwOnError: false
+    throwOnError: Boolean(operationContext)
   });
   (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
   (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
+  if (operationContext && localSave) return {...command.getResult(), history: state.editHistory.getStats()};
   return editApiResult(state, result);
 }
 
