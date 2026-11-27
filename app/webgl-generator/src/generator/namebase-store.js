@@ -1,5 +1,7 @@
 import {createNamebaseSourceEntry, formatNamebaseWeightedSample, generateNamebaseCandidate, getBuiltinNamebaseSummaries, normalizeNamebaseGenerationOptions, parseNamebaseWeightedSamples, summarizeNamebaseSource} from "./names.js";
 
+import {WORLD_NAMEBASES} from "./world-namebases.js";
+
 export const NAMEBASE_DOCUMENT_TYPE = "webgl-generator-namebases";
 export const NAMEBASE_DOCUMENT_VERSION = 1;
 export const NAMEBASE_BINDING_TARGETS = Object.freeze([
@@ -176,6 +178,7 @@ export function copyBuiltinNamebaseToUser(map, id) {
   const store = ensureNamebaseStore(map);
   const existingIds = new Set(store.bases.map(base => base.id));
   const copiedAt = new Date().toISOString();
+  const options = normalizeNamebaseGenerationOptions(sourceBase);
   const copy = {
     id: uniqueId(`user-${sanitizeId(sourceBase.id)}`, existingIds),
     sourceId: sourceBase.id,
@@ -188,8 +191,8 @@ export function copyBuiltinNamebaseToUser(map, id) {
     origin: "复制",
     importedAt: copiedAt,
     importedFrom: "内置名称库",
-    minLength: sourceBase.minLength,
-    maxLength: sourceBase.maxLength,
+    minLength: options.minLength,
+    maxLength: options.maxLength,
     duplicateChars: sourceBase.duplicateChars || "",
     legacyMultiwordRate: sourceBase.multiwordRate || 0
   };
@@ -485,7 +488,7 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
   const generationOptions = normalizeNamebaseGenerationOptions(base, summarizeNamebaseSource({source: values}));
   return {
     id,
-    sourceId: String(base?.id || ""),
+    sourceId: WORLD_NAMEBASES.has(base?.sourceId) ? base.sourceId : String(base?.id || ""),
     name: base?.name ? `${base.name}` : `导入名称库 ${index + 1}`,
     kind: base?.kind || "generic",
     category: base?.category || "用户名称库",
@@ -501,12 +504,13 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
 }
 
 function normalizeSourceValues(source) {
-  return parseNamebaseWeightedSamples(source, {dedupe: false})
-    .map(formatNamebaseWeightedSample)
+  return parseNamebaseWeightedSamples(source, {dedupe: false, preserveWords: true})
+    .map(record => formatNamebaseWeightedSample(record, {preserveWords: true}))
     .filter(Boolean);
 }
 
 function normalizePreviewName(value, options = {}) {
+  if (options.completeNames) return value;
   const minLength = Math.max(1, Number(options.minLength) || 1);
   const maxLength = Math.max(minLength, Number(options.maxLength) || 12);
   const words = String(value || "").trim().split(/\s+/gu).filter(Boolean);
@@ -637,7 +641,7 @@ function parseLegacyNamebaseText(text) {
 
 function formatLegacyNamebaseLine(base) {
   if (!base?.source?.length) return "";
-  const records = parseNamebaseWeightedSamples(base.source, {dedupe: false});
+  const records = parseNamebaseWeightedSamples(base.source, {dedupe: false, preserveWords: true});
   const names = records.map(record => sanitizeLegacyName(record.value)).filter(Boolean).join(",");
   if (!names) return "";
   const name = sanitizeLegacyField(base.name || base.id || "Namebase");

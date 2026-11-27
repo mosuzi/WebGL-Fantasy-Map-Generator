@@ -172,7 +172,7 @@ async function inspectNamebaseDocs(page, {cells, seed, template}) {
     const clearDenied = api.namebases.clear();
     const afterDeniedClear = unwrap(api.namebases.list(), "namebases.list.afterDeniedClear");
     if (clearDenied?.ok !== false) failures.push("存在用户名称库时，未确认 clear 应返回结构化失败");
-    if (!String(clearDenied?.error?.message || "").includes("确认")) failures.push(`未确认 clear 错误信息异常：${clearDenied?.error?.message || ""}`);
+    if (!String(clearDenied?.error?.message || "").includes(`清空 ${initialUserCount + 2} 个用户名称库`)) failures.push(`未确认 clear 错误信息异常：${clearDenied?.error?.message || ""}`);
     assertUserCount(afterDeniedClear, initialUserCount + 2, "未确认 clear 后用户库数量", failures);
     const clearConfirmed = unwrap(api.namebases.clear({confirm: true}), "namebases.clear.confirmed");
     const afterClear = unwrap(api.namebases.list(), "namebases.list.afterClear");

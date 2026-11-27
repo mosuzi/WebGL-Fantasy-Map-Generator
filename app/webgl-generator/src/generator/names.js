@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {WORLD_NAMEBASES} from "./world-namebases.js";
 import {K170_BURG_NAMES} from "./namebase-k170-burgs.js";
 import {CHINESE_PROVINCE_NAMES} from "./namebase-chinese-provinces.js";
 import {CHINESE_PROVINCE_FORMS} from "./province-naming.js";
@@ -324,8 +325,10 @@ const HYDRO_NAME_SUFFIXES = [...new Set([...WATER_SUFFIXES, ...LAKE_SUFFIXES, "�
 const EMPTY_NAMEBASE_SOURCE = Object.freeze({records: [], chain: null, minLength: 1, maxLength: 8, duplicateChars: "", multiwordRate: 0});
 const K170_BURG_NAMEBASE = Object.freeze({source: K170_BURG_NAMES, minLength: 1, maxLength: 6});
 const BUILTIN_NAMEBASE_ENTRY_CACHE = new Map();
+let worldSummaries;
 
 const BUILTIN_NAMEBASE_SOURCES = {
+  ...Object.fromEntries(WORLD_NAMEBASES),
   "ancient-state-roots": ANCIENT_STATE_ROOTS,
   "ancient-state-compounds": ANCIENT_STATE_COMPOUND_ROOTS,
   "state-forms-generic": STATE_FORMS.Generic,
@@ -374,6 +377,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
     makePlaceName(options = {}) {
       const rng = rngFor(seed, "place", options);
       const boundPlaceSource = namebaseSources.sourceFor("place", options);
+      if (boundPlaceSource.completeNames) return drawCompleteName(used, "place", boundPlaceSource, rng);
       const makeCandidate = () => {
         const style = choosePlaceStyle(rng, options);
         const transliterationStyle = getTransliterationStyle(options);
@@ -399,6 +403,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
       const rng = rngFor(seed, "river", options);
       const cultureStyle = getCultureStyle(options);
       const boundHydroSource = namebaseSources.sourceFor("hydro", options);
+      if (boundHydroSource.native) return drawCompleteName(used, "river", boundHydroSource, rng);
       const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
       const prefix = boundHydroSource.records.length
         ? generateNamebaseCandidate(rng, boundHydroSource, {maxLength: 5})
@@ -410,6 +415,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
       const rng = rngFor(seed, "lake", options);
       const cultureStyle = getCultureStyle(options);
       const boundHydroSource = namebaseSources.sourceFor("hydro", options);
+      if (boundHydroSource.native) return drawCompleteName(used, "lake", boundHydroSource, rng);
       const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
       const prefix = boundHydroSource.records.length
         ? generateNamebaseCandidate(rng, boundHydroSource, {maxLength: 5})
@@ -421,6 +427,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
     makeStateRoot(options = {}) {
       const rng = rngFor(seed, "state-root", options);
       const boundStateRootSource = namebaseSources.sourceFor("stateRoot", options);
+      if (boundStateRootSource.completeNames) return drawCompleteName(used, "state", boundStateRootSource, rng);
       const capitalRoot = normalizeNameRoot(options.capitalName);
       const cultureRoot = cleanStateRootCandidate(options.cultureRoot);
       const allowCapitalName = Boolean(options.allowCapitalName);
@@ -447,8 +454,9 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
         ? pick(rng, CHINESE_PROVINCE_NAMES)
         : makePrimaryCandidate();
       const baseRoot = trimStateForm(options.baseName);
-      const initialRoot = baseRoot && rng.next() < 0.55 ? baseRoot : makePrimaryCandidate();
-      const root = makeUniqueGenerated(used, "province", initialRoot, rng, makeCollisionCandidate, 128);
+      const root = boundPlaceSource.completeNames
+        ? drawCompleteName(used, "province", boundPlaceSource, rng)
+        : makeUniqueGenerated(used, "province", baseRoot && rng.next() < 0.55 ? baseRoot : makePrimaryCandidate(), rng, makeCollisionCandidate, 128);
       const formName = String(options.formName || "").trim() || PROVINCE_FORMS[(options.id || 0) % PROVINCE_FORMS.length];
       return {
         name: root,
@@ -460,6 +468,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
     makeCultureName(options = {}) {
       const rng = rngFor(seed, "culture", options);
       const boundSource = namebaseSources.sourceFor("culture", options);
+      if (boundSource.native) return drawCompleteName(used, "culture", boundSource, rng);
       const root = boundSource.records.length
         ? generateNamebaseCandidate(rng, boundSource, {maxLength: 6})
         : this.makePlaceName({...options, type: "culture"});
@@ -470,6 +479,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
     makeReligionName(options = {}) {
       const rng = rngFor(seed, "religion", options);
       const boundSource = namebaseSources.sourceFor("religion", options);
+      if (boundSource.native) return drawCompleteName(used, "religion", boundSource, rng);
       const root = boundSource.records.length
         ? generateNamebaseCandidate(rng, boundSource, {maxLength: 6})
         : this.makePlaceName({...options, type: "religion"});
@@ -550,7 +560,17 @@ export function getBuiltinNamebaseSummaries({includeSource = false} = {}) {
       analyzeNamebase(`culture-${style.toLowerCase()}-suffixes`, `${cultureStyleLabel(style)}后缀`, "suffix", "文化风格", config.suffixes || [], `${cultureStyleLabel(style)}文化地名后缀`, {includeSource})
     ]);
 
-  return [...baseRows, ...cultureRows].map((row, index) => ({...row, index}));
+  const worldRows = getWorldSummaries().map(({source, ...row}) => ({
+    ...structuredClone(row), builtin: true, ...(includeSource ? {source: [...source]} : {})
+  }));
+  return [...baseRows, ...cultureRows, ...worldRows].map((row, index) => ({...row, index}));
+}
+
+function getWorldSummaries() {
+  worldSummaries ??= Array.from(WORLD_NAMEBASES.values(), base => analyzeNamebase(
+    base.id, base.name, "generic", "世界地名", base.source, "按成对词素组合的架空地名，可用于全局或指定文化。", {includeSource: true, options: base}
+  ));
+  return worldSummaries;
 }
 
 function choosePlaceStyle(rng, options) {
@@ -658,11 +678,11 @@ function getValidCultureNamebaseUsage(cultureBindings, rows) {
   return result;
 }
 
-export function parseNamebaseWeightedSamples(source, {dedupe = true} = {}) {
+export function parseNamebaseWeightedSamples(source, {dedupe = true, preserveWords = false} = {}) {
   const values = Array.isArray(source) ? source : String(source || "").split(/[,，\n\r]+/u);
   const records = [];
   for (const value of values) {
-    const record = parseNamebaseWeightedSample(value);
+    const record = parseNamebaseWeightedSample(value, preserveWords);
     if (!record.value) continue;
     records.push(record);
   }
@@ -680,18 +700,18 @@ export function parseNamebaseWeightedSamples(source, {dedupe = true} = {}) {
   }));
 }
 
-export function formatNamebaseWeightedSample(record) {
-  const value = String(record?.value || "").trim().replace(/\s+/gu, "");
+export function formatNamebaseWeightedSample(record, {preserveWords = false} = {}) {
+  const value = String(record?.value || "").trim().replace(/\s+/gu, preserveWords ? " " : "");
   if (!value) return "";
   const weight = clampNamebaseWeight(record?.weight ?? 1);
   return weight === 1 ? value : `${value}|${formatNamebaseWeight(weight)}`;
 }
 
-function parseNamebaseWeightedSample(value) {
+function parseNamebaseWeightedSample(value, preserveWords) {
   const raw = String(value || "").trim();
   if (!raw) return {value: "", weight: 1};
   const match = raw.match(/^(.+?)(?:\s*(?:\||\*|×|x)\s*(\d+(?:\.\d+)?))$/u);
-  const name = (match ? match[1] : raw).trim().replace(/\s+/gu, "");
+  const name = (match ? match[1] : raw).trim().replace(/\s+/gu, preserveWords ? " " : "");
   const weight = match ? clampNamebaseWeight(Number(match[2])) : 1;
   return {value: name, weight};
 }
@@ -706,7 +726,21 @@ function formatNamebaseWeight(value) {
   return String(clampNamebaseWeight(value)).replace(/\.0$/u, "");
 }
 
+// 用户可修改副本。保留原样本与原参数时，副本继续使用内置库的完整拼写。
+function completeNamePreset(source) {
+  if (source?.builtin === true) return WORLD_NAMEBASES.get(source.id);
+  const preset = WORLD_NAMEBASES.get(source?.sourceId);
+  if (!preset || !Array.isArray(source.source) || source.source.length !== preset.source.length) return null;
+  const summary = getWorldSummaries().find(row => row.id === preset.id);
+  const defaults = normalizeNamebaseGenerationOptions(summary);
+  const current = normalizeNamebaseGenerationOptions(source);
+  if (Object.keys(defaults).some(key => defaults[key] !== current[key])) return null;
+  return source.source.every((name, index) => name === preset.source[index]) ? preset : null;
+}
+
 export function createNamebaseSourceEntry(source) {
+  const world = completeNamePreset(source);
+  if (world) return {completeNames: world.source, native: world.native, records: world.source.map(value => ({value, weight: 1}))};
   const sourceValues = namebaseSourceValues(source);
   const records = parseNamebaseWeightedSamples(sourceValues);
   const fallback = sampleLengthFallback(records);
@@ -796,6 +830,7 @@ function pickNamebaseValue(rng, source) {
 }
 
 export function generateNamebaseCandidate(rng, source, options = {}) {
+  if (source?.completeNames) return source.completeNames[Math.floor(namebaseRandom(rng) * source.completeNames.length)];
   const settings = namebaseCandidateSettings(source, options);
   if (!(settings.multiwordRate > 0) || namebaseRandom(rng) >= settings.multiwordRate) {
     return generateSingleNamebaseCandidate(rng, source, settings);
@@ -1022,6 +1057,32 @@ function generatorStyle(style) {
   };
 }
 
+// 词素已经按当地写法组合，重名时优先选用本库的其余完整名称。
+function drawCompleteName(used, scope, source, rng) {
+  const names = source.completeNames;
+  const start = Math.floor(rng.next() * names.length);
+  const claim = name => {
+    if (scope === "state") return claimStateRoot(used, name);
+    const key = `${scope}:${name}`;
+    if (used.has(key)) return false;
+    used.set(key, 1);
+    return true;
+  };
+  for (let offset = 0; offset < names.length; offset++) {
+    const name = names[(start + offset) % names.length];
+    if (claim(name)) return name;
+  }
+  const base = names[start];
+  const counter = `serial:${scope}:${base}`;
+  let number = used.get(counter) || 1;
+  let name;
+  do {
+    name = `${base} ${++number}`;
+  } while (!claim(name));
+  used.set(counter, number);
+  return name;
+}
+
 function makeUnique(used, scope, name, rng) {
   const key = `${scope}:${name}`;
   const count = used.get(key) || 0;
@@ -1163,12 +1224,14 @@ export function summarizeNamebaseSource(source, {includeSource = false} = {}) {
   );
   if (source?.builtin !== undefined) summary.builtin = Boolean(source.builtin);
   if (source?.origin) summary.origin = source.origin;
+  if (source?.sourceId) summary.sourceId = source.sourceId;
   if (source?.importedAt) summary.importedAt = source.importedAt;
   return summary;
 }
 
 function analyzeNamebase(id, name, kind, category, values, note = "", {includeSource = false, options = null} = {}) {
-  const records = parseNamebaseWeightedSamples(values, {dedupe: false});
+  const world = options?.builtin === true && WORLD_NAMEBASES.has(id);
+  const records = parseNamebaseWeightedSamples(values, {dedupe: false, preserveWords: true});
   const normalizedValues = records.map(record => record.value);
   const counts = new Map();
   for (const value of normalizedValues) counts.set(value, (counts.get(value) || 0) + 1);
@@ -1179,17 +1242,17 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
   const sampleMaxLength = lengths.length ? Math.max(...lengths) : 0;
   const sampleMeanLength = roundNamebaseMetric(lengths.length ? lengths.reduce((sum, length) => sum + length, 0) / lengths.length : 0);
   const sampleMedianLength = roundNamebaseMetric(medianNamebaseMetric(lengths));
-  const generationOptions = normalizeNamebaseGenerationOptions(options || {}, {
-    minLength: sampleMinLength || 1,
-    maxLength: sampleMaxLength || 8
-  });
+  const lengthsForGeneration = {minLength: sampleMinLength || 1, maxLength: sampleMaxLength || 8};
+  const generationOptions = world
+    ? {...lengthsForGeneration, duplicateChars: collectNamebaseDoubledChars(uniqueValues).join(""), multiwordRate: 0}
+    : normalizeNamebaseGenerationOptions(options || {}, lengthsForGeneration);
   const lengthOutlierNames = uniqueValues.filter(value => {
     const length = Array.from(value).length;
     return length < generationOptions.minLength || length > generationOptions.maxLength;
   });
   const disallowedRepeatNames = uniqueValues.filter(value => hasDisallowedAdjacentRepeat(Array.from(value), generationOptions.duplicateChars));
   const doubledChars = collectNamebaseDoubledChars(uniqueValues);
-  const unusualChars = collectNamebaseUnusualChars(uniqueValues);
+  const unusualChars = collectNamebaseUnusualChars(uniqueValues).filter(char => !world || !/^[\p{Mark} ’']$/u.test(char));
   const weightedSamples = Math.round(records.reduce((sum, record) => sum + record.weight, 0) * 10) / 10;
   const weightedNameSamples = records.filter(record => record.weight !== 1).length;
   const maxSampleWeight = records.length ? Math.max(...records.map(record => record.weight)) : 0;
@@ -1225,7 +1288,7 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
     examples: uniqueValues.slice(0, 16),
     note
   };
-  if (includeSource) summary.source = records.map(formatNamebaseWeightedSample).filter(Boolean);
+  if (includeSource) summary.source = records.map(record => formatNamebaseWeightedSample(record, {preserveWords: true})).filter(Boolean);
   return summary;
 }
 
