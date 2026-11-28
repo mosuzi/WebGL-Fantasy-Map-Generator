@@ -1,4 +1,4 @@
-import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
+import {chooseRenameCandidate, collectRenameChanges, createRenameGenerator, prepareRenameChanges} from "./namebase-redraw.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {namebaseRenameAffected, objectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
@@ -444,7 +444,7 @@ export function createSetRiverNoteCommand(riverId, body, {name = ""} = {}) {
   };
 }
 
-export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名称库重命名河流", drawSeed = ""} = {}) {
+export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名称库重命名河流", drawSeed = "", allowEmpty = false} = {}) {
   const targets = uniqueRiverIds(riverIds);
   let changes = null;
 
@@ -455,9 +455,12 @@ export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名
       ...RIVER_NAME_BATCH_EFFECTS,
       affected: namebaseRenameAffected(OBJECT_KIND.RIVER, targets)
     },
+    async prepare(context, checkpoint) {
+      changes ??= await prepareRenameChanges(buildRiverRenameChanges(context.map, targets, drawSeed), checkpoint);
+    },
     apply(context) {
-      changes ??= buildRiverRenameChanges(context.map, targets, drawSeed);
-      if (!changes.length) throw new Error("没有可重命名的河流");
+      changes ??= collectRenameChanges(buildRiverRenameChanges(context.map, targets, drawSeed));
+      if (!changes.length && !allowEmpty) throw new Error("没有可重命名的河流");
       for (const change of changes) writeRiverName(context.map, change.id, change.afterName);
     },
     revert(context) {
@@ -465,7 +468,7 @@ export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名
       for (const change of changes) writeRiverName(context.map, change.id, change.beforeName);
     },
     isNoop(context) {
-      return !targets.length || !buildRiverRenameChanges(context.map, targets, drawSeed).length;
+      return !targets.length || !collectRenameChanges(buildRiverRenameChanges(context.map, targets, drawSeed)).length;
     },
     getResult() {
       return {renamed: changes?.length || 0, total: targets.length};
@@ -923,20 +926,18 @@ function countPositive(values) {
   return count;
 }
 
-function buildRiverRenameChanges(map, riverIds, drawSeed) {
+function* buildRiverRenameChanges(map, riverIds, drawSeed) {
   const rivers = map?.rivers?.rivers || [];
   if (!rivers.length) return [];
   const generator = createRenameGenerator(map, "river", drawSeed);
-  const changes = [];
   for (const id of riverIds) {
     const river = findRiver(map, id);
     if (!river) continue;
     const beforeName = river.name || "";
     const afterName = chooseRenameCandidate(beforeName, drawSeed, () => generator.makeRiverName(riverNameOptions(map, river)));
     if (!afterName) continue;
-    changes.push({id, beforeName, afterName});
+    yield {id, beforeName, afterName};
   }
-  return changes;
 }
 
 function riverNameOptions(map, river) {

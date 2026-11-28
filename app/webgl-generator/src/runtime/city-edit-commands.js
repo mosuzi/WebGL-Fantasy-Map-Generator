@@ -1,5 +1,5 @@
 import {settlementLandPoint} from "../generator/settlement-land-point.js";
-import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
+import {chooseRenameCandidate, collectRenameChanges, createRenameGenerator, prepareRenameChanges} from "./namebase-redraw.js";
 import {
   createCityScaleContext,
   defaultCityVisual,
@@ -320,7 +320,7 @@ export function createSetCityNoteCommand(cityId, body, {name = ""} = {}) {
   };
 }
 
-export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名称库重命名城市", drawSeed = ""} = {}) {
+export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名称库重命名城市", drawSeed = "", allowEmpty = false} = {}) {
   const targets = uniqueCityIds(cityIds);
   let changes = null;
 
@@ -331,9 +331,12 @@ export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名�
       ...CITY_NAME_BATCH_EFFECTS,
       affected: namebaseRenameAffected(OBJECT_KIND.CITY, targets)
     },
+    async prepare(context, checkpoint) {
+      changes ??= await prepareRenameChanges(buildCityRenameChanges(context.map, targets, drawSeed), checkpoint);
+    },
     apply(context) {
-      changes ??= buildCityRenameChanges(context.map, targets, drawSeed);
-      if (!changes.length) throw new Error("没有可重命名的城市");
+      changes ??= collectRenameChanges(buildCityRenameChanges(context.map, targets, drawSeed));
+      if (!changes.length && !allowEmpty) throw new Error("没有可重命名的城市");
       for (const change of changes) writeCityName(context.map, change.id, change.afterName);
     },
     revert(context) {
@@ -341,7 +344,7 @@ export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名�
       for (const change of changes) restoreCityName(context.map, change);
     },
     isNoop(context) {
-      return !targets.length || !buildCityRenameChanges(context.map, targets, drawSeed).length;
+      return !targets.length || !collectRenameChanges(buildCityRenameChanges(context.map, targets, drawSeed)).length;
     },
     getResult() {
       return {renamed: changes?.length || 0, total: targets.length};
@@ -459,10 +462,9 @@ function captureCitySnapshot(map, cityId) {
   };
 }
 
-function buildCityRenameChanges(map, cityIds, drawSeed) {
+function* buildCityRenameChanges(map, cityIds, drawSeed) {
   if (!map?.settlements?.cities?.length) return [];
   const generator = createRenameGenerator(map, "city", drawSeed);
-  const changes = [];
   for (const id of cityIds) {
     const city = map.settlements.cities[id];
     if (!city) continue;
@@ -470,15 +472,14 @@ function buildCityRenameChanges(map, cityIds, drawSeed) {
     const beforeName = city.name || burg?.name || "";
     const afterName = chooseRenameCandidate(beforeName, drawSeed, () => generator.makePlaceName(cityNameOptions(map, city, burg)));
     if (!afterName) continue;
-    changes.push({
+    yield {
       id,
       burgId: city.burgId,
       beforeName,
       beforeBurgName: burg?.name || "",
       afterName
-    });
+    };
   }
-  return changes;
 }
 
 function cityNameOptions(map, city, burg) {

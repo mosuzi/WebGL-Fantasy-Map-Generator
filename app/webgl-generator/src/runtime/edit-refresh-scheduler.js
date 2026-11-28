@@ -145,11 +145,13 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
 
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
         const map = state.map;
-        const politicalLabelsOnly = stateNameOnly || politicalPatch && (!effects.derived.includes("point-layers") || sourceEffects?.brushCityIds?.length > 0);
+        const politicalLabelsOnly = stateNameOnly || sourceEffects?.scopedNameLabels === true
+          || politicalPatch && (!effects.derived.includes("point-layers") || sourceEffects?.brushCityIds?.length > 0);
         const nextOptions = {
           ...labelRefreshOptions(effects),
           positionTarget: sourceEffects?.labelPositionTarget,
           politicalOnly: politicalLabelsOnly,
+          namesOnly: sourceEffects?.scopedNameLabels === true,
           ...(sourceEffects?.brushCityIds?.length ? {cityIds: sourceEffects.brushCityIds} : {}),
           provinceIds: sourceEffects?.brushProvinceIds
         };
@@ -160,7 +162,8 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         if (pending) {
           if (pending.politicalOnly && nextOptions.politicalOnly) {
             const union = (a, b) => [...new Set([...(a || []), ...(b || [])])];
-            options = {...nextOptions, stateIds: union(pending.stateIds, nextOptions.stateIds), cityIds: union(pending.cityIds, nextOptions.cityIds),
+            options = {...nextOptions, namesOnly: pending.namesOnly && nextOptions.namesOnly,
+              stateIds: union(pending.stateIds, nextOptions.stateIds), cityIds: union(pending.cityIds, nextOptions.cityIds),
               provinceIds: pending.provinceIds && nextOptions.provinceIds ? union(pending.provinceIds, nextOptions.provinceIds) : null};
           } else options = {};
         }
@@ -342,7 +345,8 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         await runStep(() => state.renderer.draw());
       }
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
-        const politicalLabelsOnly = stateNameOnly || politicalPatch && (!effects.derived.includes("point-layers") || sourceEffects?.brushCityIds?.length > 0);
+        const politicalLabelsOnly = stateNameOnly || sourceEffects?.scopedNameLabels === true
+          || politicalPatch && (!effects.derived.includes("point-layers") || sourceEffects?.brushCityIds?.length > 0);
         await runStep(() => {
           if (pendingLabelRefresh?.map === state.map) {
             pendingLabelRefresh = null;
@@ -354,6 +358,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
             ...(sourceEffects?.brushCityIds?.length ? {cityIds: sourceEffects.brushCityIds} : {}),
             provinceIds: sourceEffects?.brushProvinceIds,
             politicalOnly: politicalLabelsOnly,
+            namesOnly: sourceEffects?.scopedNameLabels === true,
             stateIds: politicalLabelsOnly ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id)) : labelRefreshOptions(effects).stateIds
           });
         });

@@ -13,3 +13,17 @@ export function chooseRenameCandidate(current, drawSeed, generate) {
   }
   return "";
 }
+
+export function collectRenameChanges(candidates) {
+  return [...candidates].filter(Boolean);
+}
+
+export async function prepareRenameChanges(candidates, checkpoint) {
+  const changes = [];
+  for (const candidate of candidates) {
+    if (candidate) changes.push(candidate);
+    const wait = checkpoint();
+    if (wait) await wait;
+  }
+  return changes;
+}

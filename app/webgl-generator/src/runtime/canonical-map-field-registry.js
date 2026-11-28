@@ -98,22 +98,26 @@ export const CANONICAL_MAP_FIELD_REGISTRY = Object.freeze(descriptorRows.map(cre
 
 const descriptorById = new Map(CANONICAL_MAP_FIELD_REGISTRY.map(descriptor => [descriptor.id, descriptor]));
 const descriptorsBySpecificity = [...CANONICAL_MAP_FIELD_REGISTRY].sort((left, right) => specificity(right.path) - specificity(left.path));
+const descriptorPaths = descriptorsBySpecificity.map(descriptor => ({
+  descriptor,
+  parts: descriptor.path.split("."),
+  prefix: descriptor.path.includes("*") ? null : `${descriptor.path}.`
+}));
 
 export function getCanonicalMapFieldDescriptor(id) {
   return descriptorById.get(String(id || "")) || null;
 }
 
 export function resolveCanonicalMapFieldDescriptor(path) {
-  const normalized = normalizePath(path);
-  return descriptorsBySpecificity.find(descriptor => pathMatches(descriptor.path, normalized)) || null;
+  const parts = normalizePath(path).split(".");
+  return descriptorPaths.find(entry => pathMatches(entry.parts, parts))?.descriptor || null;
 }
 
 export function resolveCanonicalMapWriteDescriptor(path) {
   const normalized = normalizePath(path);
-  return descriptorsBySpecificity.find(descriptor => (
-    pathMatches(descriptor.path, normalized)
-    || (!descriptor.path.includes("*") && normalized.startsWith(`${descriptor.path}.`))
-  )) || null;
+  const parts = normalized.split(".");
+  return descriptorPaths.find(entry => pathMatches(entry.parts, parts)
+    || (entry.prefix && normalized.startsWith(entry.prefix)))?.descriptor || null;
 }
 
 export function listCanonicalMapSections() {
@@ -158,9 +162,7 @@ function normalizePath(path) {
   return Array.isArray(path) ? path.map(String).join(".") : String(path || "").trim();
 }
 
-function pathMatches(pattern, path) {
-  const expected = pattern.split(".");
-  const actual = path.split(".");
+function pathMatches(expected, actual) {
   if (expected.length !== actual.length) return false;
   return expected.every((part, index) => part === "*" || part === actual[index]);
 }

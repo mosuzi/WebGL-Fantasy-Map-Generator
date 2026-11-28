@@ -1,4 +1,4 @@
-import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
+import {chooseRenameCandidate, collectRenameChanges, createRenameGenerator, prepareRenameChanges} from "./namebase-redraw.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {namebaseRenameAffected, objectAffected} from "./edit-command-effects.js";
 import {createChineseNameGenerator} from "../generator/names.js";
@@ -263,7 +263,7 @@ export function createApplyFeaturePatchCommand(options = {}, {label = "局部水
   };
 }
 
-export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名称库重命名湖泊", drawSeed = ""} = {}) {
+export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名称库重命名湖泊", drawSeed = "", allowEmpty = false} = {}) {
   const targets = uniqueLakeIds(lakeIds);
   let changes = null;
 
@@ -274,9 +274,12 @@ export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名�
       ...LAKE_NAME_BATCH_EFFECTS,
       affected: namebaseRenameAffected(OBJECT_KIND.LAKE, targets)
     },
+    async prepare(context, checkpoint) {
+      changes ??= await prepareRenameChanges(buildLakeRenameChanges(context.map, targets, drawSeed), checkpoint);
+    },
     apply(context) {
-      changes ??= buildLakeRenameChanges(context.map, targets, drawSeed);
-      if (!changes.length) throw new Error("没有可重命名的湖泊");
+      changes ??= collectRenameChanges(buildLakeRenameChanges(context.map, targets, drawSeed));
+      if (!changes.length && !allowEmpty) throw new Error("没有可重命名的湖泊");
       for (const change of changes) writeLakeName(context.map, change.id, change.afterName);
     },
     revert(context) {
@@ -284,7 +287,7 @@ export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名�
       for (const change of changes) writeLakeName(context.map, change.id, change.beforeName);
     },
     isNoop(context) {
-      return !targets.length || !buildLakeRenameChanges(context.map, targets, drawSeed).length;
+      return !targets.length || !collectRenameChanges(buildLakeRenameChanges(context.map, targets, drawSeed)).length;
     },
     getResult() {
       return {renamed: changes?.length || 0, total: targets.length};
@@ -1006,20 +1009,18 @@ function round(value, digits = 2) {
   return Math.round((Number(value) || 0) * factor) / factor;
 }
 
-function buildLakeRenameChanges(map, lakeIds, drawSeed) {
+function* buildLakeRenameChanges(map, lakeIds, drawSeed) {
   const lakes = map?.pack?.features || [];
   if (!lakes.length) return [];
   const generator = createRenameGenerator(map, "lake", drawSeed);
-  const changes = [];
   for (const id of lakeIds) {
     const lake = findLake(map, id);
     if (!lake) continue;
     const beforeName = lake.name || "";
     const afterName = chooseRenameCandidate(beforeName, drawSeed, () => generator.makeLakeName(lakeNameOptions(map, lake)));
     if (!afterName) continue;
-    changes.push({id, beforeName, afterName});
+    yield {id, beforeName, afterName};
   }
-  return changes;
 }
 
 function lakeNameOptions(map, lake) {

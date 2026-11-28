@@ -343,6 +343,7 @@ import HeightmapExportWorker from "./heightmap-export-worker.js?worker";
 import {GENERATION_WORKER_TASK} from "./generation-worker-task.js";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
+import {prepareCultureNameChanges} from "./culture-related-names.js";
 import {createLatestDisplayIntentQueue, isSupersededDisplayIntent} from "./display-intent-queue.js";
 import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
 import {MapSaveState, installMapSaveStatus} from "./map-save-state.js";
@@ -1770,6 +1771,9 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       selectFromPanel("culture-panel", object);
       culturePanel.setSelectedCultureId(object.id);
     },
+    onClearSelection: () => {
+      if (state.selection?.object?.kind === OBJECT_KIND.CULTURE) state.selectionStore.clear();
+    },
     onLocate: object => {
       locateAndSelectObject("culture-panel", object, {
         afterSelect: target => culturePanel.setSelectedCultureId(target.id)
@@ -1812,6 +1816,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       updateEditingInteractionLock(state, documentRef);
     },
     onRenameVisibleFromNamebase: cultureIds => executeNamedObjectNamebaseRename(state, documentRef, OBJECT_KIND.CULTURE, cultureIds),
+    onRegenerateRelatedNames: options => regenerateCultureNames(state, documentRef, options),
     onColorChange: (cultureId, color) => {
       const context = {map: state.map};
       const culture = state.map?.society?.cultures?.[cultureId] || state.map?.pack?.cultures?.[cultureId];
@@ -3160,6 +3165,8 @@ function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCom
   const sourceMap = state.map;
   // 小补丁在本次提交取值，下一笔或紧接着的撤销可以继续排队。
   const capture = async () => {
+    const preparedFields = mutation.command?.getPreparedReplicaFieldWrites?.(mutation.action);
+    if (preparedFields) return preparedFields;
     if ((mutation.command?.getReplicaRows || mutation.command?.getReplicaFields || mutation.command?.getReplicaSplices) && (mutation.command.effects?.changedGridCells?.length || 0) <= 4096) {
       return captureCommandMapReplicaWrites({map: sourceMap, command: mutation.command});
     }
@@ -7425,6 +7432,37 @@ function executeNamedObjectNamebaseRename(state, documentRef, kind, ids, {refres
   updateEditingInteractionLock(state, documentRef);
 }
 
+async function regenerateCultureNames(state, documentRef, options) {
+  if (!state.map) return "当前没有可编辑的地图。";
+  if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return "地图正在更新，请稍后重试。";
+  const map = state.map;
+  const revision = state.mapRevision.mapRevision;
+  try {
+    const outcome = await state.runtimeOperation.run("edit.cultureNames.regenerate", async operation => {
+      const assertCurrent = () => {
+        operation.throwIfCancelled();
+        if (state.map !== map || state.mapRevision.mapRevision !== revision) {
+          throw createRuntimeOperationError("operation_obsolete", "地图内容已变化，请重新生成名称。");
+        }
+      };
+      const command = await prepareCultureNameChanges(map, options, {
+        createCommand: createNamebaseRenameObjectsCommand,
+        drawSeed: createRandomSeed(),
+        yieldToMain: () => yieldMapHandoffDecode(documentRef),
+        assertCurrent
+      });
+      assertCurrent();
+      const result = executeEditCommand(state, documentRef, command);
+      const {renamed, skipped} = command.getResult();
+      const message = result.executed ? `已重新生成 ${renamed} 个名称。` : "没有可更新的名称。";
+      return skipped ? `${message}已跳过 ${skipped} 个锁定对象。` : message;
+    }, {loading: false});
+    return outcome.result;
+  } catch (error) {
+    return error?.expected ? error.message : "名称生成失败，请稍后重试。";
+  }
+}
+
 function createNamebaseRenameObjectsCommand(kind, ids, options = {}) {
   switch (kind) {
     case "state":
@@ -9172,6 +9210,13 @@ function handleSelectionPanel(state, selection, editingObject, context) {
 }
 
 function refreshAfterEdit(state, commandOrEffects, binding = null) {
+  if (commandOrEffects?.domain === "culture-related-names") {
+    const selected = namebaseRenameTargetForObject(state.selection?.object) || state.selection?.object;
+    if (selected && commandOrEffects.effects.affected.some(target => target.kind === selected.kind && target.id === Number(selected.id))) {
+      state.editRefreshScheduler.run({...commandOrEffects, effects: {...commandOrEffects.effects, selection: "refresh"}}, {binding});
+      return;
+    }
+  }
   state.editRefreshScheduler.run(commandOrEffects, {binding});
 }
 
@@ -13594,6 +13639,9 @@ function refreshPanelsForEdit(state, commandOrEffects) {
   if (derived.includes("object-panels")) {
     updateAllObjectPanels(state);
     return;
+  }
+  if (commandOrEffects?.domain === "culture-related-names" && kinds.has(OBJECT_KIND.STATE) && !kinds.has(OBJECT_KIND.CULTURE)) {
+    updateCulturePanel(state);
   }
   for (const kind of kinds) {
     updatePanelForAffectedKind(state, kind);

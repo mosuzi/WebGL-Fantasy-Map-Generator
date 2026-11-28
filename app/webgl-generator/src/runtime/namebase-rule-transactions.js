@@ -418,7 +418,7 @@ function findObject(map, kind, id) {
   return object && object.removed !== true ? object : null;
 }
 
-function objectCultureId(map, kind, object, id) {
+export function objectCultureId(map, kind, object, id) {
   if (kind === OBJECT_KIND.STATE) return integerOrZero(object.culture);
   if (kind === OBJECT_KIND.PROVINCE) {
     return integerOrZero(object.culture ?? map?.pack?.cells?.culture?.[object.center]);
@@ -454,7 +454,7 @@ function assertRenamedNamesUnique(map, rename) {
   }
 }
 
-function namedObjects(map, kind) {
+export function namedObjects(map, kind) {
   if (kind === OBJECT_KIND.STATE) return (map?.politics?.states || map?.pack?.states || []).filter(item => item && !item.removed);
   if (kind === OBJECT_KIND.PROVINCE) return (map?.politics?.provinces || map?.pack?.provinces || []).filter(item => item && !item.removed);
   if (kind === OBJECT_KIND.CITY) return (map?.settlements?.cities || []).filter(item => item && !item.removed);

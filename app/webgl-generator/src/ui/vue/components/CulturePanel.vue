@@ -50,7 +50,7 @@
     @edit="openRenameEditor"
     @empty-action="handleListAction"
     @column-resize="callbacks.onColumnResize"
-    @selection-change="selectedCultureIds = $event"
+    @selection-change="updateTableSelection"
   />
 
   <UiPanelIoActions
@@ -71,9 +71,22 @@
     @input="callbacks.onAssignmentRadius"
   />
 
-  <UiActionDock v-if="brushRow" host-id="CulturePanel" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
-
-
+  <UiActionDock v-if="state.map" host-id="CulturePanel" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
+    <template #regenerate-names>
+      <ElForm label-position="top" size="small" @submit.prevent="regenerateNames">
+        <ElFormItem label="命名范围">
+          <strong>{{ namingScopeLabel }}</strong>
+          <ElButton v-if="namingRows.length" :disabled="nameRequestPending" @click="clearNamingSelection">清除选择</ElButton>
+        </ElFormItem>
+        <ElFormItem label="命名类型">
+          <ElSelect v-model="nameType" aria-label="命名类型" :disabled="nameRequestPending">
+            <ElOption v-for="option in nameTypeOptions" :key="option.key" :label="option.label" :value="option.key" />
+          </ElSelect>
+        </ElFormItem>
+        <ElButton native-type="submit" :disabled="nameRequestPending">{{ nameRequestPending ? "正在生成名称" : "重新生成名称" }}</ElButton>
+        <p v-if="nameRequestMessage" class="culture-name-result" role="status">{{ nameRequestMessage }}</p>
+      </ElForm>
+    </template>
 
     <template #expansion>
       <div class="social-expansion-editor" aria-label="文化中心与扩张编辑">
@@ -119,7 +132,7 @@
 </template>
 
 <script setup>
-import {Aim, Brush, Delete, MagicStick, Plus, Reading, RefreshLeft} from "@element-plus/icons-vue";
+import {Aim, Brush, Delete, MagicStick, Plus, Reading, Refresh, RefreshLeft} from "@element-plus/icons-vue";
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -138,6 +151,7 @@ import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+import {CULTURE_NAME_TYPES} from "../../../runtime/culture-name-types.js";
 
 const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.CULTURE);
 
@@ -180,6 +194,10 @@ const unitPreferences = useUnitPreferences();
 const detailGrid = ref(null);
 const activeAction = ref(null);
 const renameRequestId = ref(null);
+const nameType = ref("city");
+const nameRequestPending = ref(false);
+const nameRequestMessage = ref("");
+const nameTypeOptions = [{key: "all", label: "全部名称类型"}, ...CULTURE_NAME_TYPES];
 const treePanelOpen = computed({
   get: () => Boolean(props.state.treeOpen),
   set: value => props.callbacks.onTreeOpen?.(value)
@@ -204,12 +222,19 @@ watch(brushRow, row => {
 const regenerationLocks = useRegenerationLockSelection({panelId: "culture-panel", kind: "culture", rows: visibleRows});
 const {selectedRowIds: selectedCultureIds} = useVisibleRowSelection(visibleRows);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCultureId));
+const namingRows = computed(() => regenerationLocks.selectedRows.value.length
+  ? regenerationLocks.selectedRows.value
+  : selected.value && brushRow.value ? [selected.value] : []);
+const namingScopeLabel = computed(() => namingRows.value.length > 1
+  ? `选中的 ${namingRows.value.length} 个文化`
+  : namingRows.value[0]?.name || "所有文化");
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根文化"));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: RefreshLeft}
   : null);
 const cultureActions = computed(() => [
-  {key: "assign", resultClass: "toggle-canvas-mode", label: props.state.assignmentActive ? "退出文化归属笔刷" : "编辑文化归属", icon: Brush, panel: false, active: props.state.assignmentActive},
+  ...(brushRow.value ? [{key: "assign", resultClass: "toggle-canvas-mode", label: props.state.assignmentActive ? "退出文化归属笔刷" : "编辑文化归属", icon: Brush, panel: false, active: props.state.assignmentActive}] : []),
+  {key: "regenerate-names", resultClass: "open-secondary", label: "按文化重新生成命名", icon: Refresh},
   ...(selected.value ? [
     {key: "expansion", resultClass: "open-secondary", label: "中心与扩张", icon: Aim},
     {key: "namebase", resultClass: "open-other-panel", label: "名称库绑定", icon: Reading}
@@ -277,7 +302,7 @@ const detailRows = computed(() => selected.value ? [
 ] : []);
 
 watch(() => selected.value?.id, id => {
-  activeAction.value = null;
+  if (activeAction.value !== "regenerate-names") activeAction.value = null;
   resetExpansionDraft();
   if (!sameObjectId(renameRequestId.value, id)) return;
   renameRequestId.value = null;
@@ -321,6 +346,7 @@ function selectTreeNode(node) {
 }
 
 function handleActionSelect(actionKey) {
+  if (actionKey === "regenerate-names" && !nameRequestPending.value) nameRequestMessage.value = "";
   if (actionKey === "assign") {
     activeAction.value = null;
     props.callbacks.onAssignmentActive?.(!props.state.assignmentActive);
@@ -329,6 +355,32 @@ function handleActionSelect(actionKey) {
   if (actionKey !== "namebase" || !selected.value) return;
   activeAction.value = null;
   props.callbacks.onNamebaseBinding?.(selected.value.id);
+}
+
+function clearNamingSelection() {
+  selectedCultureIds.value = [];
+  regenerationLocks.handleSelectionChange([]);
+  nameRequestMessage.value = "";
+  props.callbacks.onClearSelection?.();
+}
+
+function updateTableSelection(ids) {
+  selectedCultureIds.value = ids;
+  if (!ids.length) props.callbacks.onClearSelection?.();
+}
+
+async function regenerateNames() {
+  if (nameRequestPending.value) return;
+  nameRequestPending.value = true;
+  nameRequestMessage.value = "";
+  try {
+    nameRequestMessage.value = await props.callbacks.onRegenerateRelatedNames?.({
+      cultureIds: namingRows.value.map(row => row.id),
+      type: nameType.value
+    });
+  } finally {
+    nameRequestPending.value = false;
+  }
 }
 
 function openRenameEditor(row) {

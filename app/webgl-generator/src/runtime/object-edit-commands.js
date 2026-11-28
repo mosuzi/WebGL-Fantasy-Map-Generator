@@ -1,4 +1,4 @@
-import {chooseRenameCandidate, createRenameGenerator} from "./namebase-redraw.js";
+import {chooseRenameCandidate, collectRenameChanges, createRenameGenerator, prepareRenameChanges} from "./namebase-redraw.js";
 import {withCityLocalUpdates} from "./city-local-updates.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
@@ -157,7 +157,7 @@ function nameFieldsForReplica(map, {kind, id}) {
   });
 }
 
-export function createRenameNamedObjectsFromNamebaseCommand(kind, ids, {label = "", drawSeed = ""} = {}) {
+export function createRenameNamedObjectsFromNamebaseCommand(kind, ids, {label = "", drawSeed = "", allowEmpty = false} = {}) {
   const targetKind = [OBJECT_KIND.PROVINCE, OBJECT_KIND.CULTURE, OBJECT_KIND.RELIGION].includes(kind) ? kind : "";
   const targets = [...new Set((ids || []).map(id => Number(id)).filter(id => Number.isInteger(id) && id > 0))];
   let changes = null;
@@ -170,10 +170,13 @@ export function createRenameNamedObjectsFromNamebaseCommand(kind, ids, {label = 
       ...OBJECT_NAME_EFFECTS,
       affected: namebaseRenameAffected(targetKind, targets)
     },
+    async prepare(context, checkpoint) {
+      changes ??= await prepareRenameChanges(buildNamedObjectRenameChanges(context.map, targetKind, targets, drawSeed), checkpoint);
+    },
     apply(context) {
       if (!targetKind) throw new Error("当前对象类型不支持名称库批量重命名");
-      changes ??= buildNamedObjectRenameChanges(context.map, targetKind, targets, drawSeed);
-      if (!changes.length) throw new Error(`没有可重命名的${kindLabel}`);
+      changes ??= collectRenameChanges(buildNamedObjectRenameChanges(context.map, targetKind, targets, drawSeed));
+      if (!changes.length && !allowEmpty) throw new Error(`没有可重命名的${kindLabel}`);
       for (const change of changes) {
         writeObjectName(context.map, change.target, change.afterName);
         if (change.mirrorBefore) restoreObjectName({pack: context.map.pack}, change.target, readObjectName(context.map, change.target));
@@ -187,7 +190,7 @@ export function createRenameNamedObjectsFromNamebaseCommand(kind, ids, {label = 
       }
     },
     isNoop(context) {
-      return !targetKind || !targets.length || !buildNamedObjectRenameChanges(context.map, targetKind, targets, drawSeed).length;
+      return !targetKind || !targets.length || !collectRenameChanges(buildNamedObjectRenameChanges(context.map, targetKind, targets, drawSeed)).length;
     },
     getResult() {
       return {renamed: changes?.length || 0, total: targets.length};
@@ -347,11 +350,10 @@ function restoreObjectName(map, target, previous) {
   throw new Error(`不支持恢复对象类型：${target.kind}`);
 }
 
-function buildNamedObjectRenameChanges(map, kind, ids, drawSeed) {
+function* buildNamedObjectRenameChanges(map, kind, ids, drawSeed) {
   const generator = createRenameGenerator(map, kind, drawSeed, {
     provinceNames: (map?.politics?.provinces || map?.pack?.provinces || []).filter(item => item && !item.removed).map(item => item.name)
   });
-  const changes = [];
   const collection = {province: "provinces", culture: "cultures", religion: "religions"}[kind];
   const primary = (kind === OBJECT_KIND.PROVINCE ? map?.politics : map?.society)?.[collection];
   const packed = map?.pack?.[collection];
@@ -363,9 +365,8 @@ function buildNamedObjectRenameChanges(map, kind, ids, drawSeed) {
     if (!afterName) continue;
     const mirrorBefore = primary?.[id] && packed?.[id] && primary[id] !== packed[id]
       ? readObjectName({pack: map.pack}, target) : null;
-    changes.push({target, before, afterName, mirrorBefore});
+    yield {target, before, afterName, mirrorBefore};
   }
-  return changes;
 }
 
 function generateNamedObjectName(map, generator, target) {

@@ -5317,7 +5317,7 @@ export class PlaceholderMapRenderer {
     };
   }
 
-  buildLabels(map, {cityRolesOnly = false, politicalOnly = false, stateIds = [], cityIds = null, provinceIds = null, statePlacements = null} = {}) {
+  buildLabels(map, {cityRolesOnly = false, politicalOnly = false, stateIds = [], cityIds = null, provinceIds = null, statePlacements = null, namesOnly = false} = {}) {
     if (!this.overlay) {
       this.gridCellIdLayer = null;
       this.labelItems = [];
@@ -5364,12 +5364,20 @@ export class PlaceholderMapRenderer {
       ]
       : [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getLabelZones(map), ...getCustomLabels(map)];
     const localEdit = scoped && cityIds?.length;
+    const cityIdSet = new Set(cityIds || []);
     const retained = new Set();
     if (localEdit) {
       const oldCities = new Map(this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).map(item => [item.targetId, item]));
       for (const [i, candidate] of sourceLabels.entries()) {
         const old = oldCities.get(candidate.targetId);
-        if (candidate.targetKind === LABEL_TARGET_KIND.CITY && old && !cityIds.includes(candidate.targetId) && old.text === candidate.text) {
+        const replaceText = namesOnly && old?.contentNode && !old.manualPath;
+        if (candidate.targetKind === LABEL_TARGET_KIND.CITY && old
+          && (replaceText || !cityIdSet.has(candidate.targetId) && old.text === candidate.text)) {
+          if (replaceText && old.text !== candidate.text) {
+            old.text = candidate.text;
+            old.metrics = estimateLabelTextBox(old.text, old.resolvedStyle);
+            setDynamicCanvasTextContent(old.contentNode, old.styleType, old.text);
+          }
           if (old.rank !== candidate.rank) {
             old.rank = candidate.rank;
             old.layout = resolveLabelLayout(map, candidate.targetKind, candidate.targetId, candidate.city, candidate);
@@ -5430,10 +5438,10 @@ export class PlaceholderMapRenderer {
       .filter(item => item.targetKind === LABEL_TARGET_KIND.CITY)
       .map(item => [String(item.targetId), item.metrics?.width]));
     const retainedIcons = politicalOnly && cityIds?.length && this.cityIconItems.length === (map.settlements?.cities || []).filter(Boolean).length
-      ? {models: this.cityIconItemsById, changed: new Set(cityIds)} : null;
+      ? {models: this.cityIconItemsById, changed: cityIdSet} : null;
     if (refreshCities) this.cityIconItems = getCityIconItems(map, retainedIcons).map(item => {
       const old = localEdit && this.cityIconItemsById.get(String(item.id));
-      if (old && !cityIds.includes(item.id) && old.rank === item.rank && old.scale === item.scale
+      if (old && !cityIdSet.has(item.id) && old.rank === item.rank && old.scale === item.scale
         && old.nameWidthCss === cityLabelWidths.get(String(item.id))) return old;
       return {
         ...item,

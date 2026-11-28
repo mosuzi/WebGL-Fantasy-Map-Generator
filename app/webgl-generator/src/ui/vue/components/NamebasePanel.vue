@@ -298,7 +298,10 @@ const bindingInvalidEntries = computed(() => props.state.bindingStatus?.invalid 
 const bindingInvalidLabel = computed(() => bindingInvalidEntries.value.map(item => `${item.label} -> ${item.id}`).join("；"));
 const globalBindings = computed(() => props.state.bindingStatus?.bindings?.global || {});
 const cultureBindings = computed(() => props.state.bindingStatus?.bindings?.cultures || {});
-const cultures = computed(() => collectCultures(props.state.map));
+const cultures = computed(() => {
+  props.state.version;
+  return collectCultures(props.state.map);
+});
 const cultureOptions = computed(() => cultures.value.length
   ? cultures.value.map(culture => ({value: String(culture.id), label: culture.label}))
   : [{value: "", label: "暂无文化"}]
@@ -475,9 +478,9 @@ function isBindingCandidate(row, targetKey) {
 }
 
 function collectCultures(map) {
-  const cultures = map?.pack?.cultures || map?.society?.cultures || [];
+  const cultures = map?.society?.cultures || map?.pack?.cultures || [];
   return cultures
-    .filter(culture => culture && (culture.i || culture.id))
+    .filter(culture => culture && !culture.removed && (culture.i || culture.id))
     .map(culture => {
       const id = culture.i ?? culture.id;
       const name = culture.name || culture.root || "未命名文化";

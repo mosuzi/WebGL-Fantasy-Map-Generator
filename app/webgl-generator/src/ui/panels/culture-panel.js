@@ -79,12 +79,17 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.selectedCultureId = row.id;
       callbacks.onSelect?.(cultureObject(row));
     },
+    onClearSelection: () => {
+      panelState.selectedCultureId = null;
+      callbacks.onClearSelection?.();
+    },
     onLocate: row => callbacks.onLocate?.(cultureObject(row)),
     onHover: row => callbacks.onHover?.(row?.id ? cultureObject(row) : null),
     onAdd: () => callbacks.onAdd?.(),
     onDelete: row => callbacks.onDelete?.(cultureObject(row)),
     onRename: (cultureId, name) => callbacks.onRename?.(cultureId, name),
     onRenameVisibleFromNamebase: ids => callbacks.onRenameVisibleFromNamebase?.(ids),
+    onRegenerateRelatedNames: options => callbacks.onRegenerateRelatedNames?.(options),
     onColorChange: (cultureId, color) => callbacks.onColorChange?.(cultureId, color),
     onParentChange: (cultureId, parentId) => callbacks.onParentChange?.(cultureId, parentId),
     onNoteChange: (cultureId, body) => callbacks.onNoteChange?.(cultureId, body),
@@ -155,24 +160,26 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     }
   );
 
+  function updateSelection(map, selection) {
+    if (panelState.map !== map) panelState.selectedCultureId = null;
+    panelState.map = map ? markRaw(map) : null;
+    panelState.selection = selection;
+    if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
+    if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = null;
+  }
+
   return {
     open(map, selection, history) {
-      panelState.map = map ? markRaw(map) : null;
-      panelState.selection = selection;
+      updateSelection(map, selection);
       panelState.history = history;
-      if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
-      if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
       panelState.open = true;
       panelState.version++;
       manager.open("culture-panel");
       lazyPanel.load();
     },
     update(map, selection, history, assignment = {}) {
-      panelState.map = map ? markRaw(map) : null;
-      panelState.selection = selection;
+      updateSelection(map, selection);
       panelState.history = history;
-      if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
-      if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
       if (assignment.active !== undefined) panelState.assignmentActive = Boolean(assignment.active);
       if (assignment.lastAffected !== undefined) panelState.lastAffected = Number(assignment.lastAffected) || 0;
       panelState.version++;
@@ -245,13 +252,6 @@ function cultureExists(map, cultureId) {
 
 function normalizeCultureId(cultureId) {
   return toIntegerId(cultureId);
-}
-
-function firstCultureId(map) {
-  const culture = (map?.society?.cultures || map?.pack?.cultures || []).find(item =>
-    item && !item.removed && Number.isInteger(item.i ?? item.id) && (item.i ?? item.id) > 0
-  );
-  return culture ? culture.i ?? culture.id : null;
 }
 
 function roundNumber(value) {
