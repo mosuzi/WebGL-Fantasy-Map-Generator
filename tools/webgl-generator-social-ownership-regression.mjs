@@ -28,8 +28,8 @@ await verifyAssignment("culture", culture, createApplyCultureAssignmentCommand);
 await verifyAssignment("religion", religion, createApplyReligionAssignmentCommand);
 verifyCenterFallback("culture", createApplyCultureAssignmentCommand);
 verifyCenterFallback("religion", createApplyReligionAssignmentCommand);
-verifyDeletion("culture", culture, createDeleteCultureCommand);
-verifyDeletion("religion", religion, createDeleteReligionCommand);
+await verifyDeletion("culture", culture, createDeleteCultureCommand);
+await verifyDeletion("religion", religion, createDeleteReligionCommand);
 
 assert.equal(createDeleteCultureCommand(0).isNoop({map}), true, "中立文化不可删除");
 assert.equal(createDeleteReligionCommand(0).isNoop({map}), true, "中立宗教不可删除");
@@ -143,7 +143,7 @@ function assertReligionUrban() {
   }
 }
 
-function verifyDeletion(kind, object, createCommand) {
+async function verifyDeletion(kind, object, createCommand) {
   const id = objectId(object);
   restoreObjectNote(map, {
     id: objectNoteId({kind, id}), kind, objectId: id, name: object.name || `${kind} #${id}`,
@@ -156,9 +156,15 @@ function verifyDeletion(kind, object, createCommand) {
     map.namebases.bindings.cultures[id] = "builtin:0";
   }
   const before = fullSnapshot();
+  const originalGrid = map.grid.cells[kind];
+  const originalPack = map.pack.cells[kind];
+  const gridCount = originalGrid.filter(owner => Number(owner) === id).length;
+  const packCount = originalPack.filter(owner => Number(owner) === id).length;
+  const replica = kind === "culture" ? structuredClone(map) : null;
   const command = createCommand(id);
   assert.equal(Boolean(command.isNoop({map})), false, `${kind} 非空对象必须允许删除`);
   history.execute(command, {map});
+  await verifyDeleteReplica(0);
   const field = kind;
   assert.equal(activeObjects(kind).some(item => objectId(item) === id), false);
   assert.ok(Array.from(map.grid.cells[field]).every(value => Number(value) !== id));
@@ -169,11 +175,24 @@ function verifyDeletion(kind, object, createCommand) {
   assert.equal(resolveObject(map, {kind, id}), null);
   assert.equal(createMapDocument(map, map.options).map.society[`${kind}s`][id].removed, true);
   history.undo({map});
+  await verifyDeleteReplica(1);
   assert.deepEqual(fullSnapshot(), before, `${kind} 删除撤销必须完整恢复`);
   assert.ok(resolveObject(map, {kind, id}));
   history.redo({map});
+  await verifyDeleteReplica(2);
   assert.equal(resolveObject(map, {kind, id}), null);
   history.undo({map});
+
+  async function verifyDeleteReplica(revision) {
+    if (!replica) return;
+    assert.equal(map.grid.cells.culture, originalGrid);
+    assert.equal(map.pack.cells.culture, originalPack);
+    const patch = await createCommandMapReplicaPatch({map, command, mapIdentity: "social", baseRevision: revision, targetRevision: revision + 1, baseChecksum: "social"});
+    const cellWrites = patch.writes.filter(write => write.path.endsWith(".cells.culture"));
+    assert.deepEqual(cellWrites.map(write => write.ranges.flatMap(range => range.values).length), [gridCount, packCount]);
+    applyMapReplicaPatch(replica, patch);
+    assert.deepEqual(replica, map);
+  }
 }
 
 function assertNoReference(kind, id) {

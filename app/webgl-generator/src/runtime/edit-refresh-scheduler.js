@@ -65,7 +65,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       const measureStateBrush = (name, task) => measureHeightBrushCommitStage(stateBrushTrace, name, task);
       const queuedPoliticalPatch = politicalPatch && measureStateBrush("queuePoliticalPatch", () => state.renderer.queuePoliticalBrushRefresh?.(changedGridCells)) === true;
       state.lastEditRefresh = summarizeEditRefresh(effects);
-      measureStateBrush("invalidateBuffers", () => invalidateRendererBuffers(state.renderer, effects));
+      measureStateBrush("invalidateBuffers", () => invalidateRendererBuffers(state.renderer, effects, sourceEffects?.socialField));
 
       if (effects.derived.includes("visual-theme")) {
         applyVisualTheme?.(presentationPresetForRefresh(commandOrEffects, state.map), commandOrEffects);
@@ -271,7 +271,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         && typeof state.renderer?.beginRetainedResourcePublish === "function"
       );
       state.lastEditRefresh = summarizeEditRefresh(effects);
-      invalidateRendererBuffers(state.renderer, effects);
+      invalidateRendererBuffers(state.renderer, effects, sourceEffects?.socialField);
 
       const checkpoint = async () => {
         await yieldToMain();
@@ -427,8 +427,8 @@ function editedColorPaletteMode(derived) {
   return null;
 }
 
-function invalidateRendererBuffers(renderer, effects) {
-  if (effects.derived.includes("cell-colors") || effects.derived.includes("terrain-caches")
+function invalidateRendererBuffers(renderer, effects, socialField) {
+  if ((!socialField && effects.derived.includes("cell-colors")) || effects.derived.includes("terrain-caches")
     || (effects.derived.includes("point-layers") && !effects.derived.includes("city-local-edit"))) renderer?.cellMetricLayer?.invalidate?.();
   if (typeof renderer?.invalidateDynamicBuffers !== "function") return;
   renderer.invalidateDynamicBuffers({

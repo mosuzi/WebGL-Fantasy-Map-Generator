@@ -111,13 +111,37 @@ try {
   await culturePanel.getByRole("button", {name: "退出文化归属笔刷"}).click();
 
   await page.evaluate(id => window.__webglGeneratorApp.panels.culture.setSelectedCultureId(id), fixture.cultureId);
-  page.once("dialog", dialog => dialog.accept());
+  const deletionBefore = await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    return {history: app.editHistory.getStats().undo, fullRefreshes: window.socialFullRefreshes};
+  });
+  const dialogs = [];
+  page.on("dialog", async dialog => {dialogs.push(dialog.type()); await dialog.dismiss();});
   await culturePanel.getByRole("button", {name: "删除文化并清除归属"}).click();
-  await page.waitForFunction(id => window.__webglGeneratorApp.map.society.cultures[id]?.removed, fixture.cultureId);
+  assert.deepEqual(dialogs, [], "删除文化从管理页直接生效");
   const cultureDeleted = await inspect(page, "culture", fixture.cultureId);
   assertDeletion(cultureDeleted);
+  await assertCultureColors(0, deletionBefore.history + 1);
   assert.equal((await page.evaluate(() => window.webglGeneratorApi.history.undo())).ok, true);
   assert.equal((await inspect(page, "culture", fixture.cultureId)).resolved, true);
+  await assertCultureColors(fixture.cultureId, deletionBefore.history);
+  assert.equal((await page.evaluate(() => window.webglGeneratorApi.history.redo())).ok, true);
+  await assertCultureColors(0, deletionBefore.history + 1);
+  assert.equal((await page.evaluate(() => window.webglGeneratorApi.history.undo())).ok, true);
+  await assertCultureColors(fixture.cultureId, deletionBefore.history);
+
+  async function assertCultureColors(owner, history) {
+    const actual = await page.evaluate(({cell}) => {
+      const app = window.__webglGeneratorApp;
+      return {
+        owner: app.map.grid.cells.culture[cell],
+        identity: app.renderer.cellAttributeStore.snapshot.identities[cell * 4 + 2],
+        history: app.editHistory.getStats().undo,
+        fullRefreshes: window.socialFullRefreshes
+      };
+    }, {cell: fixture.cultureCell});
+    assert.deepEqual(actual, {owner, identity: owner + 1, history, fullRefreshes: deletionBefore.fullRefreshes});
+  }
 
   const religionDeletedResult = await page.evaluate(id => window.webglGeneratorApi.edit.religions.delete(id, {confirm: true}), fixture.religionId);
   assert.equal(religionDeletedResult.ok, true, religionDeletedResult.error?.message);

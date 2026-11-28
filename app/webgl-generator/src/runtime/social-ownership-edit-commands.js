@@ -90,6 +90,8 @@ export function createApplySocialAssignmentCommand(kind, changes, {label = null,
 export function createDeleteSocialObjectCommand(kind, objectId, {label = null} = {}) {
   const config = socialConfig(kind);
   const id = Number(objectId);
+  const localCultureDelete = kind === "culture";
+  const derived = [config.structureEffect, config.cellsEffect, "object-panels", "derived-stale"];
   let snapshot = null;
   let result = null;
 
@@ -102,13 +104,24 @@ export function createDeleteSocialObjectCommand(kind, objectId, {label = null} =
       runtimeStats: true,
       pickPanel: true,
       affected: objectAffected(config.kind, id),
-      derived: [config.structureEffect, config.cellsEffect, "cell-colors", "object-index", "object-panels", "derived-stale"]
+      derived: localCultureDelete ? derived : [...derived, "cell-colors", "object-index"],
+      ...(localCultureDelete && {cellAttributePatch: true, socialField: kind})
     },
     apply(context) {
-      const item = getPrimaryStore(context.map, config)?.[id];
+      const {map} = context;
+      const item = getPrimaryStore(map, config)?.[id];
       if (!item || item.removed || id <= 0) throw new Error(`找不到${config.label} #${id}`);
-      snapshot ??= captureDeleteSnapshot(context.map, config);
-      result = deleteSocialObject(context.map, config, id);
+      snapshot ??= captureDeleteSnapshot(map, config, id);
+      try {
+        result = deleteSocialObject(map, config, id, snapshot);
+      } catch (error) {
+        restoreDeleteSnapshot(map, config, snapshot);
+        throw error;
+      }
+      if (localCultureDelete) {
+        this.effects.changedGridCells = snapshot.gridCells;
+        this.effects.derived = snapshot.gridCells.length ? [...derived, "cell-colors"] : derived;
+      }
     },
     revert(context) {
       if (!snapshot) throw new Error(`缺少可撤销的${config.label}删除快照`);
@@ -118,6 +131,22 @@ export function createDeleteSocialObjectCommand(kind, objectId, {label = null} =
       const item = getPrimaryStore(context.map, config)?.[id];
       return !Number.isInteger(id) || id <= 0 || !item || item.removed;
     },
+    ...(localCultureDelete && {
+      getReplicaRows() {
+        return {"grid.cells.culture": snapshot.gridCells, "pack.cells.culture": snapshot.packCells};
+      },
+      getReplicaFields(map) {
+        return [
+          "society.cultures", "pack.cultures", "metadata.derivedStale",
+          ...(map.society?.metadata ? ["society.metadata"] : []),
+          ...(snapshot.notes ? ["notes"] : []),
+          ...(map.regenerationLocks ? ["regenerationLocks"] : []),
+          ...snapshot.bindings.map(({path}) => `${path}.${id}`),
+          ...snapshot.references.map(({section, table, index}) => `${section}.${table}.${index}.culture`),
+          ...Object.keys(snapshot.stale.flags).filter(section => map[section]?.metadata).map(section => `${section}.metadata.stale`)
+        ];
+      }
+    }),
     getResult() {
       return result ? {...result} : null;
     }
@@ -131,10 +160,9 @@ export function applySocialAssignmentPreview(map, kind, changes) {
   applyGridChanges(map, config, normalized, "after");
 }
 
-function deleteSocialObject(map, config, id) {
-  const packCells = replaceValue(map.pack?.cells?.[config.field], id, 0);
-  const gridCells = replaceValue(map.grid?.cells?.[config.field], id, 0);
-  const references = clearSocialReferences(map, config, id);
+function deleteSocialObject(map, config, id, snapshot) {
+  writeDeleteCells(map, config, snapshot, 0);
+  const references = writeDeleteReferences(map, config, snapshot.references, 0);
   for (const store of getStores(map, config)) {
     const item = store[id];
     if (item) {
@@ -154,25 +182,12 @@ function deleteSocialObject(map, config, id) {
         if (!other.origins.length) other.origins = [0];
       }
     }
-    rebuildInheritanceTree(store);
   }
-  deleteCultureBinding(map, config, id);
+  writeCultureBindings(map, snapshot.bindings, id, false);
   deleteObjectNote(map, {kind: config.kind, id});
   refreshSocialCoverage(map, config);
   markSocialStale(map, config.kind);
-  return {id, packCells, gridCells, references};
-}
-
-function clearSocialReferences(map, config, id) {
-  let changed = 0;
-  for (const {items, key} of socialReferenceCollections(map, config)) {
-    for (const item of items || []) {
-      if (!item || Number(item[key]) !== id) continue;
-      item[key] = 0;
-      changed++;
-    }
-  }
-  return changed;
+  return {id, packCells: snapshot.packCells.length, gridCells: snapshot.gridCells.length, references};
 }
 
 function captureAssignmentReferences(map, field, packValues) {
@@ -306,27 +321,33 @@ function restoreAssignmentSnapshot(map, config, changes, snapshot) {
   restoreStale(map, snapshot.stale);
 }
 
-function captureDeleteSnapshot(map, config) {
+function captureDeleteSnapshot(map, config, id) {
+  const pack = map.pack?.cells?.[config.field];
+  const grid = map.grid?.cells?.[config.field];
+  const packCells = findOwnedCells(pack, id);
+  const gridCells = findOwnedCells(grid, id);
   return {
-    packValues: cloneArrayLike(map.pack?.cells?.[config.field]),
-    gridValues: cloneArrayLike(map.grid?.cells?.[config.field]),
-    references: captureReferenceValues(map, config),
+    packCells,
+    gridCells,
+    packValues: packCells.map(cell => pack[cell]),
+    gridValues: gridCells.map(cell => grid[cell]),
+    references: captureDeleteReferences(map, config, id),
     stores: captureStores(map, config),
     notes: clonePlain(map.notes || null),
-    bindings: captureCultureBindings(map),
+    id,
+    bindings: config.kind === "culture" ? captureCultureBindings(map, id) : [],
     societyMetadata: clonePlain(map.society?.metadata || null),
     stale: captureStale(map)
   };
 }
 
 function restoreDeleteSnapshot(map, config, snapshot) {
-  map.pack.cells[config.field] = cloneArrayLike(snapshot.packValues);
-  map.grid.cells[config.field] = cloneArrayLike(snapshot.gridValues);
-  restoreReferenceValues(snapshot.references);
+  writeDeleteCells(map, config, snapshot);
+  writeDeleteReferences(map, config, snapshot.references);
   restoreStores(map, config, snapshot.stores);
   if (snapshot.notes) map.notes = clonePlain(snapshot.notes);
   else delete map.notes;
-  restoreCultureBindings(snapshot.bindings);
+  writeCultureBindings(map, snapshot.bindings, snapshot.id, true);
   if (snapshot.societyMetadata) map.society.metadata = clonePlain(snapshot.societyMetadata);
   restoreStale(map, snapshot.stale);
 }
@@ -346,87 +367,66 @@ function restoreStores(map, config, snapshot) {
   map.pack[config.plural] = snapshot.shared ? map.society[config.plural] : clonePlain(snapshot.pack);
 }
 
-function captureReferenceValues(map, config) {
+function captureDeleteReferences(map, config, id) {
+  const tables = [
+    ["pack", "burgs"], ["settlements", "cities"], ["politics", "states"], ["pack", "states"],
+    ["politics", "provinces"], ["pack", "provinces"]
+  ];
+  if (config.kind === "culture") {
+    tables.push(
+      ["society", "religions"], ["pack", "religions"], ["rivers", "rivers"],
+      ["pack", "rivers"], ["pack", "features"]
+    );
+  }
   const entries = [];
-  for (const {items, key} of socialReferenceCollections(map, config)) {
-    for (const item of items || []) {
-      if (item && Object.prototype.hasOwnProperty.call(item, key)) entries.push({target: item, key, value: item[key]});
+  for (const [section, table] of tables) {
+    const items = map[section]?.[table] || [];
+    for (let index = 0; index < items.length; index++) {
+      const before = items[index]?.[config.field];
+      if (Number(before) === id) entries.push({section, table, index, before});
     }
   }
   return entries;
 }
 
-function restoreReferenceValues(entries) {
-  for (const entry of entries || []) entry.target[entry.key] = entry.value;
-}
-
-function socialReferenceCollections(map, config) {
-  const common = [
-    {items: map.pack?.burgs, key: config.field},
-    {items: map.settlements?.cities, key: config.field},
-    ...politicalCollections(map).map(items => ({items, key: config.field}))
-  ];
-  if (config.kind === "culture") {
-    common.push(
-      {items: map.society?.religions, key: "culture"},
-      {items: map.pack?.religions, key: "culture"},
-      {items: map.rivers?.rivers, key: "culture"},
-      {items: map.pack?.rivers, key: "culture"},
-      {items: map.pack?.features, key: "culture"}
-    );
+function writeDeleteReferences(map, config, entries, replacement) {
+  let changed = 0;
+  for (const {section, table, index, before} of entries) {
+    const item = map[section][table][index];
+    const value = replacement ?? before;
+    if (item[config.field] === value) continue;
+    item[config.field] = value;
+    changed++;
   }
-  return uniqueCollections(common);
-}
-
-function politicalCollections(map) {
-  return uniqueArrays([
-    map.politics?.states,
-    map.pack?.states,
-    map.politics?.provinces,
-    map.pack?.provinces
-  ]);
-}
-
-function uniqueCollections(collections) {
-  const seen = new Set();
-  return collections.filter(collection => {
-    if (!Array.isArray(collection.items)) return false;
-    const key = `${collection.key}:${objectIdentity(collection.items)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-const identityMap = new WeakMap();
-let nextIdentity = 1;
-function objectIdentity(value) {
-  if (!identityMap.has(value)) identityMap.set(value, nextIdentity++);
-  return identityMap.get(value);
+  return changed;
 }
 
 function uniqueArrays(arrays) {
   return arrays.filter((items, index) => Array.isArray(items) && arrays.indexOf(items) === index);
 }
 
-function captureCultureBindings(map) {
-  return [
-    map.namebases?.bindings?.cultures,
-    map.options?.namebaseBindings?.cultures,
-    map.metadata?.namebaseBindings?.cultures
-  ].filter(value => value && typeof value === "object").map(target => ({target, value: clonePlain(target)}));
+function cultureBindingStores(map) {
+  return new Map([
+    ["namebases.bindings.cultures", map.namebases?.bindings?.cultures],
+    ["options.namebaseBindings.cultures", map.options?.namebaseBindings?.cultures],
+    ["metadata.namebaseBindings.cultures", map.metadata?.namebaseBindings?.cultures]
+  ]);
 }
 
-function restoreCultureBindings(entries) {
-  for (const entry of entries || []) {
-    for (const key of Object.keys(entry.target)) delete entry.target[key];
-    Object.assign(entry.target, clonePlain(entry.value));
+function captureCultureBindings(map, id) {
+  return [...cultureBindingStores(map)]
+    .filter(([, target]) => target && Object.hasOwn(target, id))
+    .map(([path, target]) => ({path, before: clonePlain(target[id])}));
+}
+
+function writeCultureBindings(map, entries, id, restore) {
+  if (!entries.length) return;
+  const stores = cultureBindingStores(map);
+  for (const {path, before} of entries) {
+    const target = stores.get(path);
+    if (restore) target[id] = clonePlain(before);
+    else delete target[id];
   }
-}
-
-function deleteCultureBinding(map, config, id) {
-  if (config.kind !== "culture") return;
-  for (const entry of captureCultureBindings(map)) delete entry.target[String(id)];
 }
 
 function captureStale(map) {
@@ -488,19 +488,21 @@ function packCellsForGridChanges(map, changes) {
   return new Set(packCells.filter(cell => Number(map.pack.cells.h?.[cell]) >= 20));
 }
 
-function replaceValue(values, target, replacement) {
-  let changed = 0;
+function findOwnedCells(values, target) {
+  const cells = [];
   for (let index = 0; index < (values?.length || 0); index++) {
-    if (Number(values[index]) !== target) continue;
-    values[index] = replacement;
-    changed++;
+    if (Number(values[index]) === target) cells.push(index);
   }
-  return changed;
+  return cells;
 }
 
-function cloneArrayLike(value) {
-  if (value === undefined || value === null) return value;
-  return value.slice ? value.slice() : [...value];
+function writeDeleteCells(map, config, snapshot, replacement) {
+  for (const section of ["pack", "grid"]) {
+    const values = map[section]?.cells?.[config.field];
+    const cells = snapshot[`${section}Cells`];
+    const before = snapshot[`${section}Values`];
+    for (let index = 0; index < cells.length; index++) values[cells[index]] = replacement ?? before[index];
+  }
 }
 
 function clonePlain(value) {

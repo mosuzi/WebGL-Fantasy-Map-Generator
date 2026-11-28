@@ -126,6 +126,8 @@ export function createDeleteBatchCommand({kind, ids, createCommand, label = `批
     entries.push({id, command: createCommand(id)});
   }
   const baseEffects = entries[0]?.command?.effects || {render: "draw", selection: "refresh", runtimeStats: true, pickPanel: true, derived: ["object-panels", "object-index"]};
+  const onlyCommand = entries.length === 1 ? entries[0].command : null;
+  const localCultureCommand = kind === OBJECT_KIND.CULTURE && onlyCommand?.getReplicaRows ? onlyCommand : null;
   let appliedEntries = [];
   let result = emptyBatchResult(requested, initialSkipped);
   const command = {
@@ -137,7 +139,8 @@ export function createDeleteBatchCommand({kind, ids, createCommand, label = `批
       affected: entries.map(entry => ({kind, id: entry.id}))
     },
     apply(context) {
-      const beforeMap = kind === OBJECT_KIND.STATE && entries.length === 1 ? null : structuredClone(context.map);
+      const localDelete = localCultureCommand || (kind === OBJECT_KIND.STATE && entries.length === 1);
+      const beforeMap = localDelete ? null : structuredClone(context.map);
       const optionsReference = context.map?.options;
       appliedEntries = [];
       const skipped = [...initialSkipped];
@@ -171,6 +174,7 @@ export function createDeleteBatchCommand({kind, ids, createCommand, label = `批
       if (!appliedEntries.length) throw new Error("批量删除没有可执行的对象");
       const affected = collectAppliedAffected(kind, appliedEntries);
       command.effects.affected = affected;
+      if (localCultureCommand) command.effects.derived = localCultureCommand.effects.derived;
       if (baseEffects.cellAttributePatch === true) {
         command.effects.changedGridCells = [...new Set(appliedEntries.flatMap(entry => entry.command.effects?.changedGridCells || []))];
       }
@@ -190,6 +194,10 @@ export function createDeleteBatchCommand({kind, ids, createCommand, label = `批
     isNoop(context) {
       return !entries.some(entry => !entry.command.isNoop?.(context));
     },
+    ...(localCultureCommand && {
+      getReplicaRows: map => localCultureCommand.getReplicaRows(map),
+      getReplicaFields: map => localCultureCommand.getReplicaFields(map)
+    }),
     getResult() {
       return clonePlain(result);
     }

@@ -1773,7 +1773,9 @@ export class PlaceholderMapRenderer {
 
   refreshEditedCellColors(gridCells, {draw = true, binding = null, socialField = null} = {}) {
     if (!gridCells?.length || !this.cellAttributeStore) return false;
-    const resident = this.canPresentGpuResidentColorMode(this.colorMode);
+    const socialMode = socialField ? `${socialField}s` : null;
+    const colorsChanged = !socialMode || this.colorMode === socialMode;
+    const resident = colorsChanged && this.canPresentGpuResidentColorMode(this.colorMode);
     if (socialField) {
       // 空文化或宗教可能刚取得第一格，旧调色板中还没有它的陆地颜色。
       const seen = new Set();
@@ -1781,14 +1783,14 @@ export class PlaceholderMapRenderer {
         const id = this.map.grid.cells[socialField][cell];
         if (id < 0 || seen.has(id) || !isLandCell(cell, this.map)) continue;
         seen.add(id);
-        installRendererCellAttributeStore(this, ensureCellAttributePaletteEntry(this.gl, this.cellAttributeStore, this.map, `${socialField}s`, id, cell, this.viewOptions));
+        installRendererCellAttributeStore(this, ensureCellAttributePaletteEntry(this.gl, this.cellAttributeStore, this.map, socialMode, id, cell, this.viewOptions));
       }
     } else if (!resident) return false;
     if (!this.refreshCellAttributeCells(gridCells)) return false;
-    if (!resident) return false;
-    if (shouldDrawShoreVisualBands(this.colorMode)) refreshShoreSurfaceCellColors(this, gridCells);
+    if (colorsChanged && !resident) return false;
+    if (colorsChanged && shouldDrawShoreVisualBands(this.colorMode)) refreshShoreSurfaceCellColors(this, gridCells);
     if (binding) rebindEditedRendererResources(this, binding, null, this.surfaceResourceOwner);
-    if (draw) this.draw();
+    if (draw) this.draw({updateOverlay: !socialMode});
     return true;
   }
 

@@ -1792,17 +1792,19 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: object => {
-      const result = executeDeleteWithPreflight(state, documentRef, {
-        kind: OBJECT_KIND.CULTURE,
-        ids: [object.id],
-        createCommand: id => createDeleteCultureCommand(id),
-        label: "删除文化",
-        executeOptions: {noopStatus: "文化不存在或已删除。"}
+      const result = executeEditCommand(state, documentRef, createDeleteCultureCommand(object.id), {
+        preparePanelRefresh: targetState => {
+          const selected = targetState.selectionStore.getSnapshot().selection?.object;
+          if (selected?.kind !== OBJECT_KIND.CULTURE || selected.id !== object.id) return;
+          targetState.selectionStore.clear();
+          targetState.renderer.setSelection(null, {draw: false});
+        },
+        noopStatus: "文化不存在或已删除。",
+        status: `已删除文化 ${object.name || `#${object.id}`} 并清除相关归属。`,
+        errorStatus: "删除文化失败。",
+        throwOnError: false
       });
-      if (result.executed) {
-        setFileOperationStatus(documentRef, `已删除文化 ${object.name || `#${object.id}`} 并清除相关归属。`);
-      }
-      updateEditingInteractionLock(state, documentRef);
+      if (result.executed) updateEditingInteractionLock(state, documentRef);
     },
     onRename: (cultureId, name) => {
       const object = {kind: "culture", id: cultureId};
