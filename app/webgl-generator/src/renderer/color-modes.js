@@ -4,6 +4,16 @@ import {diplomacyRelationColor} from "../generator/diplomacy.js";
 import {DEFAULT_HEIGHT_RAMP} from "./themes.js";
 import {isAncientTheme} from "./ancient-colors.js";
 
+const DEFAULT_UNASSIGNED_LAND = Object.freeze([1, 1, 1, 1]);
+const OWNERSHIP_FIELDS = Object.freeze({
+  cultures: "culture", religions: "religion", states: "state", provinces: "province",
+  diplomacy: "state", governments: "state"
+});
+
+export function unassignedLandColor(theme) {
+  return theme?.land?.fill || (isAncientTheme(theme) ? theme.canvas?.background : null) || DEFAULT_UNASSIGNED_LAND;
+}
+
 export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode === "terrain") {
     const id = terrainClassAt(map.grid, cellIndex);
@@ -15,14 +25,19 @@ export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode === "temperature") return colorForTemperature(map.grid.cells.temp[cellIndex]);
   if (colorMode === "precipitation") return colorForPrecipitation(map.grid.cells.prec[cellIndex]);
   if (colorMode === "biomes") return colorForBiome(map.grid.cells.biome[cellIndex], map);
+  const ownershipField = OWNERSHIP_FIELDS[colorMode];
+  if (ownershipField && !(map.grid.cells[ownershipField]?.[cellIndex] > 0)) return unassignedLandColor(viewOptions.visualTheme);
   if (colorMode === "cultures") return colorForCulture(map.grid.cells.culture[cellIndex], map);
   if (colorMode === "religions") return colorForReligion(map.grid.cells.religion[cellIndex], map);
   if (colorMode === "diplomacy") return colorForDiplomacy(map.grid.cells.state[cellIndex], map, viewOptions);
   if (colorMode === "governments") return colorForGovernment(map.grid.cells.state[cellIndex], map);
   if (colorMode === "states") return colorForState(map.grid.cells.state[cellIndex], map);
   if (colorMode === "provinces") return colorForProvince(map.grid.cells.province[cellIndex], map);
-  if (colorMode === "regions") return indexedColorOrWater(map.grid.cells.region[cellIndex], 0.77, map.layers.ocean);
-  if (colorMode === "population") return colorForPopulation(map.grid.cells.pop[cellIndex], map);
+  if (colorMode === "regions") {
+    const region = map.grid.cells.region?.[cellIndex];
+    return Number.isInteger(region) && region >= 0 ? indexedColor(region, 0.77) : unassignedLandColor(viewOptions.visualTheme);
+  }
+  if (colorMode === "population") return colorForPopulation(map.grid.cells.pop?.[cellIndex], map, viewOptions.visualTheme);
   return colorForHeight(map.grid.cells.h[cellIndex], map.layers, viewOptions);
 }
 
@@ -74,13 +89,11 @@ function colorForBiome(biomeId, map) {
 
 export function colorForState(stateId, map) {
   if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  if (!stateId) return [0.7, 0.72, 0.68, 1];
+  if (!stateId) return DEFAULT_UNASSIGNED_LAND;
   return hexToRgba(map.politics.states[stateId]?.color) || indexedColor(stateId, 0.12);
 }
 
 function colorForDiplomacy(stateId, map, viewOptions = {}) {
-  if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  if (!stateId) return [0.46, 0.48, 0.46, 1];
   const subjectId = diplomacySubjectId(map, viewOptions.diplomacySubjectId);
   if (!subjectId || stateId === subjectId) return [1, 0.78, 0.28, 1];
   const subject = map.politics.states[subjectId] || map.pack?.states?.[subjectId];
@@ -89,8 +102,6 @@ function colorForDiplomacy(stateId, map, viewOptions = {}) {
 }
 
 function colorForGovernment(stateId, map) {
-  if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  if (!stateId) return [0.46, 0.48, 0.46, 1];
   const state = map.politics.states[stateId] || map.pack?.states?.[stateId];
   const family = state?.governmentFamily || state?.government?.family || "unknown";
   const familyEntry = GOVERNMENT_FAMILY_LEGEND[family];
@@ -116,23 +127,21 @@ export const GOVERNMENT_FAMILY_LEGEND = Object.freeze({
 });
 
 function colorForCulture(cultureId, map) {
-  if (cultureId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
   return hexToRgba(map.society.cultures[cultureId]?.color) || indexedColor(cultureId, 0.31);
 }
 
 function colorForReligion(religionId, map) {
-  if (religionId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
   return hexToRgba(map.society.religions[religionId]?.color) || indexedColor(religionId, 0.63);
 }
 
 export function colorForProvince(provinceId, map) {
   if (provinceId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  if (!provinceId) return [0.7, 0.72, 0.68, 1];
+  if (!provinceId) return DEFAULT_UNASSIGNED_LAND;
   return hexToRgba(map.politics.provinces[provinceId]?.color) || indexedColor(provinceId, 0.46);
 }
 
-function colorForPopulation(population, map) {
-  if (!population) return mix(map.layers.ocean, [0.06, 0.1, 0.08, 1], 0.4);
+function colorForPopulation(population, map, theme) {
+  if (!(population > 0)) return unassignedLandColor(theme);
   const t = Math.min(1, population / Math.max(1, map.settlements.metadata.maxPopulation));
   return mix([0.2, 0.36, 0.24, 1], [0.92, 0.72, 0.34, 1], Math.sqrt(t));
 }
@@ -140,11 +149,6 @@ function colorForPopulation(population, map) {
 function indexedColor(index, offset) {
   const hue = (index * 0.61803398875 + offset) % 1;
   return hslToRgb(hue, 0.32, 0.72);
-}
-
-function indexedColorOrWater(index, offset, waterColor) {
-  if (index < 0) return mix(waterColor, [0.05, 0.08, 0.1, 1], 0.3);
-  return indexedColor(index, offset);
 }
 
 function hashString(value) {

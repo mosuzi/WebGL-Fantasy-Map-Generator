@@ -7,7 +7,7 @@ import {routeCurveTolerance, routeVisualPath, ROUTE_CURVE_MAX_OFFSET, ROUTE_VISU
 import {invalidateSeaRouteWater, setSeaRouteShoreSurface} from "../geometry/sea-route-water.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
-import {colorForCell, colorForHeight, isLandCell} from "./color-modes.js";
+import {colorForCell, colorForHeight, isLandCell, unassignedLandColor} from "./color-modes.js";
 import {ANCIENT_COLOR_PROJECTION_GLSL, ancientDisplayColor, ancientDisplayHex, isAncientTheme} from "./ancient-colors.js";
 import {buildCompactGridCellSurfaceGeometry, buildGridCellSurfacePatchFromBase, politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, refreshCellVisualMeshCells, summarizeCellVisualMesh} from "./cell-visual-layer.js";
@@ -459,7 +459,8 @@ function initializeWebGlBindingsAndBuffers(renderer) {
     terrainTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_terrainTexture"), numericTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_numericTexture"),
     identityTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_identityTexture"), paletteTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_paletteTexture"),
     paletteWidth: gl.getUniformLocation(renderer.surfaceProgram, "u_paletteWidth"), heightColors: gl.getUniformLocation(renderer.surfaceProgram, "u_heightColors[0]"),
-    maxPopulation: gl.getUniformLocation(renderer.surfaceProgram, "u_maxPopulation"), oceanColor: gl.getUniformLocation(renderer.surfaceProgram, "u_oceanColor"),
+    maxPopulation: gl.getUniformLocation(renderer.surfaceProgram, "u_maxPopulation"),
+    unassignedLandColor: gl.getUniformLocation(renderer.surfaceProgram, "u_unassignedLandColor"),
     ancientPalette: gl.getUniformLocation(renderer.surfaceProgram, "u_ancientPalette")
   };
   renderer.surfaceBaseBufferSet = createSurfaceBaseBufferSet(gl, new Float32Array(), {usage: gl.STATIC_DRAW});
@@ -8020,7 +8021,7 @@ function configureGpuResidentSurfaceColors(gl, renderer) {
   gl.uniform1ui(renderer.surfaceLocations.paletteWidth, store.snapshot.palettes[paletteMode].length / 4);
   gl.uniform4fv(renderer.surfaceLocations.heightColors, surfaceHeightColorTable(renderer));
   gl.uniform1f(renderer.surfaceLocations.maxPopulation, Math.max(1, Number(renderer.map?.settlements?.metadata?.maxPopulation) || 1));
-  gl.uniform4fv(renderer.surfaceLocations.oceanColor, renderer.visualTheme?.water?.fill || renderer.map?.layers?.ocean || [0.2, 0.4, 0.6, 1]);
+  gl.uniform4fv(renderer.surfaceLocations.unassignedLandColor, unassignedLandColor(renderer.visualTheme));
   gl.activeTexture(gl.TEXTURE0);
 }
 
@@ -9612,7 +9613,7 @@ uniform highp sampler2D u_paletteTexture;
 uniform uint u_paletteWidth;
 uniform vec4 u_heightColors[101];
 uniform float u_maxPopulation;
-uniform vec4 u_oceanColor;
+uniform vec4 u_unassignedLandColor;
 out vec4 v_color;
 ${ANCIENT_COLOR_PROJECTION_GLSL}
 
@@ -9649,14 +9650,16 @@ vec4 resolveCellColor(uint cellId) {
       : u_cellColorMode == 8 ? identities.b
       : u_cellColorMode == 9 ? identities.a
       : identities.r;
+    if (paletteIndex <= 1u) return u_unassignedLandColor;
     return paletteIndex < u_paletteWidth ? texelFetch(u_paletteTexture, ivec2(int(paletteIndex), 0), 0) : a_color;
   }
   if (u_cellColorMode == 10) {
     uint paletteIndex = uint(max(0.0, round(numeric.a) + 1.0));
+    if (paletteIndex == 0u) return u_unassignedLandColor;
     return paletteIndex < u_paletteWidth ? texelFetch(u_paletteTexture, ivec2(int(paletteIndex), 0), 0) : a_color;
   }
   float population = numeric.r;
-  if (population <= 0.0) return mix(u_oceanColor, vec4(0.06, 0.1, 0.08, 1.0), 0.4);
+  if (population <= 0.0) return u_unassignedLandColor;
   float amount = sqrt(min(1.0, population / max(1.0, u_maxPopulation)));
   return mix(vec4(0.2, 0.36, 0.24, 1.0), vec4(0.92, 0.72, 0.34, 1.0), amount);
 }

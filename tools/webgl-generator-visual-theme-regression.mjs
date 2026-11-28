@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
-import {colorForHeight} from "../app/webgl-generator/src/renderer/color-modes.js";
+import {colorForCell, colorForHeight} from "../app/webgl-generator/src/renderer/color-modes.js";
 import {
   DEFAULT_HEIGHT_RAMP,
   createUserVisualThemeDocument,
@@ -46,6 +46,25 @@ assert.equal(JSON.stringify(listUserVisualThemeDocuments()), beforeInvalid, "非
 upsertUserVisualTheme(seedDocument);
 const createdTheme = resolveVisualTheme(seedDocument.id);
 assert.deepEqual(colorForHeight(40, {ocean: [0, 0, 0, 1]}, {visualTheme: createdTheme}), createdTheme.land.fill, "陆地编辑 token 没有进入 cell 颜色");
+const unassignedMap = {
+  layers: {ocean: [0.37, 0.56, 0.76, 1]},
+  grid: {cells: {h: [25, 25, 0], state: [0, -1, 0], province: [0, -1, 0], culture: [0, -1, 0],
+    religion: [0, -1, 0], region: [-1, undefined, -1], pop: [0, 0, 0]}}
+};
+const ancientTheme = resolveVisualTheme("ancient");
+for (const [visualTheme, expected] of [
+  [resolveVisualTheme("default"), [1, 1, 1, 1]],
+  [ancientTheme, ancientTheme.canvas.background],
+  [createdTheme, createdTheme.land.fill]
+]) {
+  for (const mode of ["states", "provinces", "cultures", "religions", "governments", "diplomacy", "regions", "population"]) {
+    assert.deepEqual(colorForCell(0, unassignedMap, mode, {visualTheme}), expected, `${mode} 的空白陆格没有使用主题底色`);
+    assert.deepEqual(colorForCell(1, unassignedMap, mode, {visualTheme}), expected, `${mode} 的缺失归属没有使用主题底色`);
+    assert.deepEqual(colorForCell(2, unassignedMap, mode, {visualTheme}), visualTheme.water.fill);
+  }
+}
+unassignedMap.grid.cells.region[0] = 0;
+assert.notDeepEqual(colorForCell(0, unassignedMap, "regions"), [1, 1, 1, 1], "零号地理地区属于有效地区");
 assert.deepEqual(createdTheme.water.fill.slice(0, 3), createdTheme.canvas.background.slice(0, 3), "水域与画布海洋背景没有共用颜色");
 assert.deepEqual(createdTheme.lines.routePrimary.slice(0, 3), createdTheme.lines.routeSecondary.slice(0, 3), "道路颜色没有覆盖全部路线等级");
 assert.deepEqual(createdTheme.labels.city.slice(0, 3), createdTheme.legend.text.slice(0, 3), "主要标签与图例没有共用颜色 token");

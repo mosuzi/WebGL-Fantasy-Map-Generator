@@ -266,7 +266,8 @@ function writeCellAttributes(map, cell, identities, terrain, numeric, offset) {
   const land = isLandCell(cell, map);
   terrain.set([encodeHeight(cells.h?.[cell]), toUint(cells.biome?.[cell]), encodeSignedId(feature), (terrainClassAt(map.grid, cell) << 1) | Number(land)], offset);
   numeric.set([
-    finite(cells.pop?.[cell]), finite(cells.temp?.[cell]), finite(cells.prec?.[cell]), finite(cells.region?.[cell])
+    finite(cells.pop?.[cell]), finite(cells.temp?.[cell]), finite(cells.prec?.[cell]),
+    Number.isInteger(cells.region?.[cell]) ? cells.region[cell] : -1
   ], offset);
 }
 
