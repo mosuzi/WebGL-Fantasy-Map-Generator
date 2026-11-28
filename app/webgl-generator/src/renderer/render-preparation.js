@@ -126,6 +126,22 @@ export function renderPreparationPickingComponentsForRegeneration(kind) {
   return [...components];
 }
 
+function preparedPresentation(payload, binding) {
+  return {
+    unitPreferences: normalizeUnitPreferences(payload.unitPreferences || {}),
+    politicalMeshDebugMode: normalizePoliticalMeshDebugMode(payload.politicalMeshDebugMode),
+    display: createPreparedDisplayIntent(payload, binding)
+  };
+}
+
+// The point buffer contains world coordinates only. Unlike line and surface
+// meshes it can be presented under a new camera, theme or color mode as-is.
+export function retargetPreparedPointLayer(prepared, request) {
+  if (!prepared?.layers?.point || Object.keys(prepared.layers).length !== 1) return null;
+  const binding = cloneRenderEnvelopeBinding(request.binding);
+  return {...prepared, binding, presentation: preparedPresentation(request, normalizeRenderBinding(binding))};
+}
+
 export async function executeRenderPreparationTask(payload = {}, context = {}) {
   const map = payload.map;
   if (!map || typeof map !== "object") throw renderPreparationError("render-map-required", "渲染准备缺少地图快照");
@@ -137,11 +153,7 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
   const result = {
     schemaVersion: RENDER_PREPARATION_SCHEMA_VERSION,
     binding: envelopeBinding,
-    presentation: {
-      unitPreferences: normalizeUnitPreferences(payload.unitPreferences || {}),
-      politicalMeshDebugMode: normalizePoliticalMeshDebugMode(payload.politicalMeshDebugMode),
-      display: createPreparedDisplayIntent(payload, binding)
-    },
+    presentation: preparedPresentation(payload, binding),
     layers: {}
   };
   const cacheState = resolveRenderPreparationCache(context.renderCache, binding);

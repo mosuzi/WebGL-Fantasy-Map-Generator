@@ -71,8 +71,8 @@ assert.deepEqual(directImport.upgrade, {needed: true, sourceVersion: 1, targetVe
 assert.deepEqual(workerImport.result.upgrade, directImport.upgrade, "真实 Worker 丢失升级来源");
 assert.equal(directProgress.some(item => item.stage === "upgrade"), true, "直跑 Worker 未提前发出旧卷整理进度");
 assert.equal(workerImport.progress.some(item => item.stage === "upgrade"), true, "真实 Worker 未提前发出旧卷整理进度");
-assert.ok(directImport.map.grid.cells.h instanceof Uint8Array, "fallback plain JSON 没有恢复 typed array");
-assert.ok(workerImport.result.map.grid.cells.h instanceof Uint8Array, "Worker plain JSON 没有恢复 typed array");
+assert.ok(Array.isArray(directImport.map.grid.cells.h), "兼容导入缺少可编辑高度数组");
+assert.ok(Array.isArray(workerImport.result.map.grid.cells.h), "后台导入缺少可编辑高度数组");
 assert.equal(directImport.map.pack.cells.s.length, directImport.map.pack.cells.i.length, "极简旧档没有补齐 pack suitability");
 assert.equal(directImport.map.pack.cells.pop.length, directImport.map.pack.cells.i.length, "极简旧档没有补齐 pack population");
 assert.deepEqual([...workerImport.result.map.grid.cells.h], [...directImport.map.grid.cells.h]);
@@ -155,7 +155,7 @@ assert.deepEqual(workerExport.result.data, directExport.data, "Worker/fallback p
 const exportedText = new TextDecoder().decode(workerExport.result.data);
 const exported = await runMapFileIoWorkerTask({operation: "import", input: exportedText});
 assert.equal(exported.metadata.checksum, directImport.metadata.checksum);
-assert.ok(exported.map.grid.cells.h instanceof Uint8Array);
+assert.ok(Array.isArray(exported.map.grid.cells.h));
 
 const gzipExport = await runTaskInWorker({
   operation: MAP_FILE_IO_WORKER_OPERATIONS.EXPORT,
@@ -197,7 +197,7 @@ const gzipWorker = await runTaskInWorker({
 });
 assert.equal(gzipFallback.metadata.checksum, directImport.metadata.checksum);
 assert.equal(gzipWorker.result.metadata.checksum, directImport.metadata.checksum);
-assert.ok(gzipWorker.result.map.grid.cells.h instanceof Uint8Array);
+assert.ok(Array.isArray(gzipWorker.result.map.grid.cells.h));
 
 const browserEnvelope = createBrowserMapStorageEnvelope(exportedText, directImport.map, {
   encoding: "gzip-base64",
@@ -259,7 +259,7 @@ const largeFallbackImport = await runMapFileIoWorkerTask({
 });
 assertLargeMap(largeFallbackImport, 100_000);
 const largeTransferList = collectMapFileIoWorkerTransferables(largeFallbackImport);
-assert.ok(largeTransferList.length >= 6, "100k import DTO 没有暴露 typed array transfer list");
+assert.equal(largeTransferList.length, 0, "导入后的可编辑地图仍保留了定长数组缓冲");
 const transferredLargeImport = structuredClone(largeFallbackImport, {transfer: largeTransferList});
 assertLargeMap(transferredLargeImport, 100_000);
 
@@ -290,7 +290,7 @@ console.log(JSON.stringify({
     sourceVersion: 1,
     targetVersion: workerImport.result.document.version,
     checksum: workerImport.result.metadata.checksum,
-    typedArray: workerImport.result.map.grid.cells.h.constructor.name,
+    heightColumn: workerImport.result.map.grid.cells.h.constructor.name,
     bytes: workerExport.result.bytes,
     progressStages: workerImport.progress.map(item => item.stage)
   },
@@ -311,7 +311,7 @@ console.log(JSON.stringify({
     checksum: largeWorkerImport.result.metadata.checksum,
     plainBytes: largePlain.bytes,
     gzipBytes: largeGzip.result.bytes,
-    typedArrays: [
+    cellColumns: [
       largeWorkerImport.result.map.grid.cells.i.constructor.name,
       largeWorkerImport.result.map.grid.cells.h.constructor.name,
       largeWorkerImport.result.map.grid.cells.temperature.constructor.name,
@@ -410,10 +410,7 @@ function assertLargeMap(result, expectedCount) {
   assert.equal(result.metadata.gridCells, expectedCount);
   assert.equal(result.metadata.checksum, "task-322-io-100k-checksum");
   assert.equal(result.map.grid.cells.i.length, expectedCount);
-  assert.ok(result.map.grid.cells.i instanceof Uint32Array);
-  assert.ok(result.map.grid.cells.h instanceof Uint8Array);
-  assert.ok(result.map.grid.cells.temperature instanceof Int8Array);
-  assert.ok(result.map.grid.cells.prec instanceof Float32Array);
+  for (const column of ["i", "h", "temperature", "prec"]) assert.ok(Array.isArray(result.map.grid.cells[column]), column);
   assert.equal(result.map, result.document.map, "100k document/map 别名丢失");
   assert.equal(result.map.pack.rivers, result.map.rivers.rivers, "100k pack/rivers 正式别名没有恢复");
 }

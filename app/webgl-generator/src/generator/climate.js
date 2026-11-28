@@ -91,15 +91,11 @@ function normalizeTemplateMapCoordinates(input, options) {
   };
 }
 
-export function applyOceanCurrentClimateInfluence(grid, features, climate, oceanCurrents) {
-  const currents = oceanCurrents?.currents || [];
-  const count = grid?.points?.length || 0;
-  const baseTemp = grid?.cells?.temp;
-  const basePrec = grid?.cells?.prec;
-  if (!count || !baseTemp || !basePrec) return emptyOceanCurrentInfluence(currents.length);
-
+export function traceOceanCurrentClimate(grid, currents) {
+  const count = grid.points.length;
   const temperatureDelta = new Float32Array(count);
   const precipitationDelta = new Float32Array(count);
+  const touched = new Set();
   const locateCell = createNearestGridCellLocator(grid);
   const propagationFloor = 0.045;
   let tracedCells = 0;
@@ -127,6 +123,7 @@ export function applyOceanCurrentClimateInfluence(grid, features, climate, ocean
       const cell = queue[head++];
       const weight = weights[cell];
       const magnitude = strength * weight;
+      touched.add(cell);
       temperatureDelta[cell] += thermalSign * 4.2 * magnitude;
       precipitationDelta[cell] += thermalSign > 0 ? 22 * magnitude : -15 * magnitude;
       tracedCells++;
@@ -140,18 +137,37 @@ export function applyOceanCurrentClimateInfluence(grid, features, climate, ocean
     }
   }
 
+  return {temperatureDelta, precipitationDelta, touched, tracedCells};
+}
+
+export function applyOceanCurrentClimateInfluence(grid, features, climate, oceanCurrents) {
+  const currents = oceanCurrents?.currents || [];
+  const baseTemp = grid?.cells?.temp;
+  const basePrec = grid?.cells?.prec;
+  if (!grid?.points?.length || !baseTemp || !basePrec) return emptyOceanCurrentInfluence(currents.length);
+  const trace = traceOceanCurrentClimate(grid, currents);
+  const influence = visitOceanCurrentClimate(grid, features, currents, trace, (cell, tempDelta, precDelta) => {
+    grid.cells.temp[cell] = clamp(Math.round(Number(baseTemp[cell]) + tempDelta), -128, 127);
+    grid.cells.prec[cell] = clamp(Math.round(Number(basePrec[cell]) + precDelta), 0, 255);
+  });
+  refreshClimateBiomeMetadata(grid, features, climate);
+  climate.metadata.oceanCurrentInfluence = influence;
+  return influence;
+}
+
+export function visitOceanCurrentClimate(grid, features, currents, trace, visit) {
+  const {temperatureDelta, precipitationDelta, touched, tracedCells} = trace;
   let affectedCells = 0;
   let affectedLandCells = 0;
   let warmCells = 0;
   let coldCells = 0;
   let temperatureDeltaTotal = 0;
   let precipitationDeltaTotal = 0;
-  for (let cell = 0; cell < count; cell++) {
+  for (const cell of touched) {
     const tempDelta = clamp(temperatureDelta[cell], -8, 8);
     const precDelta = clamp(precipitationDelta[cell], -40, 40);
     if (Math.abs(tempDelta) < 0.25 && Math.abs(precDelta) < 0.5) continue;
-    grid.cells.temp[cell] = clamp(Math.round(Number(baseTemp[cell]) + tempDelta), -128, 127);
-    grid.cells.prec[cell] = clamp(Math.round(Number(basePrec[cell]) + precDelta), 0, 255);
+    visit(cell, tempDelta, precDelta);
     const feature = features?.features?.[grid.cells.f[cell]];
     if (feature?.land) affectedLandCells++;
     affectedCells++;
@@ -161,8 +177,7 @@ export function applyOceanCurrentClimateInfluence(grid, features, climate, ocean
     precipitationDeltaTotal += precDelta;
   }
 
-  refreshClimateBiomeMetadata(grid, features, climate);
-  const influence = {
+  return {
     version: 1,
     algorithm: "coastal-advection-v1",
     currents: currents.length,
@@ -175,8 +190,6 @@ export function applyOceanCurrentClimateInfluence(grid, features, climate, ocean
     meanPrecipitationDelta: round(affectedCells ? precipitationDeltaTotal / affectedCells : 0, 3),
     checksum: climateInfluenceChecksum(grid.cells.temp, grid.cells.prec)
   };
-  climate.metadata.oceanCurrentInfluence = influence;
-  return influence;
 }
 
 function emptyOceanCurrentInfluence(currents = 0) {
@@ -390,14 +403,46 @@ function calculateTemperatures(grid, mapCoordinates, options) {
   return temp;
 }
 
-function getAltitudeTemperatureDrop(height, exponent) {
+export function getAltitudeTemperatureDrop(height, exponent = CLIMATE_OPTIONS.heightExponent) {
   if (height < 20) return 0;
   return round((((height - 18) ** exponent) / 1000) * 6.5);
 }
 
-function generatePrecipitation(grid, mapCoordinates, options, random) {
+// Replay only the wind tracks crossing an edit. Matching coastal noise on the
+// before/after passes preserves rain already edited by the player.
+export function heightRainfallDeltas(map, edits, oldTemperatures) {
+  const {grid, options, mapCoordinates} = map;
+  if (!mapCoordinates || !grid.metadata.columns || !edits.length) return [];
+  const previous = new Map(edits);
+  const columns = grid.metadata.columns;
+  const rowsHit = new Set(), columnsHit = new Set();
+  for (const [cell] of edits) {
+    rowsHit.add(Math.floor(cell / columns));
+    columnsHit.add(cell % columns);
+  }
+  let seed = 0;
+  for (const char of String(options?.seed || map.metadata.seed || "")) seed = Math.imul(seed, 31) + char.charCodeAt(0) | 0;
+  const base = {rowsHit, columnsHit, seed};
+  const wind = resolveAtmosphereWindProfile(options?.atmosphereDirection, options?.winds || CLIMATE_OPTIONS.winds);
+  const settings = {...options, winds: wind.winds};
+  const before = generatePrecipitation(grid, mapCoordinates, settings, null, {...base, heights: previous, temperatures: oldTemperatures});
+  const after = generatePrecipitation(grid, mapCoordinates, settings, null, base);
+  const changes = [];
+  for (const cell of new Set([...before.keys(), ...after.keys()])) {
+    const delta = (after.get(cell) || 0) - (before.get(cell) || 0);
+    if (delta && cell >= 0 && cell < grid.cells.h.length) changes.push([cell, clamp(grid.cells.prec[cell] + delta, 0, 255)]);
+  }
+  return changes;
+}
+
+function generatePrecipitation(grid, mapCoordinates, options, random, local = null) {
   const {columns, rows, cellsDesired} = grid.metadata;
-  const prec = new Uint8Array(grid.points.length);
+  const prec = local ? new Map() : new Uint8Array(grid.points.length);
+  const height = cell => local?.heights?.get(cell) ?? grid.cells.h[cell];
+  const add = (cell, rain) => {
+    if (local) prec.set(cell, Math.trunc((prec.get(cell) || 0) + rain) & 255);
+    else prec[cell] += rain;
+  };
   const cellsNumberModifier = (cellsDesired / 10000) ** 0.25;
   const precInputModifier = (options.precipitation ?? CLIMATE_OPTIONS.precipitation) / 100;
   const modifier = cellsNumberModifier * precInputModifier;
@@ -457,25 +502,27 @@ function generatePrecipitation(grid, mapCoordinates, options, random) {
         first = first[0];
       }
 
-      let humidity = maxPrec - grid.cells.h[first];
+      if (local && !(Math.abs(next) === 1 ? local.rowsHit.has(Math.floor(Number(first) / columns)) : local.columnsHit.has(Number(first) % columns))) continue;
+      let humidity = maxPrec - height(first);
       if (humidity <= 0) continue;
 
       for (let step = 0, current = first; step < steps; step++, current += next) {
-        if (grid.cells.temp[current] < -5) continue;
+        if ((local?.temperatures?.get(current) ?? grid.cells.temp[current]) < -5) continue;
 
-        if (grid.cells.h[current] < 20) {
-          if (grid.cells.h[current + next] >= 20) {
-            prec[current + next] += Math.max(humidity / rand(random, 10, 20), 1);
+        if (height(current) < 20) {
+          if (height(current + next) >= 20) {
+            const coastLoss = local ? 10 + ((Math.imul(current + next, 2654435761) ^ local.seed) >>> 0) % 11 : rand(random, 10, 20);
+            add(current + next, Math.max(humidity / coastLoss, 1));
           } else {
             humidity = Math.min(humidity + 5 * modifier, maxPrec);
-            prec[current] += 5 * modifier;
+            add(current, 5 * modifier);
           }
           continue;
         }
 
-        const isPassable = grid.cells.h[current + next] <= maxPassableElevation;
+        const isPassable = height(current + next) <= maxPassableElevation;
         const precipitation = isPassable ? getPrecipitation(humidity, current, next) : humidity;
-        prec[current] += precipitation;
+        add(current, precipitation);
         humidity = isPassable ? clamp(humidity - precipitation + (precipitation > 1.5 ? 1 : 0), 0, maxPrec) : 0;
       }
     }
@@ -483,13 +530,13 @@ function generatePrecipitation(grid, mapCoordinates, options, random) {
 
   function getPrecipitation(humidity, cell, next) {
     const normalLoss = Math.max(humidity / (10 * modifier), 1);
-    const diff = Math.max(grid.cells.h[cell + next] - grid.cells.h[cell], 0);
-    const mod = (grid.cells.h[cell + next] / 70) ** 2;
+    const diff = Math.max(height(cell + next) - height(cell), 0);
+    const mod = (height(cell + next) / 70) ** 2;
     return clamp(normalLoss + diff * mod, 1, humidity);
   }
 }
 
-function classifyBiome(temperature, precipitation, height, feature) {
+export function classifyBiome(temperature, precipitation, height, feature) {
   if (!feature?.land) return 0;
   if (height > 72) return 8;
   if (temperature < -6) return 1;

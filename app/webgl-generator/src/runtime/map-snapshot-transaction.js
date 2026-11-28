@@ -27,11 +27,11 @@ export function executeMapSnapshotTransaction({
   isNoop = result => result?.executed === false,
   shouldRestoreOnError = () => true,
   commandFactory = createMapSnapshotCommand,
-  onRestore
+  onRestore,
+  snapshot = captureMapMutationSnapshot(map, editHistory)
 }) {
   if (typeof execute !== "function") throw new Error("地图事务缺少执行器");
   if (typeof executeCommand !== "function") throw new Error("地图事务缺少历史提交器");
-  const snapshot = captureMapMutationSnapshot(map, editHistory);
   try {
     const result = execute();
     if (result && typeof result.then === "function") throw new Error("同步地图事务不能返回 Promise");

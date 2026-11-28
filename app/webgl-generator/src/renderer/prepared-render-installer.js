@@ -121,7 +121,8 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
       decoded.labels = await unpackLabelLayoutDescriptorsInChunks(layers.labels, map, gate.options("labels"));
       decoded.overlay = await renderer.prepareOverlayBundleFromDescriptors?.(map, decoded.labels, {
         ...gate.options("overlay"),
-        unitPreferences: prepared.presentation?.unitPreferences
+        unitPreferences: prepared.presentation?.unitPreferences,
+        prewarmStateLabels: options.prewarmStateLabels
       });
     }
     reportInstallProfile(options, "labels-overlay", profileStartedAt);

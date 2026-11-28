@@ -1,3 +1,4 @@
+import {packCellsByGrid} from "./grid-pack-index.js";
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {buildDiplomacy} from "../generator/diplomacy.js";
@@ -381,22 +382,7 @@ function markDerivedSystemsStale(map) {
 
 function getPackCellsForGrid(map, gridCell) {
   if (!map?.pack?.cells?.g || !map?.pack?.cells?.h) return [];
-  if (!(map.__heightEditorPackCellsByGrid instanceof Map)) {
-    const byGrid = new Map();
-    for (let packCell = 0; packCell < map.pack.cells.g.length; packCell += 1) {
-      const mappedGrid = map.pack.cells.g[packCell];
-      if (!Number.isInteger(mappedGrid) || mappedGrid < 0) continue;
-      if (!byGrid.has(mappedGrid)) byGrid.set(mappedGrid, []);
-      byGrid.get(mappedGrid).push(packCell);
-    }
-    Object.defineProperty(map, "__heightEditorPackCellsByGrid", {
-      value: byGrid,
-      writable: true,
-      configurable: true,
-      enumerable: false
-    });
-  }
-  return map.__heightEditorPackCellsByGrid.get(gridCell) || [];
+  return packCellsByGrid(map, "__heightEditorPackCellsByGrid").get(gridCell) || [];
 }
 
 function sourceElevationToHeight(elevation) {

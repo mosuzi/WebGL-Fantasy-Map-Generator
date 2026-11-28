@@ -21,7 +21,31 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
   let pendingSessionPatch = null;
   let persistentRunTail = Promise.resolve();
   let sessionSequence = 0;
-  return Object.freeze({run, commitSession, applySessionPatch, invalidateSession, getSessionSnapshot});
+  return Object.freeze({run, preparePendingView, commitSession, applySessionPatch, invalidateSession, getSessionSnapshot});
+
+  // A view change can arrive after the edited map is ready but before its
+  // transaction commits. Prepare the new view from that same pending map.
+  async function preparePendingView(sessionId, render, binding, signal) {
+    const current = persistentSession;
+    if (signal?.aborted) throw abortError(signal.reason);
+    if (!current || current.status !== "pending" || current.id !== sessionId || !sameBinding(current.binding, binding)) {
+      throw obsoleteError("待应用地图与当前画面不匹配");
+    }
+    const request = createWorkerTaskRequest({requestId: `${Date.now().toString(36)}-${(++requestSequence).toString(36)}`,
+      task: "render.prepare", binding, sessionId, reuseSession: true, persistentSession: true});
+    request.pendingRenderRequest = current.request.requestId;
+    clearTimeout(current.sessionTerminalTimer);
+    current.status = "running";
+    try {
+      return await runDedicatedWorker(current.worker, request, signal, {
+        persistentSession: true, reuseSession: true, allowFallback: false,
+        sessionInputPayload: render, replicaChecksum: current.checksum, sessionTerminal: current.sessionTerminal
+      });
+    } catch (error) {
+      settleSessionTerminal(current, "render-failed");
+      throw error;
+    }
+  }
 
   function run(task, payload, options = {}) {
     const persistent = options.sessionMode === "map-mirror" || options.sessionMode === "adopt-result-map";

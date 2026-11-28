@@ -14,6 +14,7 @@ const digest = await generatedHandoffDigest(generated.handoff);
 assert.equal(await generatedHandoffDigest(received), digest);
 const copy = await materializeMapAdoptionHandoff(received, {yieldToMain: async () => {}});
 for (const result of [copy, generated.document]) {
+  assertEditableGraph(result.map);
   assert.deepEqual(result, expected);
   assert.equal(result.map.pack.states === result.map.politics.states, expected.map.pack.states === expected.map.politics.states);
   assert.equal(result.map.pack.deals === result.map.economy.deals, expected.map.pack.deals === expected.map.economy.deals);
@@ -22,6 +23,17 @@ for (const result of [copy, generated.document]) {
   applyMainThreadMapProjection(saved.map);
   assert.deepEqual(saved, expected);
 }
+function assertEditableGraph(map) {
+  const seen = new WeakSet();
+  function inspect(value, path) {
+    if (!value || typeof value !== "object" || seen.has(value)) return;
+    assert.ok(!ArrayBuffer.isView(value) && !(value instanceof ArrayBuffer), `编辑数据没有解包：${path}`);
+    seen.add(value);
+    for (const key of Object.keys(value)) if (typeof value[key] === "object") inspect(value[key], path + "." + key);
+  }
+  inspect(map, "map");
+}
+
 const invalid = structuredClone(generated.handoff);
 invalid.geometry[0].ends[0] = 0xffffffff;
 assert.notEqual(await generatedHandoffDigest(invalid), digest);

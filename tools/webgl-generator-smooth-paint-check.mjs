@@ -68,6 +68,14 @@ function prepareCoast(kind) {
   r.setLayersVisible(Object.keys(r.layerVisibility).filter(k => r.layerVisibility[k]).map(k => [k, false]));
   const cells = map.grid.cells;
   const palette = r.cellAttributeStore.snapshot.palettes[mode];
+  const rect = r.canvas.getBoundingClientRect();
+  const {graphWidth, graphHeight} = map.metadata;
+  const scale = 14;
+  const radius = 8;
+  const y = Math.floor(rect.y + rect.height * 0.48);
+  const x = [0.48, 0.6, 0.35, 0.75].map(f => Math.floor(rect.x + rect.width * f)).find(x => document.elementFromPoint(x, y) === r.canvas);
+  if (!x) throw new Error("画笔采样点被面板遮挡");
+  const coastCells = [...r.shoreSurfaceCellRanges.landCorrections.keys()];
   const paths = [...r.shoreVisualPaths.coastline].sort((a, b) => a.sourceEdges.length - b.sourceEdges.length);
   for (const path of paths) for (const {landCell: cell} of path.sourceEdges) {
     const source = cells[kind][cell];
@@ -77,18 +85,22 @@ function prepareCoast(kind) {
       palette.slice((source + 1) * 4, (source + 1) * 4 + 3).some((v, i) => Math.abs(v - palette[(item.i + 1) * 4 + i]) > 12));
     if (!targetObject) continue;
     const target = targetObject.i;
+    const [wx, wy] = map.grid.points[cells.p[cell]];
+    const canDrag = coastCells.some(other => {
+      if (cells[kind][other] === target || (kind === "province" && cells.state[other] !== targetObject.state)) return false;
+      const [nx, ny] = map.grid.points[cells.p[other]];
+      if (Math.hypot(nx - wx, ny - wy) <= radius + 1) return false;
+      const px = Math.round(x + (nx - wx) * scale * rect.width / graphWidth);
+      const py = Math.round(y + (ny - wy) * scale * rect.height / graphHeight);
+      return document.elementFromPoint(px, py) === r.canvas;
+    });
+    if (!canDrag) continue;
     if (kind === "state") panel.setTargetStateId(target);
     else panel.setSelectedProvinceId(target);
-    panel.setBrushRadius(8);
+    panel.setBrushRadius(radius);
     panel.setActive(true);
     const selected = window.webglGeneratorApi.selection.select({kind, id: target});
     if (!selected.ok) throw new Error(selected.error?.message);
-    const rect = r.canvas.getBoundingClientRect();
-    const [wx, wy] = map.grid.points[cells.p[cell]];
-    const y = Math.floor(rect.y + rect.height * 0.48);
-    const x = [0.48, 0.6, 0.35, 0.75].map(f => Math.floor(rect.x + rect.width * f)).find(x => document.elementFromPoint(x, y) === r.canvas);
-    if (!x) throw new Error("画笔采样点被面板遮挡");
-    const scale = 14;
     Object.assign(r.camera, {scale,
       offsetX: (x - rect.x) / rect.width * 2 - 1 - (wx / map.metadata.graphWidth * 2 - 1) * scale,
       offsetY: 1 - (y - rect.y) / rect.height * 2 - (1 - wy / map.metadata.graphHeight * 2) * scale});

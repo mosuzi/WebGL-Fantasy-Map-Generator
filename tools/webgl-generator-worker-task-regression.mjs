@@ -7,6 +7,7 @@ import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeh
 import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
 import {RENDER_CACHE_RESOURCE_FAMILIES} from "../app/webgl-generator/src/renderer/render-cache-resource-binding.js";
 import {createDomainPatchCommand} from "../app/webgl-generator/src/runtime/domain-patch.js";
+import {normalizeRegenerationWorkingCopy} from "../app/webgl-generator/src/runtime/regeneration-working-copy.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {collectRegenerationWorkerTransferables, getRegenerationPatchPolicy, REGENERATION_WORKER_KINDS, runRegenerationWorkerTask} from "../app/webgl-generator/src/runtime/regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "../app/webgl-generator/src/runtime/worker-task-coordinator.js";
@@ -1073,6 +1074,7 @@ const allKindParity = {};
 let representativeRegenerationNumeric = null;
 for (const kind of REGENERATION_WORKER_KINDS) {
   const fixture = generatePlaceholderMap({seed: `worker-all-kinds-${kind}`, cellsTarget: 1000, heightmapTemplate: "continents"});
+  normalizeRegenerationWorkingCopy(fixture);
   const workerInput = structuredClone(fixture);
   const fallbackInput = structuredClone(fixture);
   const workerOutput = await coordinator.run("regeneration.compute", {map: workerInput, kind});
@@ -1339,11 +1341,11 @@ async function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /cache: structuredClone\(prepared\.cache \|\| null\)/u, "显示诊断必须记录正式 Worker 渲染缓存命中");
   assert.match(displayFlow, /operation: \{id: operation\?\.id \|\| "", name: operation\?\.name \|\| ""\}/u, "显示诊断必须绑定当前 operation 身份");
   assert.match(source, /state\.workerTaskCoordinator = state\.mapWorkerCoordinator;[\s\S]*?state\.renderTaskCoordinator = state\.mapWorkerCoordinator;/u, "计算与显示必须共用唯一 MapWorker coordinator");
-  assert.match(source, /workerRenderInstallSuspended > 0 && !activeName\.startsWith\("layers\."\)\) \{[\s\S]*?const result = apply\(\);[\s\S]*?onCommitted\(\);[\s\S]*?return result;/u, "地图事务暂停 renderer 时显示设置必须继续进入原 deferred 队列并回显当前提交状态");
+  assert.match(source, /viewingDuringHeightUpdate \|\| \(state\.renderer\?\.workerRenderInstallSuspended > 0 && !activeName\.startsWith\("layers\."\)\)\) \{\s*try \{\s*const result = await applyCurrent\(\);\s*onCommitted\(\);\s*return result;/u, "地图事务暂停时以及高度更新中切换视图均应应用当前展示意图");
   assert.match(displayFlow, /ownerCurrent \|\| !install\.committed/u, "显示失败清理必须区分当前图与 detached committed owner");
   assert.match(displayFlow, /renderer\.restoreDeferredWorkerRenderPresentation/u, "显示失败必须恢复展示标量");
   assert.match(displayFlow, /renderer\.abortWorkerRenderInstall/u, "显示失败必须解冻并清理 deferred queue");
-  assert.match(displayFlow, /error\?\.code === "worker_fallback_disabled" && ownerCurrent && !isRetryableDisplaySessionError\(error\)/u, "仅非会话自愈错误且地图仍属当前事务时允许兼容路径");
+  assert.match(displayFlow, /error\?\.code === "worker_fallback_disabled" && ownerCurrent && isIntentCurrent\(\) && !isRetryableDisplaySessionError\(error\)/u, "仅当前地图及显示意图仍有效且不可自愈时允许兼容路径");
   assert.match(displayFlow, /message: "正在改用兼容方式继续处理"/u, "兼容阶段必须使用普通用户可理解的中文文案");
   assert.ok(displayFlow.indexOf("renderer.abortWorkerRenderInstall?.()") < displayFlow.lastIndexOf("return apply()"), "兼容路径必须先完整恢复 Worker 事务再执行原同步入口");
   assert.match(source, /queueCommandMapReplicaPatch\(state, mutation, before, after, \{[\s\S]*?includeCompute: !state\?\.workerSessionMutationGuard/u, "map revision 前进必须区分 Worker 已更新的计算镜像");
@@ -1363,7 +1365,7 @@ async function verifyAppDeferredReplayStaticContract() {
   assert.doesNotMatch(displayUiRestore, /readControlPreferences/u, "显示控件恢复不得读取已经被用户改写的 DOM 偏好");
   assert.match(source, /invokeRuntimeDisplayActionFromUi\(state, documentRef,[\s\S]*?catch\(error => \{[\s\S]*?isSupersededDisplayIntent\(error\)[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "UI 必须忽略被取代意图并仅为真实失败恢复正式控件");
   assert.match(source, /createLatestDisplayIntentQueue\(\)[\s\S]*?displayIntents\.run\(async intent =>/u, "显示入口必须进入独立 latest-wins 队列");
-  assert.match(source, /const onCommitted = \(\) => \{[\s\S]*?intent\.isCurrent\(\)[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "只有最新正式 renderer 提交才能收敛控件");
+  assert.match(source, /const syncAll = intent\.isLatestGlobal\(\);\s*if \(syncAll\) restoreRuntimeDisplayControls\(state, documentRef\)/u, "只有最新正式 renderer 提交才能收敛全部控件");
   assert.match(source, /let selfHealAttempts = 0;[\s\S]*?selfHealAttempts > 0 \|\| !isRetryableDisplaySessionError\(error\)[\s\S]*?display-session-self-heal/u, "显示会话只允许一次 stale / commit rejected 自愈");
   assert.match(displayFlow, /sourceToken = createWorkerRegenerationRenderContextToken\(state, "display", \{includeViewport: false\}\)[\s\S]*?sourceViewportToken = createWorkerRegenerationViewportToken\(state\)/u, "显示内容身份与视口版本必须分别冻结");
   assert.match(displayFlow, /createWorkerRegenerationViewportToken\(state\) !== sourceViewportToken[\s\S]*?markWorkerRenderInstallViewportChanged/u, "Worker 期间视口漂移必须转为最新视口重绘，不能作废显示事务");
@@ -1693,6 +1695,10 @@ async function verifyAppDeferredReplayStaticContract() {
     documentRef: {},
     snapshot: reloadSnapshot,
     fault: reloadFault,
+    restoreSavedBrushSettings: (state, snapshot) => {
+      assert.equal(state, reloadState);
+      assert.equal(snapshot, reloadSnapshot);
+    },
     operation: {report: (stage, details) => reloadCalls.push(["report", stage, details?.message])},
     cloneGenerationOptions: value => ({...value}),
     setMythicGenerationLoading: () => {},
@@ -1892,7 +1898,7 @@ async function verifyWebGlContextRestoreFault() {
       height: 700,
       clientWidth: 1000,
       clientHeight: 700,
-      ownerDocument: {defaultView: {requestAnimationFrame: callback => callback()}},
+      ownerDocument: {defaultView: {requestAnimationFrame: callback => callback()}, createElement: () => ({getContext: () => ({})})},
       getBoundingClientRect: () => ({left: 0, top: 0, width: 1000, height: 700})
     },
     program: oldProgram,

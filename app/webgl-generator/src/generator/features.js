@@ -335,7 +335,7 @@ function getCellNeighbors(grid, cell) {
   return grid.cells.c?.[cell] || [];
 }
 
-function getSharedSegment(grid, a, b) {
+export function getSharedSegment(grid, a, b) {
   const aVertices = grid.cells.v[a] || [];
   const bVertices = grid.cells.v[b] || [];
   const shared = [];

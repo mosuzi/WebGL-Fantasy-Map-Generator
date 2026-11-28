@@ -26,14 +26,14 @@ import {
 } from "../domains/foundation/worker-runtime.ts";
 import {createMapAdoptionBindingOwner, finalizeCommittedMapAdoptionInstall} from "./map-adoption-binding-owner.js";
 import {maybeInjectMapReplaceDebugFault} from "./map-replace-debug-fault.js";
-import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
+import {invalidateSettlementCellIndex, reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {prepareRendererWorkerInstall} from "../renderer/prepared-render-installer.js";
 import {assertMatchingPreparedDisplayIntents} from "../renderer/prepared-display-intent.js";
-import {assertRenderPreparationBinding, RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration, renderPreparationPickingComponentsForRegeneration} from "../renderer/render-preparation.js";
+import {assertRenderPreparationBinding, RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration, renderPreparationPickingComponentsForRegeneration, retargetPreparedPointLayer} from "../renderer/render-preparation.js";
 import {createRenderRequestSourceBinding, createRenderResourceBinding, sameRenderResourceBinding} from "../renderer/render-resource-binding.js";
 import {
   createUserVisualThemeDocument,
@@ -123,7 +123,7 @@ import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDele
 import {createApplySocialExpansionCommand, createSaveCultureParametersCommand, inspectSocialExpansion} from "./social-expansion-edit-commands.js";
 import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment, inspectClimateWarnings} from "./biome-edit-commands.js";
 import {applySuitabilityPreview, buildSuitabilityChanges, buildSuitabilityStrokeChanges, createApplySuitabilityCommand, getSuitabilityBrushChanges, inspectSuitabilityEdit, restoreSuitabilityPreview, SUITABILITY_PREVIEW_EFFECTS} from "./suitability-edit-commands.js";
-import {invalidateSuitabilityStats} from "./suitability-stat-index.js";
+import {invalidateSuitabilityStats, touchSuitabilityStats} from "./suitability-stat-index.js";
 import {
   buildPopulationAdjustmentPlan,
   buildPopulationTransferPlan,
@@ -252,6 +252,7 @@ import {createDomainPatchCommand, createMapReplacementCommand} from "./domain-pa
 import {captureCommandMapReplicaWrites, captureCommandMapReplicaWritesAsync, createCommandMapReplicaPatch} from "./map-replica-command-patch.js";
 import {createCommittedHistoryGuard, settleHistoryActionResult} from "./history-async-boundary.js";
 import {getHeightDerivedPatchPolicy, HEIGHT_DERIVED_WORKER_TASK} from "./height-derived-worker-task.js";
+import {editedHeightPatchPolicy, HEIGHT_VIEW_FIELDS} from "./edited-height-impact.js";
 import {getRegenerationPatchPolicy, REGENERATION_WORKER_TASK, validateOceanCurrentRegenerationOutput} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
 import {createLatestPrewarmScheduler} from "./latest-prewarm-scheduler.js";
@@ -1373,7 +1374,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onRegenerateAll: async () => {
       cancelHeightLine(state, documentRef);
       try {
-        return await runtimeActions.edit.height.rebuildAllDerived({confirm: true});
+        return await runtimeActions.edit.height.rebuildAllDerived({confirm: true, mode: "edited-height"});
       } catch (error) {
         state.heightEdit.lastNotice = heightDerivedRebuildFailureMessage(error);
         updateHeightPanel(state);
@@ -3428,7 +3429,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         }
       }
     };
-    if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers.")) {
+    const viewingDuringHeightUpdate = intentKey === "view-mode" && activeName.startsWith("edit.height.rebuild");
+    if (viewingDuringHeightUpdate || (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers."))) {
       try {
         const result = await applyCurrent();
         onCommitted();
@@ -3510,14 +3512,6 @@ function createRuntimeActions(state, documentRef, options = {}) {
       if (loadingOwner) clearOwnedGenerationLoading(documentRef, loadingOwner);
     });
   };
-  const mapMutationConfig = message => ({
-    message,
-    snapshot: () => captureMapMutationSnapshot(state.map, state.editHistory),
-    rollback: snapshot => {
-      restoreMapMutationSnapshot(state.map, state.editHistory, snapshot);
-      refreshMapMutationRollback(state, documentRef);
-    }
-  });
   return {
     history: {
       get: (options = {}) => state.editHistory.getStats(options),
@@ -3794,14 +3788,18 @@ function createRuntimeActions(state, documentRef, options = {}) {
       }),
       inspectCollectionImport: (kind, document, options = {}) => inspectCollectionImportViaApi(state, kind, document, options),
       importMap: (document, options = {}) => runMapReplace("data.importMap", context => importMapDocumentViaApi(state, documentRef, document, options, context), loadingMessage("map-import-read")),
-      importGEO: (document, options = {}) => operation.runSync("data.importGEO", context => {
-        context.report("import", {message: "正在导入 GEO 数据"});
-        return importGeoDocumentTransactionViaApi(state, documentRef, document, options);
-      }, {
-        ...mapMutationConfig("正在导入 GEO 数据"),
-        message: "正在导入 GEO 数据",
-        isNoop: result => result?.imported === false
-      }),
+      importGEO: (document, options = {}) => {
+        const transaction = {};
+        return operation.runSync("data.importGEO", context => {
+          context.report("import", {message: "正在导入 GEO 数据"});
+          return importGeoDocumentViaApi(state, documentRef, document, options, transaction);
+        }, {
+          snapshot: () => transaction,
+          rollback: () => transaction.restore?.(),
+          message: "正在导入 GEO 数据",
+          isNoop: result => result?.imported === false
+        });
+      },
       importHeightmap: (payload, options = {}) => runMapReplace("data.importHeightmap", context => importHeightmapImageViaApi(state, documentRef, payload, options, context), loadingMessage("heightmap-read"), {
         isNoop: result => result?.imported === false
       })
@@ -3918,7 +3916,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
         ),
         rebuildAllDerived: (editOptions = {}) => operation.run(
           "edit.height.rebuildAllDerived",
-          context => rebuildHeightDerivedViaAction(state, documentRef, "all", editOptions, context),
+          context => editOptions?.mode === "edited-height"
+            ? applyEditedHeightDerivedViaAction(state, documentRef, editOptions, context)
+            : rebuildHeightDerivedViaAction(state, documentRef, "all", editOptions, context),
           {message: "正在更新全部高度相关内容", isNoop: result => !result?.executed}
         )
       },
@@ -7916,7 +7916,7 @@ async function importGeoData(state, documentRef, file, importAction = state.runt
   }
 }
 
-function importGeoDocumentViaApi(state, documentRef, document, options = {}) {
+function importGeoDocumentViaApi(state, documentRef, document, options, transaction) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("导入 GEO 数据会写入当前地图，需要显式传入 {confirm: true}");
   let analysis = null;
@@ -7925,8 +7925,8 @@ function importGeoDocumentViaApi(state, documentRef, document, options = {}) {
     analysis = inspectGeoImportSource(text);
     const terrainCommand = createImportFmgCellsHeightCommand(text, state.map, {label: "API 导入 FMG Cells 地形"});
     const result = terrainCommand
-      ? importFmgCellsGeoViaApi(state, documentRef, terrainCommand, options)
-      : importGeoMeasurementsViaApi(state, documentRef, text, options);
+      ? importGeoTerrainTransaction(state, documentRef, terrainCommand, options, transaction)
+      : importGeoMeasurementsViaApi(state, documentRef, text, options, transaction);
     const diagnostic = createImportSuccessDiagnostic(analysis.kind, options.sourceFile, {
       ...analysis.summary,
       result: geoImportResultSummary(result)
@@ -7941,9 +7941,14 @@ function importGeoDocumentViaApi(state, documentRef, document, options = {}) {
   }
 }
 
-function importGeoDocumentTransactionViaApi(state, documentRef, document, options = {}) {
-  assertMapAvailable(state);
+function importGeoTerrainTransaction(state, documentRef, terrainCommand, options, operation) {
+  const snapshot = captureMapMutationSnapshot(state.map, state.editHistory);
+  operation.restore = () => {
+    restoreMapMutationSnapshot(state.map, state.editHistory, snapshot);
+    refreshMapMutationRollback(state, documentRef);
+  };
   const transaction = executeMapSnapshotTransaction({
+    snapshot,
     map: state.map,
     editHistory: state.editHistory,
     label: "导入 GEO 数据",
@@ -7952,7 +7957,7 @@ function importGeoDocumentTransactionViaApi(state, documentRef, document, option
       ...REGENERATION_TRANSACTION_EFFECTS,
       affected: [{kind: "system", id: "geo-import"}]
     },
-    execute: () => importGeoDocumentViaApi(state, documentRef, document, options),
+    execute: () => importFmgCellsGeoViaApi(state, documentRef, terrainCommand, options),
     executeCommand: command => executeEditCommand(state, documentRef, command, {
       context: {map: state.map},
       refresh: () => {},
@@ -8009,7 +8014,7 @@ function importFmgCellsGeoViaApi(state, documentRef, command, options = {}) {
   };
 }
 
-function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
+function importGeoMeasurementsViaApi(state, documentRef, text, options, transaction) {
   const payload = parseGeoJsonMeasurements(text, state.map, {limit: normalizeGeoImportLimit(options.limit)});
   const sourceLabel = options.source === "ui" ? "" : "通过 API ";
   const command = createImportMeasurementsCommand(payload.measurements, {label: `${sourceLabel}导入 GEO 测量对象`.trim()});
@@ -8024,6 +8029,16 @@ function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
       effects: []
     };
   }
+  const history = state.editHistory.createSnapshot();
+  transaction.restore = () => {
+    if (state.editHistory.undoStack.at(-1) !== command) return;
+    command.revert({map: state.map});
+    state.editHistory.restoreSnapshot(history);
+    invalidateMapReplicaCoordinators(state, true, "geo-import-rollback");
+    refreshAfterEdit(state, command);
+    updateMeasurementOverlay(state, documentRef);
+    refreshPanelsForEdit(state, command);
+  };
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     preparePanelRefresh: (targetState, executed, imported) => {
@@ -12158,6 +12173,116 @@ async function rebuildHeightDerivedViaAction(state, documentRef, scope, options 
   };
 }
 
+async function applyEditedHeightDerivedViaAction(state, documentRef, options, operation) {
+  assertMapAvailable(state);
+  if (options?.confirm !== true) throw new Error("应用高度编辑需要显式传入 {confirm: true}");
+  const scope = "all";
+  const before = regenerationApiSummary(state.map);
+  const kinds = [...HEIGHT_BASE_REBUILD_STEPS, ...HEIGHT_DOWNSTREAM_REBUILD_STEPS];
+  const label = "更新高度编辑影响";
+  const map = state.map;
+  let computed = null;
+  const previewed = new Set();
+  let previewFrame = 0;
+  const footprint = map.metadata?.derivedStale?.heightEdits;
+  const crossesShore = !footprint || Object.entries(footprint).some(([cell, before]) => (before >= 20) !== (map.grid.cells.h[cell] >= 20));
+  // Brush previews have already installed the local shoreline and terrain.
+  // These attributes serve every resident view, including a view opened later.
+  const resident = state.renderer?.canPresentGpuResidentColorMode?.(state.renderer.colorMode);
+  const renderLayers = resident
+    ? crossesShore ? ["shore", "state-paths", "province-paths", "political", "line", "point", "route", "river", "picking", "labels"] : ["point"]
+    : [...RENDER_PREPARATION_LAYERS];
+  const mutation = {
+    task: HEIGHT_DERIVED_WORKER_TASK,
+    targetKind: "height-derived",
+    userLabel: label,
+    payload: {scope, mode: "edited-height", localColors: Boolean(resident)},
+    renderLayers,
+    onWorkerProgress(stage, detail) {
+      if (stage !== "height-view-cells") return false;
+      if (state.map !== map || operation?.signal?.aborted || !state.renderer?.cellAttributeStore) return true;
+      const cells = Object.create(map.grid.cells), ids = [];
+      for (const field of HEIGHT_VIEW_FIELDS) cells[field] = Object.create(map.grid.cells[field] || null);
+      for (const [id, ...values] of detail.rows) {
+        if (!Number.isInteger(id) || id < 0 || id >= cells.h.length) continue;
+        ids.push(id);
+        previewed.add(id);
+        HEIGHT_VIEW_FIELDS.forEach((field, index) => { cells[field][id] = values[index]; });
+      }
+      if (!ids.length) return true;
+      state.renderer.refreshCellAttributeCells(ids, {...map, grid: {...map.grid, cells}});
+      if (!previewFrame) previewFrame = documentRef.defaultView.requestAnimationFrame(() => {
+        previewFrame = 0;
+        if (state.map === map && !operation?.signal?.aborted) state.renderer.draw();
+      });
+      return true;
+    },
+    effects: {
+      ...REGENERATION_TRANSACTION_EFFECTS,
+      affected: kinds.map(id => ({kind: "system", id}))
+    },
+    followActiveView: true,
+    assertOutput: ({binding, renderBinding, output}) => {
+      validateFoundationWorkerOutput({task: HEIGHT_DERIVED_WORKER_TASK, binding, renderBinding, output});
+      computed = {patch: output.patch, result: output.result, refresh: output.refresh};
+    },
+    createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
+      patch: output.patch,
+      policy: editedHeightPatchPolicy(output.patch),
+      label,
+      historyDomain: "height-derived",
+      effects,
+      result,
+      workerHistory: {
+        task: REGENERATION_WORKER_TASK,
+        kind: "height-derived",
+        label,
+        renderLayers: output.refresh?.renderLayers || renderLayers,
+        refresh: output.refresh
+      },
+      affectedFactory: () => kinds.map(id => ({kind: "system", id}))
+    })
+  };
+  let response;
+  for (let attempt = 0; ; attempt++) {
+    const presentation = createWorkerRegenerationRenderContextToken(state, "height-derived");
+    const revision = state.mapRevision.getCoreSnapshot().mapRevision;
+    const primary = ({"states": "state-paths", "governments": "state-paths", "diplomacy": "state-paths",
+      "provinces": "province-paths", "population": "point"})[state.renderer?.colorMode] || "shore";
+    mutation.renderLayers = renderLayers.includes(primary) ? [primary, ...renderLayers.filter(layer => layer !== primary)] : renderLayers;
+    try {
+      response = await executeWorkerMapMutation(state, documentRef, mutation, operation);
+      break;
+    } catch (error) {
+      if (previewFrame) documentRef.defaultView.cancelAnimationFrame(previewFrame);
+      previewFrame = 0;
+      if (state.map === map && previewed.size) {
+        const ids = [...previewed];
+        for (let offset = 0; offset < ids.length && state.map === map; offset += 256) {
+          state.renderer.refreshCellAttributeCells(ids.slice(offset, offset + 256));
+          if (offset + 256 < ids.length) await yieldToBrowser(documentRef);
+        }
+        if (state.map === map) state.renderer.draw();
+      }
+      previewed.clear();
+      if (error?.code !== "operation_obsolete" || attempt >= 19 || state.map !== map ||
+          state.mapRevision.getCoreSnapshot().mapRevision !== revision ||
+          createWorkerRegenerationRenderContextToken(state, "height-derived") === presentation) throw error;
+      operation?.throwIfCancelled?.();
+      if (computed) mutation.payload = {...mutation.payload, mode: "present-edited-height", computed};
+    }
+  }
+  return {
+    ...response,
+    scope,
+    before,
+    after: response.executed ? regenerationApiSummary(state.map) : before,
+    staleSystems: [...(state.map?.metadata?.derivedStale?.systems || [])],
+    history: state.editHistory.getStats(),
+    effects: ["map-derived", "renderer", "runtime-panel", "height-panel", "object-index"]
+  };
+}
+
 function heightDerivedRebuildFailureMessage(error) {
   if (error?.name === "AbortError" || error?.code === "operation_cancelled") return "高度派生重建已取消。";
   if (error?.code === "operation_obsolete") return "地图已发生变化，本次高度派生结果未应用。";
@@ -13815,11 +13940,11 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
   const taskPayload = mutation.includeBindingInPayload === true ? {...payload, binding} : payload;
   operation?.report("stream-input", {message: `正在整理${userLabel}所需资料`});
   operation?.throwIfCancelled?.();
-  const renderRequest = createWorkerRegenerationRenderRequest(state, targetKind, binding, mutation.renderLayers, {
+  let renderRequest = createWorkerRegenerationRenderRequest(state, targetKind, binding, mutation.renderLayers, {
     sourceRevisionDelta: 1,
     topologyRevisionDelta: 1
   });
-  const renderContextToken = createWorkerRegenerationRenderContextToken(state, targetKind);
+  let renderContextToken = createWorkerRegenerationRenderContextToken(state, targetKind);
   let output;
   try {
     output = await state.workerTaskCoordinator.run(task, {
@@ -13853,7 +13978,9 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
         }
         return {map: fallbackPrepared.snapshot, ...taskPayload, render: renderRequest};
       },
-      onProgress: (stage, detail) => operation?.report(stage, detail)
+      onProgress: (stage, detail) => {
+        if (!mutation.onWorkerProgress?.(stage, detail)) operation?.report(stage, detail);
+      }
     });
   } catch (error) {
     if (state.map === sourceMap) restoreCityIconLayerStatistics(state.renderer, operationStartCityIconLayerStats);
@@ -13870,6 +13997,28 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       await mutation.assertOutput({state, sourceMap, binding, renderBinding: renderRequest.binding, output, operation});
       await yieldToBrowser(documentRef);
       assertWorkerRegenerationOutputCurrent(state, binding, output, operation);
+    }
+    while (mutation.followActiveView && output.result?.executed &&
+        renderContextToken !== createWorkerRegenerationRenderContextToken(state, targetKind)) {
+      const latestToken = createWorkerRegenerationRenderContextToken(state, targetKind);
+      const latest = createWorkerRegenerationRenderRequest(state, targetKind, binding, output.refresh.renderLayers, {
+        sourceRevisionDelta: 1, topologyRevisionDelta: 1
+      });
+      let retargeted = retargetPreparedPointLayer(output.preparedRender, latest);
+      if (!retargeted && output.worker?.session?.id) {
+        const {worker, ...prepared} = await state.workerTaskCoordinator.preparePendingView(output.worker.session.id, latest, binding, operation?.signal);
+        assertWorkerRegenerationOutputCurrent(state, binding, output, operation);
+        assertRenderPreparationBinding(prepared, latest.binding);
+        output.worker = worker;
+        retargeted = prepared;
+      }
+      if (!retargeted) {
+        // A compatibility run without a resident map can replay the computed patch.
+        throw Object.assign(new Error("视图已切换，正在准备当前画面"), {code: "operation_obsolete"});
+      }
+      output.preparedRender = retargeted;
+      renderRequest = latest;
+      renderContextToken = latestToken;
     }
   } catch (error) {
     state.workerTaskCoordinator.invalidateSession("result-obsolete");
@@ -13979,6 +14128,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       state.workerSessionMutationGuard = false;
     }
     execution = {executed: true};
+    refreshHeightImpactCells(state, output.refresh);
     const committedBinding = createCommittedFoundationWorkerBinding(binding, state.mapRevision.getCoreSnapshot());
     mutation.assertCommitted?.("domain", committedBinding);
     commitInstallMs = roundWorkerTelemetryMs(readCommitTime() - commitStartedAt);
@@ -13998,6 +14148,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
         preserveRoutePicking: Boolean(mutation.preserveRoutePicking),
         rebuildPickingFromMap: Boolean(mutation.rebuildPickingFromMap),
         inPlaceSurfaceColorPatch,
+        prewarmStateLabels: targetKind === "height-derived",
         isCurrent: installIsCurrent,
         onProgress: (stage, detail) => {
           recordWorkerRenderInstallStage(renderInstallStages, stage, detail, readCommitTime() - renderPrepareStartedAt);
@@ -14857,6 +15008,7 @@ async function replayWorkerRegenerationDeferredPresentation(state, documentRef, 
         signal: operation?.signal,
         preserveRoutePicking: targetKind === "rivers",
         rebuildPickingFromMap: targetKind === "cities",
+        prewarmStateLabels: targetKind === "height-derived",
         isCurrent,
         onProgress: () => operation?.report("render-install", {message: "正在更新最终显示效果"})
       });
@@ -15181,7 +15333,15 @@ function captureWorkerRegenerationUiSnapshot(state, documentRef) {
   };
 }
 
+function refreshHeightImpactCells(state, refresh) {
+  if (!refresh?.editedGrid) return;
+  touchSuitabilityStats(state.map, refresh.editedGrid, refresh.editedPack || []);
+  if (refresh.settlementLocations) invalidateSettlementCellIndex(state.map);
+  if (refresh.editedGrid.length) state.renderer?.refreshEditedCellColors(refresh.editedGrid, {draw: false});
+}
+
 function restoreWorkerRegenerationUiSnapshot(state, documentRef, snapshot, targetKind, refresh, {preserveRenderContext = false, restoreDeferredPresentation = false} = {}) {
+  refreshHeightImpactCells(state, refresh);
   if (!snapshot) return;
   if (restoreDeferredPresentation) {
     state.renderer?.restoreDeferredWorkerRenderPresentation?.(snapshot.renderer?.deferredPresentation);
@@ -20255,7 +20415,10 @@ function restoreSavedBrushSettings(state, display) {
 }
 
 function heightDerivedStaleSystems(map) {
-  return [...(map?.metadata?.derivedStale?.systems || [])];
+  const pending = map?.metadata?.derivedStale;
+  if (!pending) return [];
+  if (pending.heightEdits) return Object.keys(pending.heightEdits).length ? [...(pending.systems || [])] : [];
+  return pending.systems?.includes("features") ? [...pending.systems] : [];
 }
 
 function summarizeCurrentHeightStats(map) {
@@ -20299,6 +20462,8 @@ function summarizeCurrentHeightStats(map) {
   };
 }
 
+const heightPreviewBins = new WeakMap();
+
 function buildCurrentHeightPreview(map) {
   const cells = map?.grid?.cells;
   const points = map?.grid?.points;
@@ -20309,18 +20474,30 @@ function buildCurrentHeightPreview(map) {
   const width = 96;
   const height = Math.max(32, Math.round(width * graphHeight / graphWidth));
   const totals = new Float32Array(width * height);
-  const counts = new Uint16Array(width * height);
+  // 笔触只改高度；各格在预览小图中的位置及每个像素覆盖格数由几何决定。
+  let bins = heightPreviewBins.get(points);
+  if (!bins || bins.pointIds !== cells.p || bins.index.length !== heights.length || bins.graphWidth !== graphWidth || bins.graphHeight !== graphHeight) {
+    const index = new Int32Array(heights.length).fill(-1);
+    const counts = new Uint32Array(width * height);
+    for (let cell = 0; cell < index.length; cell++) {
+      const point = points[cells.p[cell]];
+      if (!point) continue;
+      const x = clampInteger(Math.floor(point[0] / graphWidth * width), 0, width - 1);
+      const y = clampInteger(Math.floor(point[1] / graphHeight * height), 0, height - 1);
+      index[cell] = y * width + x;
+      counts[index[cell]]++;
+    }
+    bins = {index, counts, pointIds: cells.p, graphWidth, graphHeight};
+    heightPreviewBins.set(points, bins);
+  }
+  const {counts} = bins;
   let globalSum = 0;
 
   for (let cell = 0; cell < heights.length; cell += 1) {
-    const point = points[cells.p[cell]];
-    if (!point) continue;
-    const sampleX = clampInteger(Math.floor((point[0] / graphWidth) * width), 0, width - 1);
-    const sampleY = clampInteger(Math.floor((point[1] / graphHeight) * height), 0, height - 1);
-    const index = sampleY * width + sampleX;
+    const index = bins.index[cell];
+    if (index < 0) continue;
     const value = clampInteger(Math.round(Number(heights[cell]) || 0), 0, 100);
     totals[index] += value;
-    counts[index] += 1;
     globalSum += value;
   }
 

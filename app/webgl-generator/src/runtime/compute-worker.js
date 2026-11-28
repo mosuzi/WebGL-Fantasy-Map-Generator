@@ -74,7 +74,9 @@ self.addEventListener("message", async event => {
         throw workerStateError("worker_protocol_duplicate_run", "Worker 请求已初始化");
       }
       if (request.reuseSession) {
-        if (!retainedSession || retainedSession.id !== request.sessionId || retainedSession.status !== "idle" || !sameSessionBinding(retainedSession.binding, request.binding)) {
+        const pendingView = request.task === "render.prepare" && retainedSession?.status === "pending"
+          && request.pendingRenderRequest === retainedSession.requestId;
+        if (!retainedSession || retainedSession.id !== request.sessionId || (!pendingView && retainedSession.status !== "idle") || !sameSessionBinding(retainedSession.binding, request.binding)) {
           throw workerStateError("worker_protocol_session_stale", "Worker session 镜像与请求绑定不一致");
         }
         retainedSession.status = "running";

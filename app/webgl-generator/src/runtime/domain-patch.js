@@ -1,3 +1,5 @@
+import {applyMainThreadMapProjection, isEditableMap, materializeEditableValue} from "./main-thread-map-projection.js";
+
 export const DOMAIN_PATCH_VERSION = 1;
 
 export function createDomainPatch(domain, writeSet, source) {
@@ -18,6 +20,12 @@ export function createDomainPatchCommand({patch, policy, label, historyDomain, e
     domain: String(historyDomain || `worker-${patch.domain}`),
     effects,
     apply(context) {
+      if (!reverse && isEditableMap(context.map)) {
+        const copies = new WeakMap();
+        patch = {...patch, operations: patch.operations.map(operation => ({
+          ...operation, value: materializeEditableValue(operation.value, copies)
+        }))};
+      }
       reverse = swapPatch(context.map, patch, reverse);
       applied = true;
     },
@@ -73,6 +81,7 @@ export function createMapReplacementCommand({replacementMap, label, historyDomai
     domain: String(historyDomain || "worker-map-replacement"),
     effects,
     apply(context) {
+      if (isEditableMap(context.map)) applyMainThreadMapProjection(alternate);
       alternate = swapObjectContents(context.map, alternate, afterSwap);
       applied = true;
     },

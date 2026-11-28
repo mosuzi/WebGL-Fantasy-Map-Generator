@@ -222,7 +222,7 @@ function markupPackFeatures(pack, grid) {
   return profile.finish();
 }
 
-function defineHaven(cells, cell, haven, harbor) {
+export function defineHaven(cells, cell, haven, harbor) {
   const waterCells = (cells.c[cell] || []).filter(neighbor => isWater(cells, neighbor));
   let closest = waterCells[0] ?? 0;
   let closestDistance = Infinity;
@@ -236,7 +236,7 @@ function defineHaven(cells, cell, haven, harbor) {
   harbor[cell] = waterCells.length;
 }
 
-function createPackFeature({pack, grid, featureIds, featureCells, firstCell, featureId, land, border, totalCells}) {
+export function createPackFeature({pack, grid, featureIds, featureCells, firstCell, featureId, land, border, totalCells}) {
   const {cells, vertices} = pack;
   const type = land ? "island" : border ? "ocean" : "lake";
   const startCell = type === "ocean" ? firstCell : findFeatureBorderCell(cells, featureIds, featureCells, firstCell, featureId);
@@ -313,14 +313,14 @@ function getLakeHeight(cells, shoreline) {
   return round(minShoreHeight - 0.1, 2);
 }
 
-export function defineFeatureGroups(pack, grid) {
+export function defineFeatureGroups(pack, grid, features = pack.features) {
   const gridCellsNumber = grid.cells.i.length;
   const oceanMinSize = gridCellsNumber / 25;
   const seaMinSize = gridCellsNumber / 1000;
   const continentMinSize = gridCellsNumber / 10;
   const islandMinSize = gridCellsNumber / 1000;
 
-  for (const feature of pack.features) {
+  for (const feature of features) {
     if (!feature) continue;
     if (feature.type === "island") {
       const previousFeature = pack.features[pack.cells.f[feature.firstCell - 1]];

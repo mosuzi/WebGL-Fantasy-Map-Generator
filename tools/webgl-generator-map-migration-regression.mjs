@@ -162,8 +162,30 @@ const headlessV1 = loadHeadlessMapDocument(legacyHeaderOnly);
 assert.ok(headlessV1.map.grid.cells.h instanceof Uint8Array, "无头对象载入把旧 v1 typed array 降成普通对象");
 assert.equal(createHeadlessMapApi(headlessV1).terrain.get().data.height.count, 3, "无头对象载入后高度统计丢失");
 
-assert.equal(MAP_DOCUMENT_VERSION, 6);
-assert.equal(MAP_SCHEMA_VERSION, 6);
+assert.equal(MAP_DOCUMENT_VERSION, 7);
+assert.equal(MAP_SCHEMA_VERSION, 7);
+const v6 = structuredClone(legacyHeaderOnly);
+v6.version = 6;
+v6.metadata = {...v6.metadata, mapSchemaVersion: 6};
+v6.map.metadata = {...v6.map.metadata, schemaVersion: 6};
+v6.map.metadata.derivedStale = {systems: ["features", "economy"]};
+v6.map.features = {features: [{land: false}, {land: true}]};
+v6.map.grid.cells.f = [1, 1, 1];
+Object.assign(v6.map, {notes: {notes: []}, measurements: {items: []}, display: {brushRadii: {height: 13}}});
+const migratedHeight = parseMapDocument(stringifyMapDocument(v6));
+assert.equal(migratedHeight.map.display.brushRadii.height, 13);
+assert.deepEqual(migratedHeight.map.metadata.derivedStale.heightEdits, {"0": 20});
+const coastBytes = await readFile(new URL("./fixtures/webgl-map-v6-pending-coast-0.6.14.webfmg", import.meta.url));
+assert.equal(createHash("sha256").update(coastBytes).digest("hex"), "b009851ea4dae62a5941d7d7dc9c614d65b4f63c88d3eedc907245665dca4dd9");
+const previousCoast = decodeWebfmgV3Document(coastBytes);
+assert.equal(previousCoast.version, 6);
+assert.equal(previousCoast.map.metadata.derivedStale.heightEdits, undefined);
+for (const opened of [await parseBinaryMapDocumentPayload(view, coastBytes), parseMapDocument(stringifyMapDocument(previousCoast))]) {
+  assert.deepEqual(opened.map.metadata.derivedStale.heightEdits, {"1": 20});
+  assert.deepEqual([...opened.map.grid.cells.h], [12, 10, 40]);
+  assert.deepEqual(opened.map.display, previousCoast.map.display);
+  assert.deepEqual(parseMapDocument(stringifyMapDocument(opened)).map.metadata.derivedStale, opened.map.metadata.derivedStale);
+}
 const v5Bytes = await readFile(new URL("./fixtures/webgl-map-v5-brush-radii-0.6.13.webfmg", import.meta.url));
 assert.equal(createHash("sha256").update(v5Bytes).digest("hex"), "6b47e5a5774e4c049f060f976ee0cd8e68a428339f89f2123c130fc607333443");
 const v5 = decodeWebfmgV3Document(v5Bytes);

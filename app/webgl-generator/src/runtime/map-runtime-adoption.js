@@ -4,6 +4,7 @@ import {ensureLabelStore} from "./label-edit-commands.js";
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {normalizeSuitabilityMap} from "./suitability-edit-commands.js";
 import {normalizeRegenerationWorkingCopy} from "./regeneration-working-copy.js";
+import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
 
 export function normalizeMapForRuntimeAdoption(map) {
   normalizeRegenerationWorkingCopy(map);
@@ -12,7 +13,7 @@ export function normalizeMapForRuntimeAdoption(map) {
   ensureLabelStore(map);
   reconcileWarDerivedData(map);
   ensureRiverHydrology(map);
-  return map;
+  return applyMainThreadMapProjection(map);
 }
 
 function ensureRiverHydrology(map) {

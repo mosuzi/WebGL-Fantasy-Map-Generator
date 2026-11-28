@@ -1,12 +1,9 @@
 import {
-  cloneMeasurementStore,
   createMeasurementFromPoints,
-  ensureMeasurementStore,
+  editableMeasurementStore,
   findMeasurement,
   normalizeMeasurementItem,
-  normalizeMeasurementPoints,
-  refreshMeasurementsMetadata,
-  restoreMeasurementStore
+  normalizeMeasurementPoints
 } from "./measurement-objects.js";
 import {normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
@@ -20,32 +17,21 @@ const MEASUREMENT_EFFECTS = Object.freeze({
 });
 
 export function createSaveMeasurementCommand(points, {name = "", routeFit = "none", drawMode, closed, smooth, sampling, label = "保存测量对象"} = {}) {
-  let previous = null;
-  let created = null;
-
+  const append = appendMeasurements(map => [createMeasurementFromPoints(map, points, {name, routeFit, drawMode, closed, smooth, sampling})]);
   return {
+    ...append,
     label,
     domain: "measurement",
-    effects: {
-      ...MEASUREMENT_EFFECTS,
-      affected: newObjectAffected("measurement")
-    },
+    effects: {...MEASUREMENT_EFFECTS, affected: newObjectAffected("measurement")},
     apply(context) {
-      previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
-      created ??= createMeasurementFromPoints(context.map, points, {name, routeFit, drawMode, closed, smooth, sampling});
-      const store = ensureMeasurementStore(context.map);
-      store.items.push(JSON.parse(JSON.stringify(created)));
-      refreshMeasurementsMetadata(store);
-      this.effects.affected = objectAffected("measurement", created.id);
-    },
-    revert(context) {
-      restoreMeasurementStore(context.map, previous);
+      const [item] = append.apply(context);
+      this.effects.affected = objectAffected("measurement", item.id);
     },
     isNoop(context) {
       return !context.map || !Array.isArray(points) || points.length < 2;
     },
     getResult() {
-      return created ? JSON.parse(JSON.stringify(created)) : null;
+      return append.getItems()[0] || null;
     },
     getMeasurement() {
       return this.getResult();
@@ -55,7 +41,8 @@ export function createSaveMeasurementCommand(points, {name = "", routeFit = "non
 
 export function createRenameMeasurementCommand(measurementId, name, {label = "重命名测量对象"} = {}) {
   const normalizedName = normalizeMeasurementName(name);
-  let previousName = null;
+  let previous;
+  let updatedAt;
 
   return {
     label,
@@ -66,16 +53,16 @@ export function createRenameMeasurementCommand(measurementId, name, {label = "�
     },
     apply(context) {
       const item = readMeasurement(context.map, measurementId);
-      previousName ??= item.name || "";
-      item.name = normalizedName || previousName || "未命名测量";
-      item.updatedAt = new Date().toISOString();
-      refreshMeasurementsMetadata(ensureMeasurementStore(context.map));
+      previous ??= {name: item.name, updatedAt: item.updatedAt};
+      item.name = normalizedName;
+      item.updatedAt = updatedAt ??= new Date().toISOString();
     },
     revert(context) {
-      const item = readMeasurement(context.map, measurementId);
-      item.name = previousName || "未命名测量";
-      item.updatedAt = new Date().toISOString();
-      refreshMeasurementsMetadata(ensureMeasurementStore(context.map));
+      Object.assign(readMeasurement(context.map, measurementId), previous);
+    },
+    getReplicaFields(map) {
+      const i = measurementIndex(map, measurementId);
+      return ["name", "updatedAt"].map(key => `measurements.items.${i}.${key}`);
     },
     isNoop(context) {
       const item = findMeasurement(context.map, measurementId);
@@ -86,6 +73,7 @@ export function createRenameMeasurementCommand(measurementId, name, {label = "�
 
 export function createUpdateMeasurementPointsCommand(measurementId, points, {routeFit = null, drawMode = null, closed = null, smooth = null, sampling = null, label = "更新测量对象"} = {}) {
   let previous = null;
+  let updatedAt;
 
   return {
     label,
@@ -95,8 +83,8 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
       affected: objectAffected("measurement", measurementId)
     },
     apply(context) {
-      previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
       const item = readMeasurement(context.map, measurementId);
+      previous ??= structuredClone(item);
       const nextRouteFit = routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit);
       Object.assign(item, normalizeMeasurementItem({
         ...item,
@@ -106,12 +94,14 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
         sampling: sampling === null ? item.sampling : sampling,
         routeFit: nextRouteFit,
         points,
-        updatedAt: new Date().toISOString()
+        updatedAt: updatedAt ??= new Date().toISOString()
       }, context.map));
-      refreshMeasurementsMetadata(ensureMeasurementStore(context.map));
     },
     revert(context) {
-      restoreMeasurementStore(context.map, previous);
+      Object.assign(readMeasurement(context.map, measurementId), structuredClone(previous));
+    },
+    getReplicaRows(map) {
+      return {"measurements.items": [measurementIndex(map, measurementId)]};
     },
     isNoop(context) {
       const item = findMeasurement(context.map, measurementId);
@@ -142,74 +132,91 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
 }
 
 export function createDeleteMeasurementCommand(measurementId, {label = "删除测量对象"} = {}) {
-  let previous = null;
-
+  let index, removed, splice;
   return {
     label,
     domain: "measurement",
-    effects: {
-      ...MEASUREMENT_EFFECTS,
-      affected: objectAffected("measurement", measurementId)
+    effects: {...MEASUREMENT_EFFECTS, affected: objectAffected("measurement", measurementId)},
+    apply({map}) {
+      const store = editableMeasurementStore(map);
+      index = measurementIndex(map, measurementId);
+      [removed] = store.items.splice(index, 1);
+      store.metadata.measurements = store.items.length;
+      splice = {path: "measurements.items", start: index, removed: 1, added: 0};
     },
-    apply(context) {
-      previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
-      const store = ensureMeasurementStore(context.map);
-      store.items = store.items.filter(item => item?.id !== measurementId);
-      refreshMeasurementsMetadata(store);
+    revert({map}) {
+      const store = editableMeasurementStore(map);
+      store.items.splice(index, 0, removed);
+      store.metadata.measurements = store.items.length;
+      splice = {path: "measurements.items", start: index, removed: 0, added: 1};
     },
-    revert(context) {
-      restoreMeasurementStore(context.map, previous);
-    },
-    isNoop(context) {
-      return !findMeasurement(context.map, measurementId);
-    }
+    getReplicaSplices: () => [splice],
+    getReplicaFields: () => ["measurements.metadata.measurements"],
+    isNoop: ({map}) => !findMeasurement(map, measurementId)
   };
 }
 
 export function createImportMeasurementsCommand(measurements, {label = "导入测量对象"} = {}) {
-  let previous = null;
-  let imported = [];
-
+  const append = appendMeasurements((map, firstId) => {
+    const items = [];
+    for (const source of measurements || []) {
+      const now = new Date().toISOString();
+      const item = normalizeMeasurementItem({
+        ...source, id: `measurement-${firstId + items.length}`,
+        createdAt: source.createdAt || now, updatedAt: source.updatedAt || source.createdAt || now
+      }, map);
+      if (item.points.length) items.push(item);
+    }
+    return items;
+  });
   return {
+    ...append,
     label,
     domain: "measurement",
-    effects: {
-      ...MEASUREMENT_EFFECTS,
-      affected: systemAffected("measurements-import", newObjectAffected("measurement"))
-    },
+    effects: {...MEASUREMENT_EFFECTS, affected: systemAffected("measurements-import", newObjectAffected("measurement"))},
     apply(context) {
-      previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
-      const store = ensureMeasurementStore(context.map);
-      imported = [];
-      for (const source of measurements || []) {
-        const idNumber = nextAvailableImportedMeasurementId(store);
-        const item = normalizeMeasurementItem({
-          ...source,
-          id: `measurement-${idNumber}`,
-          createdAt: source.createdAt || new Date().toISOString(),
-          updatedAt: source.updatedAt || source.createdAt || new Date().toISOString()
-        }, context.map);
-        if (!item.points.length) continue;
-        store.items.push(JSON.parse(JSON.stringify(item)));
-        imported.push(item);
-        refreshMeasurementsMetadata(store);
-      }
-      refreshMeasurementsMetadata(store);
-      this.effects.affected = systemAffected("measurements-import", imported.flatMap(item => objectAffected("measurement", item.id)));
-    },
-    revert(context) {
-      restoreMeasurementStore(context.map, previous);
+      const items = append.apply(context);
+      this.effects.affected = systemAffected("measurements-import", items.flatMap(item => objectAffected("measurement", item.id)));
     },
     isNoop(context) {
       return !context.map || !Array.isArray(measurements) || !measurements.some(item => Array.isArray(item?.points) && item.points.length);
     },
-    getResult() {
-      return imported.map(item => JSON.parse(JSON.stringify(item)));
-    },
-    getImported() {
-      return this.getResult();
-    }
+    getResult: append.getItems,
+    getImported: append.getItems
   };
+}
+
+function appendMeasurements(createItems) {
+  let start, firstId, items, splice;
+  return {
+    apply({map}) {
+      const store = editableMeasurementStore(map);
+      start = store.items.length;
+      firstId = store.metadata.nextId;
+      items ??= createItems(map, firstId);
+      for (const item of items) store.items.push(structuredClone(item));
+      store.metadata.measurements = store.items.length;
+      store.metadata.nextId = firstId + items.length;
+      splice = {path: "measurements.items", start, removed: 0, added: items.length};
+      return items;
+    },
+    revert({map}) {
+      const store = editableMeasurementStore(map);
+      store.items.splice(start, items.length);
+      store.metadata.measurements = store.items.length;
+      store.metadata.nextId = firstId;
+      splice = {path: "measurements.items", start, removed: items.length, added: 0};
+    },
+    getReplicaSplices: () => [splice],
+    getReplicaFields: () => ["measurements.metadata.measurements", "measurements.metadata.nextId"],
+    getItems: () => structuredClone(items || [])
+  };
+}
+
+function measurementIndex(map, id) {
+  const index = editableMeasurementStore(map).items.findIndex(item => item?.id === id);
+  if (index < 0) throw new Error(`找不到测量对象 ${id}`);
+  return index;
 }
 
 function readMeasurement(map, measurementId) {
@@ -230,9 +237,4 @@ function sameMeasurementPoints(a = [], b = []) {
 function sameMeasurementCellStops(a = [], b = []) {
   if ((a || []).length !== (b || []).length) return false;
   return (a || []).every((stop, index) => JSON.stringify(stop || null) === JSON.stringify(b[index] || null));
-}
-
-function nextAvailableImportedMeasurementId(store) {
-  refreshMeasurementsMetadata(store);
-  return Math.max(1, Number(store.metadata?.nextId) || 1);
 }

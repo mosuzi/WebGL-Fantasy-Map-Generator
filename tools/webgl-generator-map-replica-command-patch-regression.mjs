@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import {captureCommandMapReplicaWrites, captureCommandMapReplicaWritesAsync, createCommandMapReplicaPatch, listCommandMapReplicaPaths} from "../app/webgl-generator/src/runtime/map-replica-command-patch.js";
 import {applyMapReplicaPatch} from "../app/webgl-generator/src/runtime/map-replica-journal.js";
 import {computeAppliedMapReplicaPatchTargetChecksum, computeCanonicalMapReplicaChecksum} from "../app/webgl-generator/src/runtime/map-replica-checksum.js";
+import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createUpdateMeasurementPointsCommand} from "../app/webgl-generator/src/runtime/measurement-edit-commands.js";
+import {editableMeasurementStore} from "../app/webgl-generator/src/runtime/measurement-objects.js";
 import {createRenameObjectCommand} from "../app/webgl-generator/src/runtime/object-edit-commands.js";
 import {createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
@@ -39,6 +41,7 @@ for (const [baseRevision, action] of ["apply", "revert", "apply"].entries()) {
   landChecksum = await computeAppliedMapReplicaPatchTargetChecksum(background, patch);
   assert.equal(landChecksum, patch.targetChecksum);
 }
+const measured = {};
 const brushMap = generatePlaceholderMap({cellsTarget: 3000, seed: "all-brush-journal", heightmapTemplate: "continents"});
 for (const kind of ["province", "biome", "state", "new-capital", "retire"]) {
   const map = structuredClone(brushMap);
@@ -100,6 +103,26 @@ for (const kind of ["province", "biome", "state", "new-capital", "retire"]) {
       if (action === "revert") assert.deepEqual(map[section], before[section], `${kind} 没有还原 ${section}`);
       if (revision === 2) assert.deepEqual(map[section], after[section], `${kind} 重做没有复现 ${section}`);
     }
+  }
+}
+const annotations = editableMeasurementStore(measured);
+const importLines = points => createImportMeasurementsCommand([{points}]);
+importLines([[1, 1], [2, 2]]).apply({map: measured});
+const receivedMeasurements = structuredClone(measured);
+const firstLine = annotations.items[0], firstReplicaLine = receivedMeasurements.measurements.items[0];
+let rev = 0;
+for (const edit of [importLines([[3, 3], [4, 4]]), createRenameMeasurementCommand("measurement-2", "山道"),
+  createUpdateMeasurementPointsCommand("measurement-2", [[3, 3], [4, 5]]), createDeleteMeasurementCommand("measurement-2")]) {
+  for (const action of ["apply", "revert", "apply"]) {
+    edit[action]({map: measured});
+    const patch = await createCommandMapReplicaPatch({map: measured, command: edit, mapIdentity: "lines",
+      baseRevision: rev, targetRevision: ++rev, baseChecksum: "lines"});
+    assert.ok(patch.writes.every(write => write.path !== "measurements"));
+    applyMapReplicaPatch(receivedMeasurements, patch);
+    assert.equal(await computeAppliedMapReplicaPatchTargetChecksum(receivedMeasurements, patch), patch.targetChecksum);
+    assert.deepEqual(measured, receivedMeasurements);
+    assert.equal(annotations.items[0], firstLine);
+    assert.equal(receivedMeasurements.measurements.items[0], firstReplicaLine);
   }
 }
 target.pack.states = target.politics.states;

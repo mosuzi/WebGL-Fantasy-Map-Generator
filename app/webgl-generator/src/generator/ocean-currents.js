@@ -54,11 +54,11 @@ export function normalizeOceanCurrentModel(source) {
   };
 }
 
-export function buildOceanCurrents(map, {seed, preservedCurrents = []} = {}) {
+export function buildOceanCurrents(map, {seed, preservedCurrents = [], basinFeatureIds} = {}) {
   assertInputs(map);
   const resolvedSeed = String(seed ?? `${map.metadata?.seed || map.options?.seed || "map"}|ocean-currents`);
   const random = createRandom(resolvedSeed);
-  const oceanBasins = collectOceanBasins(map);
+  const oceanBasins = basinFeatureIds ? collectOceanBasins(map).filter(basin => basinFeatureIds.has(basin.featureId)) : collectOceanBasins(map);
   const oceanMask = createOceanMask(map, oceanBasins);
   const coastDistance = buildCoastDistance(map.grid.cells.c, oceanMask);
   const spatialIndex = createGridSpatialIndex(map.grid);

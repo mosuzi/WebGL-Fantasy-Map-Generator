@@ -40,7 +40,7 @@ const uiActionSignatures = {
   namebaseExport: "onExport: rows => exportNamebases(state, documentRef, rows, runtimeActions.namebases.export)",
   heightBase: "runtimeActions.edit.height.rebuildBaseDerived({confirm: true})",
   heightDownstream: "runtimeActions.edit.height.rebuildDownstreamDerived({confirm: true})",
-  heightAll: "runtimeActions.edit.height.rebuildAllDerived({confirm: true})",
+  heightAll: 'runtimeActions.edit.height.rebuildAllDerived({confirm: true, mode: "edited-height"})',
   selection: "locate: target => state.renderer.locateObject(target, locateOptions)"
 };
 for (const [name, signature] of Object.entries(uiActionSignatures)) assert(appSource.includes(signature), `${name} UI 没有接入公共 action`);

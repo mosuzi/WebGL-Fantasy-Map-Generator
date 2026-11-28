@@ -1,3 +1,4 @@
+import {packCellsForGrid} from "./grid-pack-index.js";
 import {refreshPackFeatures} from "../generator/pack.js";
 import {inspectRelocatedSettlementPort} from "../generator/settlements.js";
 import {systemAffected} from "./edit-command-effects.js";
@@ -1131,13 +1132,6 @@ function coversWholeOpenWaterComponent(gridCells, topology) {
   });
 }
 
-function packCellsForGrid(map, selectedGrid) {
-  const result = [];
-  for (let cell = 0; cell < (map?.pack?.cells?.g?.length || 0); cell++) {
-    if (selectedGrid.has(Number(map.pack.cells.g[cell]))) result.push(cell);
-  }
-  return result;
-}
 
 function isConnectedSubset(neighbors, cells) {
   if (!cells.length) return false;

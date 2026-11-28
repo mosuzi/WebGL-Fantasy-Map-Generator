@@ -92,7 +92,7 @@ export function createRenameObjectCommand(object, nextName) {
       affected: objectAffected(target.kind, target.id)
     },
     getReplicaPaths(map) {
-      if (target.kind !== OBJECT_KIND.CITY) return null;
+      if (target.kind !== OBJECT_KIND.CITY) return [];
       const cityIndex = map?.settlements?.cities?.findIndex(city => city && (city.id ?? city.i) === target.id) ?? -1;
       const city = cityIndex >= 0 ? map.settlements.cities[cityIndex] : null;
       const burgIndex = map?.pack?.burgs?.findIndex(
@@ -102,6 +102,9 @@ export function createRenameObjectCommand(object, nextName) {
         ...(cityIndex >= 0 ? [`settlements.cities.${cityIndex}`] : []),
         ...(burgIndex >= 0 ? [`pack.burgs.${burgIndex}`] : [])
       ];
+    },
+    getReplicaFields(map) {
+      return nameFieldsForReplica(map, target);
     },
     apply(context) {
       if (!normalizedName) throw new Error("名称不能为空");
@@ -118,6 +121,40 @@ export function createRenameObjectCommand(object, nextName) {
       return !current || current.name === normalizedName;
     }
   };
+}
+
+function nameFieldsForReplica(map, {kind, id}) {
+  const slots = {
+    state: ["politics.states", "pack.states", ["name", "fullName"]],
+    province: ["politics.provinces", "pack.provinces", ["name", "fullName"]],
+    culture: ["society.cultures", "pack.cultures", ["name", "root"]],
+    religion: ["society.religions", "pack.religions", ["name"]]
+  }[kind];
+  if (slots) {
+    const [primary, mirror, fields] = slots;
+    return [primary, mirror].flatMap(path => {
+      const [section, table] = path.split(".");
+      return map[section]?.[table]?.[id] ? fields.map(key => `${path}.${id}.${key}`) : [];
+    });
+  }
+  if (kind === OBJECT_KIND.CITY) return [];
+  const tables = {
+    river: ["rivers.rivers", "pack.rivers"],
+    lake: ["pack.features", "features.features", "grid.features"],
+    marker: ["markers.markers", "pack.markers"],
+    note: ["notes.notes"]
+  }[kind];
+  const fields = kind === OBJECT_KIND.NOTE ? ["name", "updatedAt"] : ["name"];
+  return (tables || []).flatMap(path => {
+    const [section, table] = path.split(".");
+    const index = map[section]?.[table]?.findIndex(row => {
+      if (!row) return false;
+      if (kind === OBJECT_KIND.NOTE) return row.kind === kind && String(row.objectId) === String(id);
+      if (kind === OBJECT_KIND.LAKE) return row.type === "lake" && Number(row.i ?? row.id) === Number(id);
+      return Number(row.id ?? row.i) === Number(id);
+    });
+    return index >= 0 ? fields.map(key => `${path}.${index}.${key}`) : [];
+  });
 }
 
 export function createRenameNamedObjectsFromNamebaseCommand(kind, ids, {label = "", drawSeed = ""} = {}) {

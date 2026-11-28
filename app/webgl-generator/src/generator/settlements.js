@@ -3043,7 +3043,7 @@ function traceLandPath(grid, features, start, end) {
   return [];
 }
 
-function buildPopulationPoints(grid, features, population) {
+export function buildPopulationPoints(grid, features, population) {
   return grid.points
     .map((point, cell) => ({cell, point, population: population[cell]}))
     .filter(item => item.population > 42 && isLandFeature(features, grid, item.cell) && grid.cells.burg?.[item.cell] === -1)

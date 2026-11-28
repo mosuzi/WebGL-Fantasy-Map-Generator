@@ -32,6 +32,12 @@ try {
 
   await page.goto("http://" + host + ":" + port + "?healthClear=1", {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 60000);
+  const save = process.env.FMG_HEIGHT_APPLY_SAVE;
+  if (save) {
+    await page.locator("#import-map-file").setInputFiles(save);
+    await page.waitForFunction(() => window.__webglGeneratorApp.map.grid.cells.h.length === 100000);
+    await waitForApiReady(page, 90000);
+  }
   await page.evaluate(() => document.getElementById("open-height-panel")?.click());
   const panel = page.locator('.floating-panel[data-panel-id="height-panel"]');
   await panel.waitFor({state: "visible"});
@@ -104,12 +110,108 @@ try {
   assert.equal(layout.buttons.length, 0, "普通地图更新入口仍嵌在条件横幅内");
   assert.ok(layout.scrollWidth <= layout.clientWidth + 1, "待更新提示产生横向溢出");
   assert.doesNotMatch(layout.text, /待派生|\d+\s*项：|宗教、|标记、|地区等/, "待更新提示仍暴露派生调试信息");
-  await page.evaluate(() => window.__webglGeneratorApp.panels.height.update({derivedStaleSystems: []}));
+  await page.screenshot({path: screenshotPath, fullPage: true});
+  assert.ok(existsSync(screenshotPath) && statSync(screenshotPath).size > 0, "高度待更新提示截图没有生成");
+  const coast = await page.evaluate(() => {
+    const {map, renderer} = window.__webglGeneratorApp;
+    const cells = map.grid.cells;
+    renderer.setColorMode("states");
+    const rect = renderer.canvas.getBoundingClientRect();
+    const id = cells.h.findIndex((h, i) => {
+      if (h < 20 || !cells.state[i] || cells.burg[i] >= 0 || !cells.c[i].some(n => cells.h[n] < 20)) return false;
+      const p = renderer.worldToScreen(...map.grid.points[i], rect);
+      return p.x > 30 && p.x < rect.width - 30 && p.y > 30 && p.y < rect.height - 30;
+    });
+    if (id < 0) throw Error("验收地图缺少已分配的海岸陆格");
+    const country = cells.state[id], state = map.politics.states[country];
+    window.heightImpactPixel = () => {
+      const canvas = renderer.canvas, gl = renderer.gl, box = canvas.getBoundingClientRect();
+      const p = renderer.worldToScreen(...map.grid.points[id], box), rgba = new Uint8Array(4);
+      renderer.draw();
+      gl.readPixels(Math.floor(p.x * canvas.width / box.width), canvas.height - 1 - Math.floor(p.y * canvas.height / box.height),
+        1, 1, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+      return [...rgba];
+    };
+    const landPixel = window.heightImpactPixel();
+    const result = window.webglGeneratorApi.edit.height.applyChanges([{gridCell: id, before: cells.h[id], after: 10}]);
+    if (!result.ok) throw Error(result.error?.message);
+    return {id, country, capital: state.capital, name: state.fullName, color: state.color, landPixel};
+  });
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp, coordinator = app.workerTaskCoordinator;
+    window.heightComputations = [];
+    const refresh = app.renderer.refreshCellAttributeCells.bind(app.renderer);
+    window.firstHeightPreview = null;
+    app.renderer.refreshCellAttributeCells = (ids, source) => {
+      const result = refresh(ids, source);
+      if (source && source !== app.map && window.firstHeightPreview === null) {
+        window.firstHeightPreview = {ms: Math.round(performance.now() - window.heightApplyStart),
+          pending: Boolean(app.map.metadata.derivedStale?.heightEdits), mode: app.renderer.colorMode};
+      }
+      return result;
+    };
+    app.workerTaskCoordinator = {...coordinator, run(task, payload, options) {
+      if (task === "height-derived.compute") window.heightComputations.push(payload.mode);
+      return coordinator.run(task, payload, options);
+    }};
+    window.heightApplyTasks = [];
+    window.heightApplyObserver = new PerformanceObserver(list => window.heightApplyTasks.push(...list.getEntries().map(e => Math.round(e.duration))));
+    window.heightApplyObserver.observe({entryTypes: ["longtask"]});
+    window.heightApplyStart = performance.now();
+  });
+  const enable = panel.getByRole("button", {name: "启用高度编辑", exact: true});
+  if (await enable.isVisible()) await enable.click();
+  await persistentUpdate.click();
+  if (process.env.FMG_HEIGHT_SWITCH_VIEW === "1") {
+    await page.waitForFunction(() => window.webglGeneratorApi.info.runtimeStats().data?.operation?.busy);
+    const biomes = page.locator('.ui-segmented-mode-bridge[data-mode="biomes"]');
+    assert.equal(await biomes.isDisabled(), false, "应用期间玩家视图选择仍被锁定");
+    await biomes.evaluate(button => button.click());
+  }
+  await page.waitForFunction(() => !window.__webglGeneratorApp.map.metadata.derivedStale?.heightEdits, null, {timeout: 90000});
+  await waitForApiReady(page, 90000);
+  const timing = await page.evaluate(() => {
+    window.heightApplyObserver.disconnect();
+    return {ms: Math.round(performance.now() - window.heightApplyStart), longTasks: window.heightApplyTasks,
+      computations: window.heightComputations, preview: window.firstHeightPreview};
+  });
+  assert.equal(timing.computations.filter(mode => mode === "edited-height").length, 1, "视图变化重复执行了高度结算");
+  assert.ok(timing.preview?.pending && timing.preview.ms < timing.ms, "当前视图必须在整笔高度应用提交前收到变更格数据");
+  assert.ok(timing.longTasks.every(ms => ms <= 200), `高度应用阻塞主线程：${timing.longTasks.join(" / ")}ms`);
+  if (process.env.FMG_HEIGHT_SWITCH_VIEW === "1") {
+    assert.equal(await page.evaluate(() => window.__webglGeneratorApp.renderer.colorMode), "biomes", "应用高度时切换的视图被覆盖");
+    assert.equal(timing.preview.mode, "biomes");
+  }
+  const applied = await page.evaluate(({id, country}) => {
+    const {map, renderer} = window.__webglGeneratorApp;
+    renderer.setColorMode("states");
+    const state = map.politics.states[country], cells = map.grid.cells;
+    return {height: cells.h[id], owner: cells.state[id], province: cells.province[id],
+      land: map.features.features[cells.f[id]].land, capital: state.capital, name: state.fullName, color: state.color};
+  }, coast);
+  assert.deepEqual(applied, {height: 10, owner: 0, province: 0, land: false, capital: coast.capital, name: coast.name, color: coast.color});
+  const pixels = await page.evaluate(() => {
+    const {renderer} = window.__webglGeneratorApp;
+    const states = window.heightImpactPixel();
+    renderer.setColorMode("provinces");
+    const provinces = window.heightImpactPixel();
+    renderer.setColorMode("states");
+    return {states, provinces};
+  });
+  assert.notDeepEqual(pixels.states, coast.landPixel, "沉没格中心仍显示原来的国色");
+  assert.deepEqual(pixels.states, pixels.provinces, "国家和省份视图对同一片水域着色不一致");
   await banner.waitFor({state: "hidden"});
   await persistentUpdate.waitFor({state: "visible"});
   assert.equal(await persistentUpdate.isDisabled(), true, "完成更新后永久入口消失或没有恢复禁用");
-  await page.evaluate(systems => window.__webglGeneratorApp.panels.height.update({derivedStaleSystems: systems}), heightChange.derivedStaleSystems);
-  await banner.waitFor({state: "visible"});
+  const history = await page.evaluate(async ({id, country}) => {
+    const api = window.webglGeneratorApi;
+    const map = window.__webglGeneratorApp.map;
+    const undo = await api.history.undo();
+    if (!undo.ok || map.grid.cells.state[id] !== country) throw Error(undo.error?.message || "撤销后的国家归属有误");
+    const redo = await api.history.redo();
+    if (!redo.ok || map.grid.cells.state[id] !== 0) throw Error(redo.error?.message || "重做后的水格有国色");
+    return {undo: undo.ok, redo: redo.ok};
+  }, coast);
   const diagnostics = partitionApiBrowserDiagnostics(
     await page.evaluate(() => window.__webglGeneratorHealth?.getEvents?.() ? {events: window.__webglGeneratorHealth.getEvents()} : {}),
     consoleErrors
@@ -117,19 +219,90 @@ try {
   assert.deepEqual(diagnostics.consoleErrors, []);
   assert.deepEqual(pageErrors, []);
 
-  await page.screenshot({path: screenshotPath, fullPage: true});
-  assert.ok(existsSync(screenshotPath) && statSync(screenshotPath).size > 0, "高度待更新提示截图没有生成");
   console.log(JSON.stringify({
     ok: true,
     url: "http://" + host + ":" + port + "?healthClear=1",
     viewport: "520x900",
     heightChange,
+    coast, applied, history, pixels, timing,
     layout,
     screenshotPath,
     consoleErrors: diagnostics.consoleErrors,
     performanceConsoleErrors: diagnostics.performanceConsoleErrors,
     pageErrors
   }, null, 2));
+  const saved = await page.evaluate(() => window.webglGeneratorApi.data.saveBrowserMap());
+  assert.ok(saved.ok, saved.error?.message);
+  await page.reload({waitUntil: "domcontentloaded"});
+  await waitForApiReady(page, 90000);
+  const reopened = await page.evaluate(({id, country}) => {
+    const {map} = window.__webglGeneratorApp;
+    return [map.grid.cells.h[id], map.grid.cells.state[id], map.politics.states[country]?.capital, map.metadata.derivedStale?.heightEdits ?? null];
+  }, coast);
+  assert.deepEqual(reopened, [10, 0, coast.capital, null]);
+  console.log(JSON.stringify({reopened}));
+  if (!save) for (const scenario of ["capital", "last-land"]) {
+    const report = await page.evaluate(async scenario => {
+      const api = window.webglGeneratorApi, map = window.__webglGeneratorApp.map;
+      const g = map.grid.cells, p = map.pack.cells;
+      const country = map.politics.states.filter(s => s?.capital && !s.removed && s.cells >= 2)
+        .sort((a, b) => a.cells - b.cells).find(s => p.i.some(i => p.state[i] === s.i && !p.burg[i] && p.h[i] >= 20 && g.h[p.g[i]] >= 20));
+      if (!country) throw Error("验收地图缺少可以迁都的国家");
+      const id = country.i, capital = country.capital, originalCity = map.pack.burgs[capital];
+      const cells = scenario === "capital" ? [p.g[originalCity.cell]] : [...new Set([
+        ...g.i.filter(i => g.state[i] === id), ...p.i.filter(i => p.state[i] === id).map(i => p.g[i])
+      ])];
+      const others = map.politics.states.filter(s => s && s.i !== id && !s.removed).map(s => [s.i, s.name, s.color, s.capital]);
+      const brush = api.edit.height.applyChanges(cells.map(i => ({gridCell: i, before: g.h[i], after: 10})));
+      if (!brush.ok) throw Error(brush.error.message);
+      if (scenario === "capital") {
+        const {renderer} = window.__webglGeneratorApp, offset = cells[0] * 4;
+        const snapshot = () => {
+          const gpu = renderer.cellAttributeStore.snapshot;
+          return JSON.stringify([g.state[cells[0]], map.politics.states[id].capital, map.metadata.derivedStale,
+            ...["terrain", "identities", "numeric"].map(key => [...gpu[key].slice(offset, offset + 4)])]);
+        };
+        const before = snapshot();
+        window.__webglGeneratorWorkerRefreshFault = {kind: "height-derived", stage: "after-render", mode: "once"};
+        const failed = await api.edit.height.rebuildAllDerived({confirm: true, mode: "edited-height"});
+        delete window.__webglGeneratorWorkerRefreshFault;
+        if (failed.ok || snapshot() !== before) throw Error("高度应用失败时地图或预览颜色没有恢复");
+      }
+      const updated = await api.edit.height.rebuildAllDerived({confirm: true, mode: "edited-height"});
+      if (!updated.ok) throw Error(updated.error.message);
+      const state = map.politics.states[id], destination = map.pack.burgs[state.capital];
+      const valid = scenario === "capital" ? !state.removed && state.capital === capital && destination.name === originalCity.name
+        && p.h[destination.cell] >= 20 && p.state[destination.cell] === id : state.removed && !state.capital;
+      const othersPreserved = others.every(([i, name, color, burg]) => {
+        const row = map.politics.states[i];
+        return row.name === name && row.color === color && row.capital === burg && !row.removed;
+      });
+      return {scenario, cells: cells.length, valid, othersPreserved};
+    }, scenario);
+    assert.ok(report.valid && report.othersPreserved, JSON.stringify(report));
+    console.log(JSON.stringify(report));
+  }
+  if (!save) {
+    const explicit = await page.evaluate(async () => {
+      const app = window.__webglGeneratorApp;
+      const coordinator = app.workerTaskCoordinator;
+      const requests = [];
+      app.workerTaskCoordinator = {...coordinator, run(task, payload, options) {
+        if (task === "height-derived.compute") requests.push({scope: payload.scope, mode: payload.mode ?? "full"});
+        return coordinator.run(task, payload, options);
+      }};
+      try {
+        const result = await window.webglGeneratorApi.edit.height.rebuildAllDerived({confirm: true});
+        return {ok: result.ok, error: result.error, requests};
+      } finally {
+        app.workerTaskCoordinator = coordinator;
+      }
+    });
+    assert.ok(explicit.ok, JSON.stringify(explicit.error));
+    assert.deepEqual(explicit.requests, [{scope: "all", mode: "full"}]);
+    console.log(JSON.stringify({explicitRegeneration: explicit.requests}));
+  }
+  assert.deepEqual(pageErrors, []);
   await context.close();
 } finally {
   if (browser) await Promise.race([browser.close(), delay(5000)]);

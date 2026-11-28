@@ -602,10 +602,10 @@ function rebuildAllRiverCellState(map) {
   }
 }
 
-function traceDownhillRiver(map, sourcePackCell) {
+export function traceDownhillRiver(map, sourcePackCell, {excludeRiver = 0, upstream = []} = {}) {
   const cells = map.pack.cells;
   const path = [sourcePackCell];
-  const visited = new Set(path);
+  const visited = new Set([...upstream, ...path]);
   let current = sourcePackCell;
   let parent = 0;
   let termination = "";
@@ -622,7 +622,7 @@ function traceDownhillRiver(map, sourcePackCell) {
       termination = "water";
       break;
     }
-    if (Number(cells.r?.[next]) > 0) {
+    if (Number(cells.r?.[next]) > 0 && Number(cells.r[next]) !== excludeRiver) {
       parent = Number(cells.r[next]);
       termination = "confluence";
       break;
@@ -670,7 +670,7 @@ function buildCreatedRiver(map, preview) {
   };
 }
 
-function approximateCreatedHydrology(map, path) {
+export function approximateCreatedHydrology(map, path) {
   let area = 0;
   let precipitationArea = 0;
   for (const packCell of path) {
@@ -790,7 +790,7 @@ function cleanupLakeRiverReferences(map, removed) {
   }
 }
 
-function refreshRiverMetadata(map) {
+export function refreshRiverMetadata(map) {
   const rivers = readRivers(map);
   const cells = map.pack?.cells || {};
   map.rivers.metadata = {

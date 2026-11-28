@@ -28,7 +28,7 @@
     class="height-player-rebuild-action"
     variant="secondary"
     :disabled="!state.derivedStaleSystems?.length"
-    :title="state.derivedStaleSystems?.length ? '按当前高度重新生成关联地图内容' : '当前地图内容已与高度同步'"
+    :title="state.derivedStaleSystems?.length ? '更新改动区域及受影响的图层' : '当前地图内容已与高度同步'"
     @click="regenerateFromBanner"
   >
     完成编辑并更新地图
@@ -1411,6 +1411,7 @@ function setFalloff(falloff) {
 
 function regenerateFromBanner() {
   if (debugEnabled.value) return props.callbacks.onRegenerateDownstream?.();
+  if (props.state.active) setActive(false);
   return props.callbacks.onRegenerateAll?.();
 }
 

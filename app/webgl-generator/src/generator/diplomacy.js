@@ -424,7 +424,7 @@ function ensureDiplomacyArrays(states) {
   }
 }
 
-function refreshDiplomacySummaries(states, protectedStateIds = new Set()) {
+export function refreshDiplomacySummaries(states, protectedStateIds = new Set()) {
   const validIds = new Set((states || []).filter(state => state?.i && !state.removed).map(state => state.i));
   for (const state of states || []) {
     if (!state?.i || state.removed || protectedStateIds.has(Number(state.i))) continue;
@@ -446,7 +446,7 @@ function mergeDiplomacySnapshots(primary = [], supporting = []) {
   return [...byId.values()];
 }
 
-function summarizeDiplomacy(states, buildMs = 0) {
+export function summarizeDiplomacy(states, buildMs = 0) {
   const validStates = (states || []).filter(state => state?.i && !state.removed);
   const relationCounts = {};
   let pairs = 0;

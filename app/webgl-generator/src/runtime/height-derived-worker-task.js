@@ -1,4 +1,5 @@
-import {createDomainPatch} from "./domain-patch.js";
+import {createDomainPatch, createDomainPatchCommand} from "./domain-patch.js";
+import {editedHeightPatchPolicy, reconcileEditedHeight} from "./edited-height-impact.js";
 import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {
   HEIGHT_BASE_REBUILD_STEPS,
@@ -32,6 +33,48 @@ export async function runHeightDerivedWorkerTask(payload, context = {}) {
   const map = payload?.map;
   if (!map || typeof map !== "object") throw taskError("worker_height_derived_map_missing", "高度派生 Worker 缺少地图快照");
   if (payload?.mode === "render-only") return renderOnly(payload, map, context);
+  if (payload?.mode === "present-edited-height") {
+    const {patch, refresh, result} = payload.computed;
+    createDomainPatchCommand({patch, policy: editedHeightPatchPolicy(patch)}).apply({map});
+    const {preparedRender} = await renderOnly({...payload, render: {...payload.render, layers: refresh.renderLayers}}, map, context);
+    return {kind: "height-derived", scope: payload.scope, binding: context.binding || null, patch, refresh, result, preparedRender};
+  }
+  if (payload?.mode === "edited-height") {
+    checkpoint(context);
+    const previewCells = payload.localColors ? rows => context.report?.("height-view-cells", {rows}) : null;
+    const {patch, cells, crossings, shoreClassification, militaryMoved} = reconcileEditedHeight(map, {...context, previewCells});
+    const executed = Boolean(patch.operations.length);
+    const changedCells = section => [...new Set(patch.operations.filter(({path}) => path[0] === section && path[1] === "cells" && path.length === 4)
+      .map(({path}) => Number(path[3])).filter(Number.isInteger))];
+    const editedGrid = changedCells("grid");
+    const editedPack = changedCells("pack");
+    const settlementLocations = patch.writeSet.some(path => /^(settlements\.(cities|routes)|pack\.(burgs|routes))\b/.test(path));
+    let layers = payload.render?.layers;
+    if (payload.localColors && layers) {
+      const changes = patch.writeSet;
+      const wanted = new Set(["point"]);
+      if (shoreClassification) { wanted.add("shore"); wanted.add("line"); }
+      const movesCity = changes.some(path => path.startsWith("settlements.cities"));
+      const movesRoute = changes.some(path => path.startsWith("settlements.routes"));
+      const movesRiver = changes.some(path => path.startsWith("rivers.rivers"));
+      const activeReferences = changes.some(path => path.endsWith(".military") || path.startsWith("markers.markers"));
+      if (movesCity || militaryMoved || movesRoute || movesRiver || activeReferences) {
+        wanted.add("picking"); wanted.add("labels");
+      }
+      if (changes.some(path => path.endsWith(".removed") || path.endsWith(".gridCenter") || path.startsWith("zones.zones"))) wanted.add("labels");
+      if (changes.some(path => path.startsWith("oceanCurrents.currents") || path.startsWith("zones.zones"))) wanted.add("line");
+      if (movesRoute) wanted.add("route");
+      if (movesRiver) wanted.add("river");
+      layers = layers.filter(layer => wanted.has(layer));
+    }
+    const preparedRender = executed && payload.render ? await executeRenderPreparationTask({...payload.render, layers, map}, context) : null;
+    checkpoint(context);
+    return {kind: "height-derived", scope: payload.scope, binding: context.binding || null, patch, preparedRender,
+      refresh: {editedGrid, editedPack, settlementLocations, renderLayers: layers, derived: ["height-field", "cell-colors", "object-panels"]},
+      result: {action: "更新高度编辑影响", executed, cells, crossings,
+        status: executed ? `已更新 ${cells} 个高度格，其中 ${crossings} 格改变水陆归属。` : "没有待应用的高度编辑。",
+        staleSystems: [...(map.metadata?.derivedStale?.systems || [])]}};
+  }
   const scope = normalizeScope(payload?.scope);
   const kinds = scopeKinds(scope);
   const lockSession = createRegenerationPostMergeSession(map, {closure: ["world"]});

@@ -54,8 +54,8 @@ import {
 import {migrateLandlessStates} from "./landless-states.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
-export const MAP_DOCUMENT_VERSION = 6;
-export const MAP_SCHEMA_VERSION = 6;
+export const MAP_DOCUMENT_VERSION = 7;
+export const MAP_SCHEMA_VERSION = 7;
 export const PNG_OVERLAY_KEYS = Object.freeze(["labels", "cityIcons", "markers", "military", "measurements", "legend", "scaleBar"]);
 export const GEOJSON_RANGE_MODES = Object.freeze(["full", "viewport", "bbox"]);
 
@@ -117,7 +117,7 @@ export function createMapDocument(map, options = {}, presentation = {}) {
 
 function prepareMapForExport(map) {
   const version = Number(map.metadata?.schemaVersion || 0);
-  if (version === MAP_SCHEMA_VERSION) return map;
+  if (version >= 5 || map.metadata?.derivedStale?.heightEdits) return map;
   return repairSettlementLandPoints(version >= 4 ? map : migrateLandlessStates(map));
 }
 
@@ -1148,7 +1148,8 @@ const MAP_DOCUMENT_MIGRATORS = createMapDocumentMigrationRegistry({
   2: migrateMapDocumentV2ToV3,
   3: migrateMapDocumentV3ToV4,
   4: migrateMapDocumentV4ToV5,
-  5: migrateMapDocumentV5ToV6
+  5: migrateMapDocumentV5ToV6,
+  6: migrateMapDocumentV6ToV7
 });
 
 function migrateMapDocumentV1ToV2(document) {
@@ -1203,6 +1204,22 @@ function migrateMapDocumentV5ToV6(document, original) {
   const display = normalizeMapDisplayConfig({...map.display, brushRadii: savedDisplay?.brushRadii, brushStrengths: savedDisplay?.brushStrengths});
   return {...document, version: 6, metadata: {...document.metadata, mapSchemaVersion: 6},
     map: {...map, metadata: {...map.metadata, schemaVersion: 6}, display}};
+}
+
+function migrateMapDocumentV6ToV7(document) {
+  const map = document.map;
+  const metadata = {...map.metadata, schemaVersion: 7};
+  const pending = metadata.derivedStale;
+  if (pending?.systems?.includes("features") && !pending.heightEdits) {
+    const heightEdits = {}, cells = map.grid?.cells, features = map.features?.features;
+    for (let cell = 0; cell < (cells?.h?.length || 0); cell++) {
+      const old = features?.[cells.f?.[cell]];
+      if (typeof old?.land === "boolean" && old.land !== (cells.h[cell] >= 20)) heightEdits[cell] = old.land ? 20 : 19;
+    }
+    if (Object.keys(heightEdits).length) metadata.derivedStale = {...pending, heightEdits};
+  }
+  return {...document, version: 7, metadata: {...document.metadata, mapSchemaVersion: 7},
+    map: {...map, metadata}};
 }
 
 function validateCurrentMapDocument(document) {

@@ -36,7 +36,7 @@ export function createApplyHeightBrushCommand(changes, {label = "高度笔刷", 
     apply(context) {
       if (!previous) previous = snapshotHeightStale(context.map);
       applyHeights(context.map, normalized, "after", originalPackHeights);
-      if (normalized.length) markHeightDependentDerivedStale(context.map);
+      if (normalized.length) markHeightDependentDerivedStale(context.map, normalized);
     },
     revert(context) {
       applyHeights(context.map, normalized, "before", originalPackHeights);
@@ -128,12 +128,38 @@ function snapshotHeightStale(map) {
       .map(section => capture(map[section].metadata, "stale", section))];
 }
 
-function markHeightDependentDerivedStale(map) {
+function markHeightDependentDerivedStale(map, changes) {
   if (!map?.metadata) return;
+  const heightEdits = {...map.metadata.derivedStale?.heightEdits};
+  for (const {gridCell, before, after} of changes) {
+    const original = heightEdits[gridCell] ?? before;
+    if (original === after) delete heightEdits[gridCell];
+    else heightEdits[gridCell] = original;
+  }
+  const baseline = map.metadata.derivedStale?.heightBaseline ?? {
+    hadDerived: Object.hasOwn(map.metadata, "derivedStale"),
+    hadSystems: Object.hasOwn(map.metadata.derivedStale || {}, "systems"),
+    systems: [...(map.metadata.derivedStale?.systems || [])],
+    flags: Object.fromEntries(["military", "zones", "markers", "economy", "diplomacy"]
+      .filter(key => map[key]?.metadata && Object.hasOwn(map[key].metadata, "stale")).map(key => [key, map[key].metadata.stale]))
+  };
+  if (!Object.keys(heightEdits).length) {
+    const {heightEdits: oldEdits, heightBaseline, systems, ...remaining} = map.metadata.derivedStale || {};
+    const restored = [...new Set([...baseline.systems, ...(systems || []).filter(key => !HEIGHT_DEPENDENT_DERIVED_SYSTEMS.includes(key))])];
+    if (baseline.hadSystems || restored.length) remaining.systems = restored;
+    if (baseline.hadDerived || Object.keys(remaining).length) map.metadata.derivedStale = remaining;
+    else delete map.metadata.derivedStale;
+    for (const key of ["military", "zones", "markers", "economy", "diplomacy"]) {
+      if (!map[key]?.metadata) continue;
+      if (Object.hasOwn(baseline.flags, key)) map[key].metadata.stale = baseline.flags[key];
+      else delete map[key].metadata.stale;
+    }
+    return;
+  }
   const systems = new Set([...(map.metadata.derivedStale?.systems || []), ...HEIGHT_DEPENDENT_DERIVED_SYSTEMS]);
   map.metadata.derivedStale = {
     ...(map.metadata.derivedStale || {}),
-    systems: [...systems]
+    systems: [...systems], heightEdits, heightBaseline: baseline
   };
   if (map.military?.metadata) map.military.metadata.stale = true;
   if (map.zones?.metadata) map.zones.metadata.stale = true;

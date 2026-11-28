@@ -7,6 +7,14 @@ export const MEASUREMENT_DRAW_CURVE = "curve";
 export const MEASUREMENT_DRAW_ROUTE = "route";
 export const MEASUREMENT_DRAW_AREA = "area";
 
+const editableStores = new WeakMap();
+
+export function editableMeasurementStore(map) {
+  const cached = editableStores.get(map);
+  if (cached && cached.store === map.measurements && cached.items === map.measurements.items) return cached.store;
+  return ensureMeasurementStore(map);
+}
+
 export function ensureMeasurementStore(map) {
   if (!map.measurements || typeof map.measurements !== "object") {
     map.measurements = {
@@ -20,6 +28,7 @@ export function ensureMeasurementStore(map) {
   map.measurements.version = MEASUREMENTS_VERSION;
   map.measurements.items = map.measurements.items.map(item => normalizeMeasurementItem(item, map));
   refreshMeasurementsMetadata(map.measurements);
+  editableStores.set(map, {store: map.measurements, items: map.measurements.items});
   return map.measurements;
 }
 
@@ -34,7 +43,7 @@ export function refreshMeasurementsMetadata(store) {
 }
 
 export function createMeasurementFromPoints(map, points, {name = "", routeFit = "none", drawMode, closed, smooth, sampling} = {}) {
-  const store = ensureMeasurementStore(map);
+  const store = editableMeasurementStore(map);
   const idNumber = Math.max(1, Number(store.metadata.nextId) || 1);
   const now = new Date().toISOString();
   const measurementRouteFit = normalizeMeasurementRouteFit(routeFit);

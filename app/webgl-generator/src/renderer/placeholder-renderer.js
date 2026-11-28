@@ -5187,7 +5187,10 @@ export class PlaceholderMapRenderer {
     this.locateFlashFrame = requestAnimationFrame(() => this.animateLocateFlash());
   }
 
-  async prepareOverlayBundleFromDescriptors(map, descriptors, {signal = null, isCurrent = null, yieldToMain = defaultRendererYield, budgetMs = 6, onProgress = null, unitPreferences = null} = {}) {
+  async prepareOverlayBundleFromDescriptors(map, descriptors, {
+    signal = null, isCurrent = null, yieldToMain = defaultRendererYield, budgetMs = 6,
+    onProgress = null, unitPreferences = null, prewarmStateLabels = false
+  } = {}) {
     if (!this.overlay) return emptyPreparedOverlayBundle();
     const gate = createRendererChunkGate({signal, isCurrent, yieldToMain, budgetMs, onProgress});
     const frozenUnitPreferences = normalizeUnitPreferences(unitPreferences || this.unitPreferences);
@@ -5215,7 +5218,13 @@ export class PlaceholderMapRenderer {
       node.classList.toggle("position-locked", item.layout.locked);
       applyResolvedLabelStyle(node, item.resolvedStyle);
       fragment.append(node);
-      labels.push({...item, manualPath, node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null});
+      const label = {...item, manualPath, node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null};
+      if (prewarmStateLabels && label.targetKind === LABEL_TARGET_KIND.STATE && !manualPath && !label.layout.locked) {
+        // 先准备与障碍物无关的国土内排字，正式帧再计算当前碰撞和可见性。
+        const rect = {width: this.canvasSize.cssWidth, height: this.canvasSize.cssHeight};
+        layoutStateInHomeland(this, label, {x: 0, y: 0}, rect, [], [], 0, map);
+      }
+      labels.push(label);
       await gate.checkpoint("labels", index + 1, descriptors.length);
     }
 
@@ -7185,11 +7194,11 @@ function provinceLabelPlacement(map, province) {
   return isWorldPoint(point) ? {x: point[0], y: point[1], rotation: 0} : null;
 }
 
-function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding) {
+function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding, map = renderer.map) {
   const scale = renderer.camera.scale;
-  const sx = rect.width / renderer.map.metadata.graphWidth;
-  const sy = rect.height / renderer.map.metadata.graphHeight;
-  const outline = homelandOutline(renderer.map, item.componentCellSet);
+  const sx = rect.width / map.metadata.graphWidth;
+  const sy = rect.height / map.metadata.graphHeight;
+  const outline = homelandOutline(map, item.componentCellSet);
   const {sites, banks} = homelandLabelSites(outline, item.x, item.y, item.rotation);
   const fits = (box, margin, site) => homelandContainsBox(outline,
     site.x + (box.left - margin) / sx, site.y + (box.top - margin) / sy,

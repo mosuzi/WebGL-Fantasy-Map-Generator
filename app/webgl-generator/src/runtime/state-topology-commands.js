@@ -8,7 +8,6 @@ import {
   describeRiverPoliticalBoundaries,
   riverPoliticalTransition
 } from "../generator/river-political-barrier.js";
-import {refreshCityScaleVisuals} from "./city-visuals.js";
 
 const STATE_TOPOLOGY_EFFECTS = Object.freeze({
   render: "draw",
@@ -2103,7 +2102,6 @@ function refreshPoliticalTopology(map, plan) {
     });
   }
   refreshPoliticsMetadata(map);
-  refreshCityScaleVisuals(map);
   refreshSettlementMetadata(map);
 }
 
