@@ -32,15 +32,18 @@ import {
   buildIncrementalShoreVisualPaths,
   buildShoreSurfaceVertexLayers,
   updateShoreSurfaceVertexLayers,
+  prepareShoreSurfaceBufferPatch,
   buildShoreVisualPaths,
   emptyShoreVisualPaths,
   patchHardShoreLines,
   planHeightShoreEdit,
   prewarmShorePathIndexes,
+  commitShorePathIndexes,
   pushShoreLineLayers,
   recolorShoreSurfaceVertexLayers,
   summarizeShoreVisualPaths
 } from "./shore-layer.js";
+import {stageShoreBufferPatch} from "./shore-buffer-patch.js";
 import {drawLandMaskedTriangles, withSurfaceSideAlpha} from "./surface-side-depth.js";
 import {
   PROVINCE_VISUAL_STYLE,
@@ -1902,7 +1905,7 @@ export class PlaceholderMapRenderer {
     return surfaceBundle;
   }
 
-  installGpuResidentShoreSurface(surfaceBundle, key) {
+  installGpuResidentShoreSurface(surfaceBundle, key, staged = null) {
     this.landCorrectionVertices = surfaceBundle.landCorrections;
     this.waterCorrectionVertices = surfaceBundle.waterCorrections;
     this.landCoverVertices = surfaceBundle.landCovers;
@@ -1914,7 +1917,8 @@ export class PlaceholderMapRenderer {
     this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
     this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
     this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
-    uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
+    if (staged) staged.install(this);
+    else uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
     return surfaceBundle;
   }
 
@@ -2357,7 +2361,7 @@ export class PlaceholderMapRenderer {
     }
   }
 
-  prepareHeightBrushShore(changedCells) {
+  prepareHeightBrushShore(changedCells, isStrokeCurrent) {
     if (!this.surfaceCellRanges.size || !this.canPresentGpuResidentColorMode(this.colorMode)) return null;
     const map = this.map, before = this.shoreVisualPaths;
     const heights = map.grid.cells.h;
@@ -2368,6 +2372,13 @@ export class PlaceholderMapRenderer {
     const plan = planHeightShoreEdit(map, before, crossings);
     if (!plan) return null;
     const mode = this.colorMode, theme = this.viewOptions.visualTheme, surfaceKey = gpuResidentShoreSurfaceKey(mode, this.viewOptions);
+    const smooth = this.viewOptions.smoothCellBorders !== false;
+    const isCurrent = () => isStrokeCurrent() && this.map === map && this.shoreVisualPaths === before
+      && this.viewOptions.visualTheme === theme && gpuResidentShoreSurfaceKey(this.colorMode, this.viewOptions) === surfaceKey
+      && (this.viewOptions.smoothCellBorders !== false) === smooth;
+    if (!plan.sources.length) return Promise.resolve({
+      accept: () => { if (isCurrent()) plan.accept(plan.finish([]).after); }
+    });
     const colors = new Map();
     for (const source of plan.sources) for (const cells of [source.landCells, source.waterCells]) {
       for (const cell of cells) if (!colors.has(cell)) colors.set(cell, colorForCell(cell, map, mode, this.viewOptions));
@@ -2375,14 +2386,29 @@ export class PlaceholderMapRenderer {
     const id = this.nextHeightShoreId = (this.nextHeightShoreId || 0) + 1;
     const request = {type: "prepare-shore", id, sources: plan.sources, colors, heights: crossings.map(cell => [cell, heights[cell]]), viewOptions: {visualTheme: theme}};
     return new Promise(resolve => {
-      this.heightShoreRequests.set(id, result => resolve(() => {
-        if (!result || this.map !== map || this.shoreVisualPaths !== before || this.viewOptions.visualTheme !== theme || gpuResidentShoreSurfaceKey(this.colorMode, this.viewOptions) !== surfaceKey) return;
-        const {after, added} = plan.finish(result.shapes);
-        this.preparedHeightShore = {after, surface: result.surface};
-        added.forEach((path, index) => this.shoreLinePathObjectVertices.set(path, result.lines[index]));
-      }));
+      this.heightShoreRequests.set(id, resolve);
       if (this.politicalBrushWorkerReady) this.politicalBrushWorker.postMessage(request);
       else this.politicalBrushPendingPatches.push(request);
+    }).then(async result => {
+      if (!result || !isCurrent()) return null;
+      const {after, added} = plan.finish(result.shapes);
+      let patch = null;
+      if (smooth && shouldDrawShoreVisualBands(mode) && this.gpuResidentSmoothShoreSurfaceKey === surfaceKey) {
+        patch = await this.stageHeightShorePatch(before, after, added, result, isCurrent);
+      }
+      return {
+        accept: () => {
+          if (!isCurrent()) return;
+          plan.accept(after);
+          const validPatch = patch?.isCurrent() ? patch : null;
+          this.preparedHeightShore = {after, surface: result.surface, patch: validPatch};
+          added.forEach((path, index) => this.shoreLinePathObjectVertices.set(path, result.lines[index]));
+        },
+        discard: () => {
+          patch?.staged.discard();
+          if (this.preparedHeightShore?.after === after) this.preparedHeightShore = null;
+        }
+      };
     }).catch(error => {
       this.heightShoreRequests.delete(id);
       this.lastHeightShoreError = error.message;
@@ -2390,11 +2416,47 @@ export class PlaceholderMapRenderer {
     });
   }
 
+  async stageHeightShorePatch(before, after, added, geometry, isShoreCurrent) {
+    const current = readShoreSurfaceBundle(this);
+    const gl = this.gl;
+    const buffers = Object.fromEntries(Object.values(SHORE_SURFACE_BUFFER_KEYS).map(key => [key, this[key]]));
+    const lineVertices = this.shoreLineVertices;
+    const lineBuffer = this.shoreLineBuffer;
+    const visibility = {coastline: this.layerVisibility.coastline, lakeShore: this.layerVisibility.lakeShore};
+    const isCurrent = () => isShoreCurrent() && this.gl === gl && !gl.isContextLost()
+      && this.landCorrectionVertices === current.landCorrections
+      && this.shoreLineVertices === lineVertices && this.shoreLineBuffer === lineBuffer
+      && this.layerVisibility.coastline === visibility.coastline && this.layerVisibility.lakeShore === visibility.lakeShore
+      && Object.entries(buffers).every(([key, buffer]) => this[key] === buffer);
+    const gate = createRendererChunkGate({isCurrent, budgetMs: 4});
+    try {
+      const checkpoint = () => gate.checkpoint("shore-surface-patch", 0, 0);
+      const bundle = await prepareShoreSurfaceBufferPatch(before, after, current, added, geometry.surface, checkpoint);
+      if (!bundle) return null;
+      const entries = Object.entries(SHORE_SURFACE_BUFFER_KEYS).map(([channel, key]) => ({
+        key, source: buffers[key], sourceLength: current[channel].length,
+        vertices: bundle[channel], moves: bundle.bufferMoves[channel]
+      }));
+      const visiblePaths = paths => [
+        ...(visibility.coastline === false ? [] : paths.coastline),
+        ...(visibility.lakeShore === false ? [] : paths.lakeShore)
+      ];
+      const line = await prepareShoreLineBufferPatch(visiblePaths(before), visiblePaths(after), lineVertices,
+        this.shoreLinePathObjectVertices, new Map(added.map((path, index) => [path, geometry.lines[index]])), checkpoint);
+      if (line) entries.push({key: "shoreLineBuffer", source: lineBuffer, sourceLength: lineVertices.length, ...line});
+      const staged = await stageShoreBufferPatch(gl, entries, checkpoint);
+      return {bundle, staged, line, isCurrent};
+    } catch (error) {
+      if (isCurrent()) this.lastHeightShoreError = error.message;
+      return null;
+    }
+  }
+
   refreshResidentHeightTopology(crossings, normalizedCells, draw, binding) {
     const before = this.shoreVisualPaths;
     const started = performance.now();
     const after = buildIncrementalShoreVisualPaths(this.map, before, crossings);
-    const prepared = this.preparedHeightShore?.after === after ? this.preparedHeightShore.surface : null;
+    const prepared = this.preparedHeightShore?.after === after ? this.preparedHeightShore : null;
     this.preparedHeightShore = null;
     const shoreBuilt = performance.now();
     if (!after) return null;
@@ -2421,6 +2483,7 @@ export class PlaceholderMapRenderer {
         theme: this.viewOptions.visualTheme, coast: this.layerVisibility.coastline, lake: this.layerVisibility.lakeShore};
     }
     this.shoreVisualPaths = after;
+    commitShorePathIndexes(this.map, before, after);
     invalidateSeaRouteWater(this.map, crossings);
     this.gpuResidentHardShoreLineVertices = new Float32Array();
     this.gpuResidentSmoothShoreLineVertices = new Float32Array();
@@ -2428,11 +2491,9 @@ export class PlaceholderMapRenderer {
     const key = gpuResidentShoreSurfaceKey(this.colorMode, this.viewOptions);
     const edgesBuilt = performance.now();
     if (shouldDrawShoreVisualBands(this.colorMode) && this.gpuResidentSmoothShoreSurfaceKey === key) {
-      const bundle = updateShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode, this.viewOptions, before, after, {
-        landCorrections: this.landCorrectionVertices, waterCorrections: this.waterCorrectionVertices,
-        landCovers: this.landCoverVertices, waterCovers: this.waterCoverVertices, cellRanges: this.shoreSurfaceCellRanges, shorePathEnds: this.shorePathEnds
-      }, prepared);
-      this.installGpuResidentShoreSurface(bundle, key);
+      const bundle = prepared?.patch?.bundle || updateShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode,
+        this.viewOptions, before, after, readShoreSurfaceBundle(this), prepared?.surface);
+      this.installGpuResidentShoreSurface(bundle, key, prepared?.patch?.staged);
       if (this.viewOptions.smoothCellBorders === false) this.refreshGpuResidentShoreSurface();
     } else {
       this.gpuResidentSmoothShoreSurfaceKey = "";
@@ -2442,11 +2503,20 @@ export class PlaceholderMapRenderer {
     this.bindSeaRouteShore();
     if (this.layerVisibility.routes) this.scheduleRouteBufferRefresh();
     if (shouldDrawShoreVisualBands(this.colorMode)) refreshShoreSurfaceCellColors(this, normalizedCells);
-    this.refreshShoreLineLayer({draw: false});
+    if (prepared?.patch?.line) {
+      const {vertices} = prepared.patch.line;
+      this.shoreLineVertices = vertices;
+      this.shoreLineVertexCount = vertices.length / 6;
+      this.gpuResidentSmoothShoreLineVertices = vertices;
+      this.shoreLinePathVertices = new Map();
+      adoptRenderCacheResourceBinding(this, "line", currentRendererRenderCacheBinding(this, binding));
+    } else this.refreshShoreLineLayer({draw: false});
     if (binding) rebindEditedRendererResources(this, binding, null, this.surfaceResourceOwner);
     if (draw) this.draw();
     return {incremental: true, topology: "local", cells: normalizedCells.length, crossings: crossings.length, spans: crossings.length,
-      localShoreMs: roundMs(shoreBuilt - started), localMeshMs: roundMs(edgesBuilt - shoreBuilt), localSurfaceMs: roundMs(surfaceBuilt - edgesBuilt)};
+      localShoreMs: roundMs(shoreBuilt - started), localMeshMs: roundMs(edgesBuilt - shoreBuilt), localSurfaceMs: roundMs(surfaceBuilt - edgesBuilt),
+      shoreUploadedBytes: prepared?.patch?.staged.uploadedBytes ?? null, shoreRetainedBytes: prepared?.patch?.staged.retainedBytes ?? null,
+      shoreLinePatched: Boolean(prepared?.patch?.line)};
   }
 
   refreshHeightCells(gridCells, {draw = true, binding = null} = {}) {
@@ -7495,15 +7565,57 @@ function combineVertexBuffers(primary, extra) {
   return result;
 }
 
+const SHORE_SURFACE_BUFFER_KEYS = Object.freeze({
+  landCorrections: "landCorrectionBuffer",
+  waterCorrections: "waterCorrectionBuffer",
+  landCovers: "landCoverBuffer",
+  waterCovers: "waterCoverBuffer"
+});
+
+function readShoreSurfaceBundle(renderer) {
+  return {
+    landCorrections: renderer.landCorrectionVertices, waterCorrections: renderer.waterCorrectionVertices,
+    landCovers: renderer.landCoverVertices, waterCovers: renderer.waterCoverVertices,
+    cellRanges: renderer.shoreSurfaceCellRanges, shorePathEnds: renderer.shorePathEnds
+  };
+}
+
+async function prepareShoreLineBufferPatch(before, after, oldVertices, oldPathVertices, local, checkpoint) {
+  const sources = new Map();
+  let oldLength = 0;
+  for (const path of before) {
+    const vertices = oldPathVertices.get(path);
+    if (!vertices) return null;
+    sources.set(path, {vertices, source: oldLength, fromPrevious: true});
+    oldLength += vertices.length;
+  }
+  if (oldLength !== oldVertices.length) return null;
+  for (const [path, vertices] of local) sources.set(path, {vertices, source: 0, fromPrevious: false});
+  const ordered = after.map(path => sources.get(path));
+  if (ordered.some(part => !part)) return null;
+  const vertices = new Float32Array(ordered.reduce((size, part) => size + part.vertices.length, 0));
+  const moves = [];
+  let target = 0;
+  for (const part of ordered) {
+    const {vertices: sourceVertices, source, fromPrevious} = part;
+    const length = sourceVertices.length;
+    if (!length) continue;
+    for (let offset = 0; offset < length; offset += 65536) {
+      vertices.set(sourceVertices.subarray(offset, offset + 65536), target + offset);
+      await checkpoint();
+    }
+    const last = moves.at(-1);
+    if (fromPrevious && last?.fromPrevious && last.source + last.length === source) last.length += length;
+    else moves.push({source, target, fromPrevious, length});
+    target += length;
+  }
+  return {vertices, moves};
+}
+
 function uploadShoreSurfaceBuffers(gl, renderer, bundle) {
-  for (const [buffer, vertices] of [
-    [renderer.landCorrectionBuffer, bundle.landCorrections],
-    [renderer.waterCorrectionBuffer, bundle.waterCorrections],
-    [renderer.landCoverBuffer, bundle.landCovers],
-    [renderer.waterCoverBuffer, bundle.waterCovers]
-  ]) {
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+  for (const [channel, key] of Object.entries(SHORE_SURFACE_BUFFER_KEYS)) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, renderer[key]);
+    gl.bufferData(gl.ARRAY_BUFFER, bundle[channel], gl.STATIC_DRAW);
   }
 }
 

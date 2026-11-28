@@ -19818,7 +19818,8 @@ function applyPendingHeightBrush(state, documentRef, final, draw) {
         }
       }
     }
-    if (batch.size) preparing = state.renderer.prepareHeightBrushShore?.([...batch.keys()]);
+    if (batch.size) preparing = state.renderer.prepareHeightBrushShore?.([...batch.keys()],
+      () => state.map === map && state.heightEdit.activeStroke === stroke);
   } finally {
     for (const change of batch.values()) heights[change.gridCell] = change.previous;
   }
@@ -19834,12 +19835,16 @@ function applyPendingHeightBrush(state, documentRef, final, draw) {
       state.editRefreshScheduler.run({...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW, render: "none", changedGridCells});
       if (redraw) state.renderer.draw({updateOverlay: false, checkGlError: false});
     };
-    const publish = install => {
-      if (state.map !== map || state.heightEdit.activeStroke !== stroke) return false;
-      install?.();
-      paint(batch.values(), cells, draw);
-      if (!final) updatePickPanel(documentRef, state);
-      return true;
+    const publish = prepared => {
+      try {
+        if (state.map !== map || state.heightEdit.activeStroke !== stroke) return false;
+        prepared?.accept();
+        paint(batch.values(), cells, draw);
+        if (!final) updatePickPanel(documentRef, state);
+        return true;
+      } finally {
+        prepared?.discard?.();
+      }
     };
     if (!preparing) return publish();
     // 不跨海平面的格子先着色。其余格子的高度、岸线和填色在同一帧发布。

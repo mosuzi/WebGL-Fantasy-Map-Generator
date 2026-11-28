@@ -49,6 +49,7 @@ import polygonClipping from "polygon-clipping";
 import earcut from "earcut";
 import {resolvedGridVertexPoint} from "./grid-vertex-geometry.js";
 import {createRenderContext} from "./render-context.js";
+import {createShoreEdgeIndex} from "./shore-edge-index.js";
 import {withSurfaceSideAlpha} from "./surface-side-depth.js";
 import {filterShoreRenderSpikes as filterLabShoreRenderSpikes} from "../../../../prototype/boundary-topology-lab/src/shore-render-spike-filter.js";
 
@@ -289,7 +290,10 @@ export function updateShoreSurfaceVertexLayers(context, colorMode, options, befo
   if (current.shorePathEnds?.landCorrections?.length === oldPaths.size) {
     const added = [...newPaths].filter(path => !oldPaths.has(path));
     const local = prepared || buildShoreSurfaceVertexLayers(context, colorMode, options, {coastline: added, lakeShore: []});
-    return spliceShoreSurfacePaths([...oldPaths], current, added, local, [...newPaths]);
+    const splice = spliceShoreSurfacePaths([...oldPaths], current, added, local, [...newPaths]);
+    let step = splice.next();
+    while (!step.done) step = splice.next();
+    return step.value;
   }
   const dirty = new Set();
   for (const path of [...oldPaths, ...newPaths]) {
@@ -328,14 +332,28 @@ export function updateShoreSurfaceVertexLayers(context, colorMode, options, befo
   return result;
 }
 
-function spliceShoreSurfacePaths(oldPaths, previous, added, local, ordered) {
+export async function prepareShoreSurfaceBufferPatch(before, after, current, added, local, checkpoint) {
+  const oldPaths = [...new Set([...before.coastline, ...before.lakeShore])];
+  if (current.shorePathEnds?.landCorrections?.length !== oldPaths.length) return null;
+  const ordered = [...new Set([...after.coastline, ...after.lakeShore])];
+  const splice = spliceShoreSurfacePaths(oldPaths, current, added, local, ordered);
+  let step = splice.next();
+  while (!step.done) {
+    await checkpoint();
+    step = splice.next();
+  }
+  return step.value;
+}
+
+function* spliceShoreSurfacePaths(oldPaths, previous, added, local, ordered) {
   const origin = new Map();
   for (const [paths, bundle] of [[oldPaths, previous], [added, local]]) {
     paths.forEach((path, index) => origin.set(path, {bundle, index}));
   }
-  const result = {cellRanges: {}, shorePathEnds: {}};
+  const result = {cellRanges: {}, shorePathEnds: {}, bufferMoves: {}};
   for (const key of Object.keys(previous.cellRanges)) {
     const parts = [];
+    const bufferMoves = [];
     const ends = [];
     const moves = new Map([[previous, []], [local, []]]);
     let offset = 0;
@@ -344,17 +362,35 @@ function spliceShoreSurfacePaths(oldPaths, previous, added, local, ordered) {
       const sourceEnds = bundle.shorePathEnds[key];
       const start = sourceEnds[index - 1] || 0, end = sourceEnds[index];
       moves.get(bundle)[index] = offset - start;
-      parts.push(bundle[key].subarray(start, end));
+      if (end > start) {
+        parts.push(bundle[key].subarray(start, end));
+        const fromPrevious = bundle === previous;
+        const last = bufferMoves.at(-1);
+        if (last && last.fromPrevious === fromPrevious && last.source + last.length === start) {
+          last.length += end - start;
+        } else {
+          bufferMoves.push({fromPrevious, source: start, target: offset, length: end - start});
+        }
+      }
       offset += end - start;
       ends.push(offset);
     }
     const vertices = new Float32Array(offset);
     let cursor = 0;
-    for (const part of parts) { vertices.set(part, cursor); cursor += part.length; }
+    for (const part of parts) {
+      for (let start = 0; start < part.length; start += 65536) {
+        const chunk = part.subarray(start, start + 65536);
+        vertices.set(chunk, cursor);
+        cursor += chunk.length;
+        yield;
+      }
+    }
     const ranges = new Map();
+    let processed = 0;
     for (const [bundle, shifts] of moves) {
       const sourceEnds = bundle.shorePathEnds[key];
       for (const [cell, spans] of bundle.cellRanges[key]) for (const span of spans) {
+        if (++processed % 256 === 0) yield;
         let low = 0, high = sourceEnds.length;
         while (low < high) {
           const mid = (low + high) >>> 1;
@@ -370,6 +406,7 @@ function spliceShoreSurfacePaths(oldPaths, previous, added, local, ordered) {
     result[key] = vertices;
     result.cellRanges[key] = ranges;
     result.shorePathEnds[key] = ends;
+    result.bufferMoves[key] = bufferMoves;
   }
   return result;
 }
@@ -1954,6 +1991,30 @@ export function buildShoreVisualPaths(map, algorithmOptions = {}) {
 }
 
 const lastShoreEdit = new WeakMap();
+const shorePathDeltas = new WeakMap();
+
+function rememberShorePathDelta(before, after, changes) {
+  if (!shorePathDeltas.has(before)) shorePathDeltas.set(before, new WeakMap());
+  shorePathDeltas.get(before).set(after, changes);
+}
+
+export function readShorePathDelta(before, after) {
+  const forward = shorePathDeltas.get(before)?.get(after);
+  if (forward) return forward;
+  const reverse = shorePathDeltas.get(after)?.get(before);
+  if (!reverse) return null;
+  return Object.fromEntries(Object.entries(reverse).map(([kind, {added, removed}]) =>
+    [kind, {removed: added, added: removed}]));
+}
+
+export function commitShorePathIndexes(map, before, after) {
+  const changes = readShorePathDelta(before, after);
+  if (!changes) return;
+  for (const [kind, {removed, added}] of Object.entries(changes)) {
+    const index = shorePathIndexes.get(map)?.[kind];
+    if (index?.paths === before[kind]) index.apply(after[kind], removed, added);
+  }
+}
 
 // 先取得受影响的原始岸段。曲线、填色和描边全部准备完毕后才一起发布。
 export function planHeightShoreEdit(map, before, crossings) {
@@ -1965,20 +2026,27 @@ export function planHeightShoreEdit(map, before, crossings) {
       return draft;
     }
   });
-  if (!paths || !pending.size) return null;
+  if (!paths || paths === before) return null;
+  const changes = readShorePathDelta(before, paths);
   const added = [...paths.coastline, ...paths.lakeShore].filter(path => pending.has(path));
   const sources = added.map(path => ({
     ...pending.get(path), points: path.points, sideVectors: path.sideVectors, landCells: path.landCells, waterCells: path.waterCells
   }));
   return {sources, finish(results) {
+    if (!added.length) return {after: paths, added};
     const replacements = new Map(added.map((path, index) => [path, Object.freeze({...path, sourcePoints: path.points, ...results[index]})]));
     const replace = path => replacements.get(path) || path;
     const after = Object.freeze({
       coastline: Object.freeze(paths.coastline.map(replace)), lakeShore: Object.freeze(paths.lakeShore.map(replace)),
       topology: Object.freeze({...paths.topology, renderPointCount: [...paths.coastline, ...paths.lakeShore].reduce((n,p) => n + replace(p).renderPoints.length, 0)})
     });
-    lastShoreEdit.set(map, {key: [...crossings].sort((a, b) => a - b).join(","), before, after});
+    if (changes) rememberShorePathDelta(before, after, Object.fromEntries(
+      Object.entries(changes).map(([kind, change]) => [kind, {...change, added: change.added.map(replace)}])
+    ));
     return {after, added: added.map(replace)};
+  }, accept(after) {
+    const key = [...crossings].sort((a, b) => a - b).join(",");
+    lastShoreEdit.set(map, {key, before, after});
   }};
 }
 
@@ -2030,6 +2098,7 @@ export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGrid
   const coastline = rebuildIncrementalShoreType(map, "coastline", previousPaths.coastline, options, edges.coastline, changed);
   const coastAt = performance.now();
   const lakeShore = rebuildIncrementalShoreType(map, "lakeShore", previousPaths.lakeShore, lakeShoreBuildOptions(map, options), edges.lakeShore, changed);
+  if (coastline.paths === previousPaths.coastline && lakeShore.paths === previousPaths.lakeShore) return previousPaths;
   const paths = [...coastline.paths, ...lakeShore.paths];
   const topology = {
     ...(previousPaths.topology || {}),
@@ -2044,6 +2113,10 @@ export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGrid
     coastline: Object.freeze(coastline.paths),
     lakeShore: Object.freeze(lakeShore.paths),
     topology: Object.freeze(topology)
+  });
+  rememberShorePathDelta(previousPaths, after, {
+    coastline: {removed: coastline.removed, added: coastline.added},
+    lakeShore: {removed: lakeShore.removed, added: lakeShore.added}
   });
   if (!algorithmOptions.prepareEditedPath) lastShoreEdit.set(map, {key: editKey, before: previousPaths, after});
   return after;
@@ -2092,30 +2165,8 @@ export function prewarmShorePathIndexes(map, paths) {
 function shorePathIndex(map, kind, paths) {
   if (!shorePathIndexes.has(map)) shorePathIndexes.set(map, {});
   const groups = shorePathIndexes.get(map);
-  const index = groups[kind] ||= {paths: [], byCell: new Map(), byVertex: new Map()};
-  if (index.paths === paths) return index;
-  const update = (table, key, path, add) => {
-    let members = table.get(key);
-    if (add) {
-      if (!members) table.set(key, members = new Set());
-      members.add(path);
-    } else if (members) {
-      members.delete(path);
-      if (!members.size) table.delete(key);
-    }
-  };
-  const previous = new Set(index.paths), next = new Set(paths);
-  for (const [candidates, retained, add] of [[previous, next, false], [next, previous, true]]) {
-    for (const path of candidates) {
-      if (retained.has(path)) continue;
-      for (const edge of path.sourceEdges) {
-        update(index.byCell, edge.landCell, path, add);
-        update(index.byCell, edge.waterCell, path, add);
-      }
-      for (const point of path.points) update(index.byVertex, shorePointKey(point), path, add);
-    }
-  }
-  index.paths = paths;
+  const index = groups[kind] ||= createShoreEdgeIndex(shorePointKey);
+  index.prepare(paths);
   return index;
 }
 
@@ -2123,16 +2174,17 @@ function rebuildIncrementalShoreType(map, kind, previousPaths, options, changedE
   const dirtyEdge = edge => changed.has(edge.landCell) || changed.has(edge.waterCell);
   const index = shorePathIndex(map, kind, previousPaths);
   const affected = new Set();
-  for (const cell of changed) for (const path of index.byCell.get(cell) || []) affected.add(path);
+  for (const cell of changed) for (const path of index.pathsForCell(cell)) affected.add(path);
   for (const edge of changedEdges) for (const point of [edge.a, edge.b]) {
-    for (const path of index.byVertex.get(shorePointKey(point)) || []) affected.add(path);
+    for (const path of index.pathsForVertex(point)) affected.add(path);
   }
-  if (!affected.size && !changedEdges.length) return {paths: previousPaths};
+  if (!affected.size && !changedEdges.length) return {paths: previousPaths, removed: [], added: []};
   const edges = [...changedEdges];
-  const original = new Map();
-  const edgeKey = edge => `${edge.landCell}:${edge.waterCell}`;
+  const previousOwner = edge => {
+    const indexed = index.readEdge(edge);
+    return indexed?.rawEdge.landCell === edge.landCell ? indexed.path : undefined;
+  };
   for (const path of affected) for (const edge of path.sourceEdges) {
-    original.set(edgeKey(edge), path);
     if (!dirtyEdge(edge)) edges.push(edge);
   }
   // 与完整构建保持相同的遍历起点和方向，连通分量可在笔触处合并或断开。
@@ -2142,13 +2194,13 @@ function rebuildIncrementalShoreType(map, kind, previousPaths, options, changedE
   edges.sort((left, right) => firstCell(left) - firstCell(right) || neighborOrder(left) - neighborOrder(right));
   const paths = previousPaths.filter(path => !affected.has(path));
   const replaced = buildShorePathsFromEdges(edges).map(source => {
-    const owners = new Set(source.sourceEdges.map(edge => original.get(edgeKey(edge))).filter(Boolean));
+    const owners = new Set(source.sourceEdges.map(previousOwner).filter(Boolean));
     const [previous] = owners;
     if (owners.size === 1 && previous.sourceEdges.length === source.sourceEdges.length
-      && source.sourceEdges.every(edge => original.get(edgeKey(edge)) === previous)) return previous;
+      && source.sourceEdges.every(edge => previousOwner(edge) === previous)) return previous;
     // 已经按原始格边显示的岸段沿用原形，在变动处接合；分裂出的新环单独评估。
     const retainsRing = previous?.closed && previous.topologyFallbackReason && owners.size === 1
-      && source.sourceEdges.filter(edge => original.get(edgeKey(edge)) === previous).length > previous.sourceEdges.length / 2;
+      && source.sourceEdges.filter(edge => previousOwner(edge) === previous).length > previous.sourceEdges.length / 2;
     if (options.prepareEditedPath) return options.prepareEditedPath(source, kind, retainsRing ? previous.topologyFallbackReason : null);
     const preparedArcs = retainsRing ? new Map([[source, {
       sourcePoints: source.points, renderPoints: source.points, closed: pointsNear(source.points[0], source.points.at(-1)),
@@ -2158,7 +2210,8 @@ function rebuildIncrementalShoreType(map, kind, previousPaths, options, changedE
   });
   const first = previousPaths.findIndex(path => affected.has(path));
   paths.splice(first < 0 ? paths.length : first, 0, ...replaced);
-  return {paths};
+  const retained = new Set(replaced.filter(path => affected.has(path)));
+  return {paths, removed: [...affected].filter(path => !retained.has(path)), added: replaced.filter(path => !retained.has(path))};
 }
 
 function attachOriginalCoastlinePoints(paths, map, featureType) {
