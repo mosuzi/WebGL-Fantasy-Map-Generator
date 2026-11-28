@@ -106,7 +106,7 @@ import {prepareMapFileIoWorkerPayload} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
 import {generatedHandoffDigest, materializeMapAdoptionHandoff} from "./map-adoption-handoff.js";
 import {gunzipWebfmgV3Bytes, isWebfmgV3Bytes} from "./webfmg-v3-container.js";
-import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
+import {applyMainThreadMapProjectionAsync} from "./main-thread-map-projection.js";
 import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {
   validateWholeMapAdoptionDocument,
@@ -332,7 +332,7 @@ import {
 import {captureVisualThemeState, createSetUserVisualThemesCommand} from "./visual-theme-edit-commands.js";
 import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-theme-storage.js";
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
-import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
+import {subscribeGlobalConfigPreferences, syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.js";
 import {browserMapSaveLoadingMessage} from "../ui/map-storage-user-copy.js";
 import {createRegenerationUserError, regenerationErrorMessage, regenerationLoadingMessage, regenerationLoadingState, regenerationResultMessage} from "../ui/regeneration-user-copy.js";
@@ -593,12 +593,12 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     }
   });
   const editHistory = new EditHistory({
-    onMutation: mutation => {
+    onMutation: (mutation, context) => {
       if (mutation.command?.domain !== "suitability") invalidateSuitabilityStats(state?.map);
       saveState.mutation(mutation);
       const before = mapRevision.getCoreSnapshot();
       const after = mapRevision.advance();
-      mapPublication.record(mutation, before, mapRevision.getCoreSnapshot());
+      mapPublication.record(mutation, before, mapRevision.getCoreSnapshot(), context?.panelProjection);
       queueCommandMapReplicaPatch(state, mutation, before, after, {
         includeCompute: !state?.workerSessionMutationGuard
       });
@@ -621,8 +621,8 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     workerSessionMutationGuard: false,
     workerAtomicCommitGuard: false,
     pick: null,
-    selection: null,
-    editingObject: null,
+    get selection() { return this.selectionStore?.selection ?? null; },
+    get editingObject() { return this.selectionStore?.editingObject ?? null; },
     editHistory,
     mapRevision,
     saveState,
@@ -755,6 +755,22 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   };
   let selectionStore = null;
   let runtimeActions = null;
+  mapPublication.subscribe(["*"], event => {
+    if (event.replaced) return;
+    const changes = event.changes.filter(change => change.panelProjection);
+    if (changes.some(change => change.panelProjection.full)) {
+      refreshPanelsForEdit(state, {derived: ["object-panels"]});
+      return;
+    }
+    for (const change of changes) refreshPanelsForEdit(state, change);
+  });
+  mapPublication.subscribe(["route-mesh", "river-mesh", "city-relocation", "object-index", "regeneration"], event => {
+    if (!event.replaced && event.changes.some(({domain, effects}) =>
+      domain === "regeneration" || effects?.derived?.some(tag => tag === "route-mesh" || tag === "river-mesh" || tag === "city-relocation")
+      || effects?.derived?.includes("object-index") && effects?.affected?.some(({kind}) => kind === OBJECT_KIND.CITY))) {
+      state.renderer?.invalidateHeightShoreProtection();
+    }
+  });
   // 城市表格可能在启动空闲期间提前挂载，所有列表订阅前必须已有同一个锁定会话。
   state.regenerationLockUiSession = installRegenerationLockUiSession(documentRef, {
     getMap: () => state.map,
@@ -769,7 +785,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     if (state[group][id] === value) return;
     state[group] = {...state[group], [id]: value};
     if (state.map) state.map.display = {...state.map.display, [group]: state[group]};
-    state.saveStatusUi?.refresh();
+    saveState.invalidate();
   };
   const saveBrushRadius = (id, radius) => {
     saveBrushSetting("brushRadii", id, normalizeBrushRadius(id, radius));
@@ -2775,13 +2791,15 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       }
     }
   });
-  selectionStore = new SelectionStore(({selection, editingObject}, metadata = null) => {
+  selectionStore = new SelectionStore(undefined, object => resolveObject(state.map, object));
+  state.selectionStore = selectionStore;
+  let previousSelection = null;
+  selectionStore.subscribe(({selection, editingObject}, metadata = null) => {
     const selectionStartedAt = performance.now();
-    const previousObject = state.selection?.object;
+    const previousObject = previousSelection?.object;
+    previousSelection = selection;
     const nextObject = selection?.object;
     const citySelectionSwitch = previousObject?.kind === OBJECT_KIND.CITY && nextObject?.kind === OBJECT_KIND.CITY;
-    state.selection = selection;
-    state.editingObject = editingObject;
     const activeRiverId = state.riverEdit.waypointRiverId;
     const selectedRiverId = selection?.object?.kind === OBJECT_KIND.RIVER ? Number(selection.object.id) : null;
     if (state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) && selectedRiverId !== activeRiverId) {
@@ -2820,8 +2838,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
       });
       if (state.cityEdit.selectionPerformanceSamples.length > 32) state.cityEdit.selectionPerformanceSamples.shift();
     }
-  }, object => resolveObject(state.map, object));
-  state.selectionStore = selectionStore;
+  });
   state.editRefreshScheduler = createEditRefreshScheduler({
     state,
     documentRef,
@@ -2846,6 +2863,15 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     }
   });
   registerCanvasToolModes(state, documentRef, {stopObjectEditing});
+  state.canvasToolModes.subscribe((_active, transition) => {
+    const refresh = () => {
+      updateEditingInteractionLock(state, documentRef);
+      updateRuntimePanel(documentRef, state);
+      state.brushCursorPreview?.scheduleRefresh();
+    };
+    if (transition?.reason === "pointer-miss") documentRef.defaultView.requestAnimationFrame(refresh);
+    else refresh();
+  });
   state.brushCursorPreview = createBrushCursorPreview(canvas, state, documentRef);
   applyControlPreferencesToRenderer(documentRef, renderer);
   state.operationFeedback = createDelayedOperationFeedback(documentRef);
@@ -2853,24 +2879,26 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     setLoading: state.operationFeedback.setRuntimeOperation,
     waitForPaint: () => yieldToBrowser(documentRef),
     beginHealthOperation: (name, detail) => healthMonitor?.beginOperation?.(name, detail),
-    recordHealth: (type, detail, severity) => healthMonitor?.record?.(type, detail, severity),
-    onStateChange: snapshot => {
-      state.runtimeOperationSnapshot = snapshot;
-      documentRef.dispatchEvent(new CustomEvent("webgl-generator-runtime-operation", {
-        detail: {
-          busy: Boolean(snapshot.busy),
-          name: String(snapshot.current?.name || ""),
-          message: String(snapshot.current?.message || "")
-        }
-      }));
-      if (snapshot.busy) state.viewPrewarmScheduler?.cancel("foreground-operation");
-      else {
-        mapPublication.schedule();
-        scheduleGpuViewPrewarm(state, documentRef);
+    recordHealth: (type, detail, severity) => healthMonitor?.record?.(type, detail, severity)
+  });
+  state.runtimeOperationSnapshot = state.runtimeOperation.getSnapshot();
+  state.runtimeOperation.subscribe(snapshot => {
+    state.runtimeOperationSnapshot = snapshot;
+    documentRef.dispatchEvent(new CustomEvent("webgl-generator-runtime-operation", {
+      detail: {
+        busy: Boolean(snapshot.busy),
+        name: String(snapshot.current?.name || ""),
+        message: String(snapshot.current?.message || "")
       }
-      state.keyboardShortcuts?.refreshAvailability?.();
-      state.panels.oceanCurrent?.updateWorldRebuild?.(snapshot);
+    }));
+    if (snapshot.busy) state.viewPrewarmScheduler?.cancel("foreground-operation");
+    else {
+      mapPublication.schedule();
+      scheduleGpuViewPrewarm(state, documentRef);
+      saveState.invalidate();
     }
+    state.keyboardShortcuts?.refreshAvailability?.();
+    state.panels.oceanCurrent?.updateWorldRebuild?.(snapshot);
   });
   state.mapWorkerCoordinator = createWorkerTaskCoordinator({
     createWorker: () => takePrewarmedComputeWorker(state),
@@ -2900,8 +2928,11 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   });
   state.runtimeActions = runtimeActions;
   state.saveStatusUi = installMapSaveStatus(documentRef, saveState);
+  mapPublication.subscribe(["*"], () => saveState.invalidate());
+  subscribeGlobalConfigPreferences(preferences => JSON.stringify(preferences.units), () => saveState.invalidate());
   state.pngPresets = installPngPresets(documentRef, () => state.map);
   state.contentSearch = installMapContentSearch(documentRef, {
+    mapPublication,
     getMap: () => state.map,
     getBinding: () => mapRevision.getSnapshot(),
     canLocate: object => state.renderer.canLocateObject(object),
@@ -2946,6 +2977,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         state.map.options = {...(state.map.options || {}), mapName};
         state.map.metadata = {...(state.map.metadata || {}), name: mapName};
       }
+      saveState.invalidate();
       state.panels.cloudStorage?.updateFilenamePreview?.();
       syncSaveFilenameTemplateUi(documentRef, state);
     },
@@ -4573,6 +4605,7 @@ function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = fals
   else if (gpuResident) applied = state.renderer?.setVisualThemeGpuResident?.(id, {force});
   else applied = state.renderer?.setVisualTheme?.(id, {force});
   const finalize = () => {
+    state.saveState?.invalidate();
     syncLabelStylesUi(state, documentRef);
     updateRuntimePanel(documentRef, state);
   };
@@ -5336,6 +5369,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
         signal: operation?.signal || null,
         isCurrent,
         resetViewport: true,
+        prewarmStateLabels: true,
         rebuildPickingFromMap: true,
         deferOverlayLayout: true,
         requireDisplayIntent: true,
@@ -6433,7 +6467,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
       const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
       const payload = await unwrapPreparedMapImportInput(documentRef, canonicalInput);
       const document = await parseMapDocumentPayloadAsync(documentRef, payload, {budgetMs: 4, yieldToMain: () => yieldMapHandoffDecode(documentRef)});
-      applyMainThreadMapProjection(document.map);
+      await applyMainThreadMapProjectionAsync(document.map, {yieldToMain: () => yieldMapHandoffDecode(documentRef), signal: operation?.signal});
       canonicalDecodeMs = roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - startedAt);
       return document;
     });
@@ -9418,7 +9452,9 @@ function executeEditCommand(state, documentRef, command, options = {}) {
       if (noopStatus) setFileOperationStatus(documentRef, messageFromOption(noopStatus, command));
       return {executed: false, command, result: null, error: null};
     }
-    const executedCommand = measureHeightBrushCommitStage(options.performanceTrace, "historyExecute", () => state.editHistory.execute(command, context));
+    const panelProjection = options.refreshPanels === false ? null : {full: false};
+    const executedCommand = measureHeightBrushCommitStage(options.performanceTrace, "historyExecute", () =>
+      state.editHistory.execute(command, {...context, panelProjection}));
     const result = readEditCommandResult(executedCommand);
     const refresh = options.refresh || (command.effects?.derived?.includes("city-relocation") ? refreshCityRelocationAfterEdit : refreshAfterEdit);
     let highlightsChanged = false;
@@ -9433,8 +9469,9 @@ function executeEditCommand(state, documentRef, command, options = {}) {
       highlightsChanged = measureHeightBrushCommitStage(options.performanceTrace, "reconcileHighlights", () => reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false})).changed;
       measureHeightBrushCommitStage(options.performanceTrace, "refreshScheduler", () => refresh(state, executedCommand));
     }
-    if (options.refreshPanels !== false) {
-      measureHeightBrushCommitStage(options.performanceTrace, "refreshPanels", () => refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : executedCommand));
+    if (panelProjection) {
+      panelProjection.full = highlightsChanged;
+      if (!state.mapPublication) refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : executedCommand);
     }
     if (options.status) measureHeightBrushCommitStage(options.performanceTrace, "status", () => setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand)));
     return {executed: true, command: executedCommand, result, error: null};
@@ -9529,9 +9566,11 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
       {message: `正在${verb}${pendingCommand.label || "重生成结果"}`}
     );
   }
+  const panelProjection = options.refreshPanels === false || pendingCommand?.domain === "grid-topology" ? null : {full: false};
+  const context = {map: state.map, panelProjection};
   const command = action === "redo"
-    ? state.editHistory.redo({map: state.map})
-    : state.editHistory.undo({map: state.map});
+    ? state.editHistory.redo(context)
+    : state.editHistory.undo(context);
   if (!command) {
     return {
       executed: false,
@@ -9556,10 +9595,11 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
   state.selectionStore.batch(() => {
     if (command.domain === "state-topology") synchronizeStateTopologyHistoryUi(state, command, action);
     if (command.domain === "feature-topology") synchronizeFeatureTopologyHistoryUi(state, command, action);
-    reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
+    const changed = reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}).changed;
+    if (panelProjection) panelProjection.full = changed;
     refresh(state, command);
   });
-  if (options.refreshPanels !== false) refreshPanelsForEdit(state, {derived: ["object-panels"]});
+  if (panelProjection && !state.mapPublication) refreshPanelsForEdit(state, command);
   if (command.effects?.derived?.includes("city-relocation")) scheduleCityPopulationPointRefresh(state, documentRef, state.map);
   options.afterRefresh?.(state, command);
   if (command.effects?.derived?.includes("labels")) syncLabelStylesUi(state, documentRef);
@@ -13599,18 +13639,24 @@ function refreshPanelsForEdit(state, commandOrEffects) {
     state.panels.city?.updateRelocationContext?.(state.map, state.selection, state.editHistory.getStats());
     return;
   }
-  if (!kinds.size && !derived.length) {
+  const domain = commandOrEffects?.domain;
+  if (!kinds.size && !derived.length && !SCOPED_MAP_PANEL_DOMAINS.has(domain)) {
     updateAllObjectPanels(state);
     return;
   }
-  if (derived.includes("object-panels")) {
+  if (derived.includes("object-panels") && !SCOPED_MAP_PANEL_DOMAINS.has(domain)) {
     updateAllObjectPanels(state);
     return;
   }
+  if (SCOPED_MAP_PANEL_DOMAINS.has(domain)) kinds.add(domain);
   for (const kind of kinds) {
     updatePanelForAffectedKind(state, kind);
   }
 }
+
+const SCOPED_MAP_PANEL_DOMAINS = new Set([
+  "namebase", "namebase-rule", "measurement", "marker", "note", "label", "label-style", "regeneration-locks"
+]);
 
 function updatePanelForAffectedKind(state, kind) {
   switch (kind) {
@@ -13634,6 +13680,9 @@ function updatePanelForAffectedKind(state, kind) {
       break;
     case OBJECT_KIND.CULTURE:
       updateCulturePanel(state);
+      updateStatePanel(state);
+      updateProvincePanel(state);
+      updateCityPanel(state);
       break;
     case OBJECT_KIND.RELIGION:
       updateReligionPanel(state);
@@ -13661,6 +13710,9 @@ function updatePanelForAffectedKind(state, kind) {
       break;
     case "note":
       updateNotesPanel(state);
+      break;
+    case "label-style":
+      updateLabelNamingPanel(state);
       break;
     case "measurement":
       updateMeasurementPanel(state);
@@ -14428,7 +14480,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
     }
     if (atomicCommitGuarded) {
       state.workerAtomicCommitGuard = false;
-      state.mapPublication.schedule();
+      state.mapPublication?.schedule();
     }
     if (!workerSessionFinalized) state.workerTaskCoordinator.invalidateSession("worker-result-not-committed");
     if (!workerOperationSucceeded && state.map === committedMap) {
@@ -17360,47 +17412,20 @@ function clearMarkerModeState(state) {
   updateMarkerPanel(state);
 }
 
-function enterCanvasToolMode(state, documentRef, modeId, context = {}) {
-  try {
-    return state.canvasToolModes.enter(modeId, context);
-  } finally {
-    updateEditingInteractionLock(state, documentRef);
-    updateRuntimePanel(documentRef, state);
-    state.brushCursorPreview?.scheduleRefresh();
-  }
+function enterCanvasToolMode(state, _documentRef, modeId, context = {}) {
+  return state.canvasToolModes.enter(modeId, context);
 }
 
-function cancelCanvasToolMode(state, documentRef, modeId, reason = "cancel") {
-  try {
-    return state.canvasToolModes.cancel(modeId, reason);
-  } finally {
-    updateEditingInteractionLock(state, documentRef);
-    updateRuntimePanel(documentRef, state);
-    state.brushCursorPreview?.scheduleRefresh();
-  }
+function cancelCanvasToolMode(state, _documentRef, modeId, reason = "cancel") {
+  return state.canvasToolModes.cancel(modeId, reason);
 }
 
-function cancelCanvasToolModeAfterPointerMiss(state, documentRef, modeId) {
-  try {
-    return state.canvasToolModes.cancel(modeId, "pointer-miss");
-  } finally {
-    const view = documentRef.defaultView || globalThis;
-    view.requestAnimationFrame(() => {
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
-      state.brushCursorPreview?.scheduleRefresh();
-    });
-  }
+function cancelCanvasToolModeAfterPointerMiss(state, _documentRef, modeId) {
+  return state.canvasToolModes.cancel(modeId, "pointer-miss");
 }
 
-function completeCanvasToolMode(state, documentRef, modeId, detail = {}) {
-  try {
-    return state.canvasToolModes.complete(modeId, detail);
-  } finally {
-    updateEditingInteractionLock(state, documentRef);
-    updateRuntimePanel(documentRef, state);
-    state.brushCursorPreview?.scheduleRefresh();
-  }
+function completeCanvasToolMode(state, _documentRef, modeId, detail = {}) {
+  return state.canvasToolModes.complete(modeId, detail);
 }
 
 function rollbackCanvasToolStroke(state, kind) {

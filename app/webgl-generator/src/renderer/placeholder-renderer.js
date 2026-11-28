@@ -39,6 +39,7 @@ import {
   planHeightShoreEdit,
   prewarmShorePathIndexes,
   commitShorePathIndexes,
+  invalidateShoreProtection,
   pushShoreLineLayers,
   recolorShoreSurfaceVertexLayers,
   summarizeShoreVisualPaths
@@ -2373,7 +2374,9 @@ export class PlaceholderMapRenderer {
     if (!plan) return null;
     const mode = this.colorMode, theme = this.viewOptions.visualTheme, surfaceKey = gpuResidentShoreSurfaceKey(mode, this.viewOptions);
     const smooth = this.viewOptions.smoothCellBorders !== false;
+    const protectedObjects = this.heightShoreObjects;
     const isCurrent = () => isStrokeCurrent() && this.map === map && this.shoreVisualPaths === before
+      && this.heightShoreObjects === protectedObjects
       && this.viewOptions.visualTheme === theme && gpuResidentShoreSurfaceKey(this.colorMode, this.viewOptions) === surfaceKey
       && (this.viewOptions.smoothCellBorders !== false) === smooth;
     if (!plan.sources.length) return Promise.resolve({
@@ -2414,6 +2417,11 @@ export class PlaceholderMapRenderer {
       this.lastHeightShoreError = error.message;
       return null;
     });
+  }
+
+  invalidateHeightShoreProtection() {
+    if (this.map) invalidateShoreProtection(this.map);
+    this.heightShoreObjects = null;
   }
 
   async stageHeightShorePatch(before, after, added, geometry, isShoreCurrent) {
@@ -5259,7 +5267,7 @@ export class PlaceholderMapRenderer {
 
   async prepareOverlayBundleFromDescriptors(map, descriptors, {
     signal = null, isCurrent = null, yieldToMain = defaultRendererYield, budgetMs = 6,
-    onProgress = null, unitPreferences = null, prewarmStateLabels = false
+    onProgress = null, unitPreferences = null, prewarmStateLabels = false, stateLabelScale = this.camera.scale
   } = {}) {
     if (!this.overlay) return emptyPreparedOverlayBundle();
     const gate = createRendererChunkGate({signal, isCurrent, yieldToMain, budgetMs, onProgress});
@@ -5292,7 +5300,7 @@ export class PlaceholderMapRenderer {
       if (prewarmStateLabels && label.targetKind === LABEL_TARGET_KIND.STATE && !manualPath && !label.layout.locked) {
         // 先准备与障碍物无关的国土内排字，正式帧再计算当前碰撞和可见性。
         const rect = {width: this.canvasSize.cssWidth, height: this.canvasSize.cssHeight};
-        layoutStateInHomeland(this, label, {x: 0, y: 0}, rect, [], [], 0, map);
+        layoutStateInHomeland(this, label, {x: 0, y: 0}, rect, [], [], 0, map, stateLabelScale);
       }
       labels.push(label);
       await gate.checkpoint("labels", index + 1, descriptors.length);
@@ -7264,8 +7272,7 @@ function provinceLabelPlacement(map, province) {
   return isWorldPoint(point) ? {x: point[0], y: point[1], rotation: 0} : null;
 }
 
-function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding, map = renderer.map) {
-  const scale = renderer.camera.scale;
+function layoutStateInHomeland(renderer, item, screen, rect, obstacles, peers, padding, map = renderer.map, scale = renderer.camera.scale) {
   const sx = rect.width / map.metadata.graphWidth;
   const sy = rect.height / map.metadata.graphHeight;
   const outline = homelandOutline(map, item.componentCellSet);

@@ -1,4 +1,4 @@
-import {createApp} from "vue";
+import {createApp, watch} from "vue";
 import {pinia} from "./pinia.js";
 import MapToolbar from "./components/MapToolbar.vue";
 import MeasurementReadout from "./components/MeasurementReadout.vue";
@@ -54,6 +54,12 @@ export function patchGlobalConfigPreferences(patch) {
 export function setGlobalConfigLayerVisible(layer, visible) {
   if (!app) return null;
   return useGlobalConfigStore(pinia).setLayerVisible(layer, visible);
+}
+
+export function subscribeGlobalConfigPreferences(select, listener) {
+  if (!app) return () => {};
+  const store = useGlobalConfigStore(pinia);
+  return watch(() => select(store.preferences), listener);
 }
 
 export function syncEditorStateSnapshot(snapshot) {

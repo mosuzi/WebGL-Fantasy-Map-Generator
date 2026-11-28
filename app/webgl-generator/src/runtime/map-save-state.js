@@ -1,3 +1,5 @@
+import {createStateSignal} from "./state-signal.js";
+
 // Content positions follow reversible commands, independently of monotonic map revisions.
 export class MapSaveState {
   constructor({getIdentity, getPresentation}) {
@@ -9,6 +11,8 @@ export class MapSaveState {
     this.position = 0;
     this.commands = new WeakMap();
     this.receipts = new Map();
+    this.changes = createStateSignal();
+    this.subscribe = this.changes.subscribe;
   }
 
   ensureIdentity() {
@@ -29,7 +33,11 @@ export class MapSaveState {
       positions = {before: this.position, after: ++this.sequence};
       this.commands.set(command, positions);
     }
-    this.position = action === "undo" ? positions.before : positions.after;
+    if (action === "rollback" && this.position !== positions.after) {
+      this.position = ++this.sequence;
+    } else {
+      this.position = action === "undo" || action === "rollback" ? positions.before : positions.after;
+    }
   }
 
   capture() {
@@ -56,7 +64,12 @@ export class MapSaveState {
     if ((this.receipts.get(destination)?.order || 0) > ticket.order) return false;
     this.receipts.delete(destination);
     this.receipts.set(destination, {...ticket, destination, detail, savedAt: new Date().toISOString()});
+    this.invalidate();
     return true;
+  }
+
+  invalidate() {
+    this.changes.emit();
   }
 
   getStatus() {
@@ -85,7 +98,21 @@ export function installMapSaveStatus(documentRef, tracker) {
     event.preventDefault();
     event.returnValue = "";
   };
-  const timer = view.setInterval(refresh, 750);
+  let scheduled = false;
+  let disposed = false;
+  const stop = tracker.subscribe(() => {
+    if (scheduled) return;
+    scheduled = true;
+    queueMicrotask(() => {
+      scheduled = false;
+      if (!disposed) refresh();
+    });
+  });
+  refresh();
   view.addEventListener("beforeunload", onBeforeUnload);
-  return {refresh, dispose() { view.clearInterval(timer); view.removeEventListener("beforeunload", onBeforeUnload); }};
+  return {dispose() {
+    disposed = true;
+    stop();
+    view.removeEventListener("beforeunload", onBeforeUnload);
+  }};
 }

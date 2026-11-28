@@ -1,3 +1,5 @@
+import {createStateSignal} from "./state-signal.js";
+
 export function createCanvasToolModeManager({declaredModeIds = []} = {}) {
   const declarations = normalizeModeIds(declaredModeIds);
   const declared = new Set(declarations);
@@ -7,6 +9,7 @@ export function createCanvasToolModeManager({declaredModeIds = []} = {}) {
   let queued = null;
   let sequence = 0;
   let lastTransition = null;
+  const changes = createStateSignal();
 
   function register(id, hooks = {}) {
     const modeId = normalizeModeId(id);
@@ -57,6 +60,8 @@ export function createCanvasToolModeManager({declaredModeIds = []} = {}) {
       return result(false, "queued", active);
     }
     transition = nextTransition;
+    const before = sequence;
+    const previous = active?.id;
     let current = nextTransition;
     let response = null;
     try {
@@ -69,6 +74,7 @@ export function createCanvasToolModeManager({declaredModeIds = []} = {}) {
     } finally {
       transition = null;
       queued = null;
+      if (sequence !== before || previous !== active?.id) changes.emit(getActive(), lastTransition);
     }
   }
 
@@ -218,6 +224,7 @@ export function createCanvasToolModeManager({declaredModeIds = []} = {}) {
     isActive: id => active?.id === id,
     getActive,
     getSnapshot,
+    subscribe: changes.subscribe,
     assertRegistrationComplete
   };
 }

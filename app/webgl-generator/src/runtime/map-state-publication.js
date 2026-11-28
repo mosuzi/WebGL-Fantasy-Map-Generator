@@ -54,8 +54,8 @@ export function createMapStatePublication({readCurrent, canPublish, onError}) {
         for (const set of sets) set.delete(listener);
       };
     },
-    record({action, command}, before, after) {
-      pending.push({action, domain: command.domain, effects: command.effects, before, after});
+    record({action, command}, before, after, panelProjection = null) {
+      pending.push({action, domain: command.domain, effects: command.effects, before, after, panelProjection});
       schedule();
     },
     restore(revision) {

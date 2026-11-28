@@ -1,6 +1,10 @@
+import {createStateSignal} from "./state-signal.js";
+
 export class SelectionStore {
   constructor(onChange = () => {}, resolveObject = object => object) {
-    this.onChange = onChange;
+    this.changes = createStateSignal();
+    this.subscribe = this.changes.subscribe;
+    this.subscribe(onChange);
     this.resolveObject = resolveObject;
     this.selection = null;
     this.editingObject = null;
@@ -49,7 +53,7 @@ export class SelectionStore {
         this.pendingEmit = false;
         const metadata = this.pendingMetadata;
         this.pendingMetadata = null;
-        this.onChange(this.getSnapshot(), metadata);
+        this.changes.emit(this.getSnapshot(), metadata);
       }
     }
   }
@@ -67,7 +71,7 @@ export class SelectionStore {
       if (metadata) this.pendingMetadata = {...this.pendingMetadata, ...metadata};
       return;
     }
-    this.onChange(this.getSnapshot(), metadata);
+    this.changes.emit(this.getSnapshot(), metadata);
   }
 
   refresh(metadata = null) {

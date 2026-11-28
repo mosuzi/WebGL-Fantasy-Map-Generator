@@ -2162,6 +2162,11 @@ export function prewarmShorePathIndexes(map, paths) {
   return shoreProtectedObjectsCache.get(map);
 }
 
+export function invalidateShoreProtection(map) {
+  shoreProtectedObjectsCache.delete(map);
+  lastShoreEdit.delete(map);
+}
+
 function shorePathIndex(map, kind, paths) {
   if (!shorePathIndexes.has(map)) shorePathIndexes.set(map, {});
   const groups = shorePathIndexes.get(map);

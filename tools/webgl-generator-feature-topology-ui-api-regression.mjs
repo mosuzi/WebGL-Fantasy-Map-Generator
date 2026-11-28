@@ -34,7 +34,7 @@ assert.match(appSource, /onTopologyInspect: options => state\.runtimeActions\.ed
 assert.match(appSource, /onTopologyApply: options => state\.runtimeActions\.edit\.features\.applyTopology\(options\)/, "Feature 面板提交未走公共 runtime action");
 assert.match(appSource, /FEATURE_TOPOLOGY_SELECT: "feature:topology-select"/, "缺少 Feature 拓扑画布模式");
 assert.match(appSource, /setHeightTransformPreview\?\.\(changes/, "Feature 拓扑预览未使用 renderer-only 高度预览");
-assert.match(appSource, /status: "已完成海岸修改，可通过撤销恢复。"/, "玩家侧提交反馈仍暴露内部拓扑术语");
+assert.match(appSource, /status: "已完成海岸修改。"/, "玩家侧提交反馈仍暴露内部拓扑术语");
 assert.match(appSource, /已将一处地图区域加入海岸编辑选区/, "画布选区反馈仍暴露 cell id");
 const topologyPreviewSource = appSource.slice(
   appSource.indexOf("function previewFeatureTopologyDraft"),

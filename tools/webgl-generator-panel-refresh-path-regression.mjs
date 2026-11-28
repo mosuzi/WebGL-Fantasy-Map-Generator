@@ -8,16 +8,18 @@ const source = readFileSync(appPath, "utf8");
 
 const executeEdit = functionBlock("executeEditCommand", "executeHistoryCommand");
 assertOrdered(executeEdit, [
-  "state.editHistory.execute(command, context)",
+  "state.editHistory.execute(command, {...context, panelProjection})",
   "readEditCommandResult(executedCommand)",
   "options.preparePanelRefresh?.(state, executedCommand, result)",
   "refresh(state, executedCommand)",
-  'refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : executedCommand)'
+  "panelProjection.full = highlightsChanged"
 ], "编辑命令面板刷新顺序");
 
 const executeHistory = functionBlock("executeHistoryCommand", "readEditCommandResult");
-assert.ok(executeHistory.includes('refreshPanelsForEdit(state, {derived: ["object-panels"]})'), "撤销 / 重做必须复用统一面板刷新入口并同步全局历史摘要");
+assert.ok(executeHistory.includes("const context = {map: state.map, panelProjection}"), "撤销 / 重做必须向统一提交入口交付面板投影");
 assert.ok(!executeHistory.includes("updateAllObjectPanels(state)"), "撤销 / 重做不得绕过统一面板刷新入口");
+assert.ok(source.includes("mapPublication.record(mutation, before, mapRevision.getCoreSnapshot(), context?.panelProjection)"), "编辑历史没有发布落定的面板投影");
+assert.ok(source.includes("for (const change of changes) refreshPanelsForEdit(state, change)"), "面板没有消费已发布的编辑影响范围");
 const asyncRegenerationHistory = functionBlock("executeRegenerationHistoryCommand", "settleMilitaryPanelHistoryResult");
 assert.ok(asyncRegenerationHistory.includes("createCommittedHistoryGuard"), "异步重生成历史必须冻结提交后的 map revision");
 assert.ok(count(asyncRegenerationHistory, "assertCurrent();") >= 5, "异步重生成历史的 scheduler、panel、回调与最终返回缺少 revision checkpoint");

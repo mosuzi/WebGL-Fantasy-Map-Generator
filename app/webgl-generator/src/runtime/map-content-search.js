@@ -2,6 +2,7 @@ import {collectObjectReferences, listObjectTypes} from "./object-query-api.js";
 import {resolveObject, resolveTradeFlow} from "./object-resolver.js";
 
 export const MAP_SEARCH_EVENT = "webfmg-map-search";
+export const MAP_SEARCH_CHANGED = "webfmg-map-search-changed";
 export const SEARCH_TYPES = listObjectTypes().map(({type, label}) => ({type, label: type === "note" ? "备注" : label}));
 const TEXT_FIELDS = ["name", "fullName", "text", "label", "targetName", "state", "province", "from", "to", "sellerName", "buyerName", "goodName", "centerBurg", "subjectName", "objectName", "description", "statusLabel", "relationLabel", "categoryLabel", "resourceLabel"];
 const pause = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -59,7 +60,7 @@ export function searchIndex(index, {query = "", type = "", page = 0, limit = 50}
   return {total: matches.length, page, pages: last + 1, items: matches.slice(page * limit, (page + 1) * limit)};
 }
 
-export function installMapContentSearch(documentRef, {getMap, getBinding, canLocate, locate}) {
+export function installMapContentSearch(documentRef, {getMap, getBinding, canLocate, locate, mapPublication}) {
   let cache = null;
   let building = null;
   const signature = () => JSON.stringify(getBinding());
@@ -89,5 +90,16 @@ export function installMapContentSearch(documentRef, {getMap, getBinding, canLoc
     } catch { respond({error: "暂时无法读取此内容，请刷新搜索结果后重试。"}); }
   };
   documentRef.addEventListener(MAP_SEARCH_EVENT, onRequest);
-  return {dispose: () => documentRef.removeEventListener(MAP_SEARCH_EVENT, onRequest)};
+  const stop = mapPublication?.subscribe(["*"], event => {
+    if (!event.replaced && event.changes.every(({domain}) => NON_SEARCH_DOMAINS.has(domain))) return;
+    cache = null;
+    building = null;
+    documentRef.dispatchEvent(new documentRef.defaultView.Event(MAP_SEARCH_CHANGED));
+  });
+  return {dispose() {
+    stop?.();
+    documentRef.removeEventListener(MAP_SEARCH_EVENT, onRequest);
+  }};
 }
+
+const NON_SEARCH_DOMAINS = new Set(["visual-theme", "namebase", "regeneration-locks", "label-style"]);

@@ -25,7 +25,7 @@ export class EditHistory {
     this.lastLabel = command.label;
     this.lastDomain = command.domain || "none";
     this.lastAffected = this.captureCommandAffected(command);
-    this.onMutation?.({action: "execute", command});
+    this.onMutation?.({action: "execute", command}, context);
     return command;
   }
 
@@ -37,7 +37,7 @@ export class EditHistory {
     this.lastLabel = `撤销 ${command.label}`;
     this.lastDomain = command.domain || "none";
     this.lastAffected = this.captureCommandAffected(command);
-    this.onMutation?.({action: "undo", command});
+    this.onMutation?.({action: "undo", command}, context);
     return command;
   }
 
@@ -64,7 +64,7 @@ export class EditHistory {
     this.lastLabel = `恢复 ${command.label}`;
     this.lastDomain = command.domain || "none";
     this.lastAffected = this.captureCommandAffected(command);
-    this.onMutation?.({action: "redo", command});
+    this.onMutation?.({action: "redo", command}, context);
     return true;
   }
 

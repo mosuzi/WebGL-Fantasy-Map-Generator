@@ -4,7 +4,7 @@ import {
   encodeWebfmgV3Document,
   inspectWebfmgV3Container
 } from "./webfmg-v3-container.js";
-import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
+import {applyMainThreadMapProjection, applyMainThreadMapProjectionAsync} from "./main-thread-map-projection.js";
 import {migrateMapDocument} from "./map-file-io.js";
 import {attachGeneratedCellColumns, attachGeneratedGeometry, detachGeneratedCellColumns, detachGeneratedGeometry, restoreGeneratedWorkerColumns} from "./generated-map-geometry-handoff.js";
 
@@ -107,7 +107,7 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
       await attachGeneratedGeometry(document.map, handoff.geometry, yieldToMain);
     }
     if (handoff.migrateOnMaterialize === true) document = migrateMapDocument(document);
-    applyMainThreadMapProjection(document.map);
+    await applyMainThreadMapProjectionAsync(document.map, {...options, yieldToMain});
     return document;
   } finally {
     handoff.chunks.fill(null);

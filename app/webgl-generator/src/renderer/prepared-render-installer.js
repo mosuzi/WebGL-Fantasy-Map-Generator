@@ -122,7 +122,8 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
       decoded.overlay = await renderer.prepareOverlayBundleFromDescriptors?.(map, decoded.labels, {
         ...gate.options("overlay"),
         unitPreferences: prepared.presentation?.unitPreferences,
-        prewarmStateLabels: options.prewarmStateLabels
+        prewarmStateLabels: options.prewarmStateLabels,
+        stateLabelScale: options.resetViewport ? 1 : undefined
       });
     }
     reportInstallProfile(options, "labels-overlay", profileStartedAt);

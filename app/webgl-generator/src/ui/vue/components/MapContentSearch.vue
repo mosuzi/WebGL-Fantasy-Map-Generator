@@ -26,11 +26,11 @@ import {ref, computed, watch, onBeforeUnmount, nextTick} from "vue";
 import UiButton from "./base/UiButton.vue";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 const debugEnabled = useDebugMode();
-import {MAP_SEARCH_EVENT, SEARCH_TYPES} from "../../../runtime/map-content-search.js";
+import {MAP_SEARCH_CHANGED, MAP_SEARCH_EVENT, SEARCH_TYPES} from "../../../runtime/map-content-search.js";
 const dialog = ref(null), input = ref(null), query = ref(""), type = ref(""), page = ref(0), selected = ref(0), busy = ref(false), error = ref(""), detail = ref(null);
 const result = ref({items: [], total: 0, page: 0, pages: 1});
 const hasSearchCriteria = computed(() => !!query.value.trim() || !!type.value);
-let composing = false, timer, refreshTimer, sequence = 0;
+let composing = false, timer, sequence = 0;
 const request = payload => new Promise(respond => document.dispatchEvent(new CustomEvent(MAP_SEARCH_EVENT, {detail: {...payload, respond}})));
 async function run() {
   if (!hasSearchCriteria.value) {
@@ -69,8 +69,17 @@ function navigate(event) {
   if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); selected.value = Math.max(0, Math.min(result.value.items.length - 1, selected.value + (event.key === "ArrowDown" ? 1 : -1))); dialog.value.querySelectorAll('.map-search-results button')[selected.value]?.scrollIntoView({block: "nearest"}); }
   if (event.key === "Enter") { event.preventDefault(); select(selected.value); }
 }
-function openSearch() { dialog.value.showModal(); run(); refreshTimer = setInterval(() => { if (!busy.value && !composing) run(); }, 1500); nextTick(() => input.value.focus()); }
-function stop() { ++sequence; clearTimeout(timer); clearInterval(refreshTimer); }
+function openSearch() {
+  dialog.value.showModal();
+  document.addEventListener(MAP_SEARCH_CHANGED, schedule);
+  run();
+  nextTick(() => input.value.focus());
+}
+function stop() {
+  ++sequence;
+  clearTimeout(timer);
+  document.removeEventListener(MAP_SEARCH_CHANGED, schedule);
+}
 onBeforeUnmount(stop);
 </script>
 

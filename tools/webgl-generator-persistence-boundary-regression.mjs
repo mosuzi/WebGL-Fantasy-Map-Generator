@@ -313,6 +313,7 @@ function createStorageFixture(options = {}) {
               transaction.error = error;
               request.onerror?.();
               transaction.onerror?.();
+              queueMicrotask(() => transaction.onabort?.());
               return;
             }
             request.result = action();

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdtemp, rm} from "node:fs/promises";
+import {mkdtemp, rm, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {createRequire} from "node:module";
@@ -13,6 +13,7 @@ const {chromium} = createRequire(new URL("../source/Fantasy-Map-Generator/packag
 const profile = await mkdtemp(join(tmpdir(), "fmg-load-"));
 const server = await preview({configFile: false, root, build: {outDir: "dist/webgl-generator"}, preview: {host: "127.0.0.1", port: 0}, logLevel: "error"});
 let context;
+const profiles = new WeakMap();
 try {
   const importedPage = await openPage("data.importMap");
   await waitForApiReady(importedPage, 60000);
@@ -35,9 +36,10 @@ try {
   }
   assert.deepEqual(restored.identity, imported.identity);
   assert.equal(restored.cell, imported.cell);
-  for (const entry of [imported, restored]) {
-    assert.ok(entry.ms < 7000, JSON.stringify(entry));
-    assert.ok(entry.maxLongTaskMs <= 200, JSON.stringify(entry));
+  for (const [operation, entry] of Object.entries({imported, restored})) {
+    const detail = JSON.stringify({operation, ...entry});
+    assert.ok(entry.ms < 7000, detail);
+    assert.ok(entry.maxLongTaskMs <= 200, detail);
   }
   console.log(JSON.stringify({imported, restored, local}, null, 2));
 } finally {
@@ -122,6 +124,8 @@ async function openPage(operation) {
   await context.addInitScript(name => {
     let start = name === "data.restoreBrowserMap" ? 0 : null;
     const tasks = [];
+    const stages = [];
+    window.addEventListener("webgl-generator-load-stage", event => stages.push({id: event.detail.id, phase: event.detail.phase, at: Math.round(performance.now())}));
     const observer = new PerformanceObserver(list => tasks.push(...list.getEntries()));
     observer.observe({type: "longtask"});
     document.addEventListener("change", event => {
@@ -139,8 +143,11 @@ async function openPage(operation) {
         const end = performance.now();
         tasks.push(...observer.takeRecords());
         observer.disconnect();
-        const durations = tasks.filter(task => task.startTime >= start && task.startTime < end).map(task => task.duration);
-        window.loadResult = {ms: Math.round(end - start), maxLongTaskMs: Math.max(0, ...durations), cell, identity: {
+        const longTasks = tasks.filter(task => task.startTime >= start && task.startTime < end).map(task => {
+          const phase = stages.findLast(stage => stage.at <= task.startTime);
+          return {at: Math.round(task.startTime - start), pageTime: task.startTime, duration: task.duration, phase: phase ? `${phase.phase}:${phase.id}` : null};
+        });
+        window.loadResult = {ms: Math.round(end - start), maxLongTaskMs: Math.max(0, ...longTasks.map(task => task.duration)), longTasks, cell, identity: {
           seed: map.metadata.seed, checksum: map.summary.checksum, grid: map.grid.cells.i.length,
           pack: map.pack.cells.i.length, cities: map.settlements.cities.length, routes: map.settlements.routes.length
         }};
@@ -151,13 +158,29 @@ async function openPage(operation) {
     requestAnimationFrame(frame);
   }, operation);
   const page = await context.newPage();
-  await page.goto(server.resolvedUrls.local[0], {waitUntil: "commit"});
+  if (process.env.FMG_LOAD_CPU_PROFILE) {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Performance.enable");
+    await cdp.send("Profiler.enable");
+    await cdp.send("Profiler.start");
+    profiles.set(page, {cdp, operation});
+  }
+  const url = new URL(server.resolvedUrls.local[0]);
+  if (process.argv.includes("--trace-load")) url.searchParams.set("loadTrace", "1");
+  await page.goto(url.href, {waitUntil: "commit"});
   return page;
 }
 
 async function result(page) {
   await page.waitForFunction(() => window.loadResult, null, {timeout: 60000});
   const value = await page.evaluate(() => window.loadResult);
+  const capture = profiles.get(page);
+  if (capture) {
+    const {cdp, operation} = capture;
+    const {profile} = await cdp.send("Profiler.stop");
+    const {metrics} = await cdp.send("Performance.getMetrics");
+    await writeFile(`${process.env.FMG_LOAD_CPU_PROFILE}-${operation}.json`, JSON.stringify({value, metrics, profile}));
+  }
   assert.ok(Number.isInteger(value.cell));
   return value;
 }

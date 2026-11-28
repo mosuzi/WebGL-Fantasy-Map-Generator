@@ -1,3 +1,5 @@
+import {createStateSignal} from "./state-signal.js";
+
 const DEFAULT_SUGGESTIONS = Object.freeze({
   operation_busy: "等待当前任务结束后重试。",
   operation_cancelled: "当前请求已取消，可在确认地图状态后重试。",
@@ -29,9 +31,12 @@ export function createRuntimeOperationManager(options = {}) {
   let sequence = 0;
   let current = null;
   let last = null;
+  const changes = createStateSignal();
+  if (options.onStateChange) changes.subscribe(options.onStateChange);
 
   const manager = {
     getSnapshot,
+    subscribe: changes.subscribe,
     run,
     runSync,
     cancelCurrent
@@ -208,7 +213,7 @@ export function createRuntimeOperationManager(options = {}) {
   }
 
   function publish() {
-    options.onStateChange?.(getSnapshot());
+    changes.emit(getSnapshot());
   }
 }
 
