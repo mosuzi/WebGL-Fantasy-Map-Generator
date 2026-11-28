@@ -14,6 +14,12 @@ const OBJECT_NAME_EFFECTS = Object.freeze({
   derived: Object.freeze(["object-name", "labels", "object-panels"])
 });
 
+const CULTURE_NAME_EFFECTS = Object.freeze({
+  ...OBJECT_NAME_EFFECTS,
+  render: "none",
+  derived: Object.freeze(["object-name", "culture-directory"])
+});
+
 const STATE_CAPITAL_EFFECTS = Object.freeze({
   render: "draw",
   selection: "refresh",
@@ -83,12 +89,12 @@ export function createRenameObjectCommand(object, nextName) {
     label: `重命名${formatObjectKind(target.kind)} #${target.id}`,
     domain: target.kind,
     effects: {
-      ...OBJECT_NAME_EFFECTS,
+      ...(target.kind === OBJECT_KIND.CULTURE ? CULTURE_NAME_EFFECTS : OBJECT_NAME_EFFECTS),
       derived: target.kind === OBJECT_KIND.CITY
         ? [...OBJECT_NAME_EFFECTS.derived, "city-role-labels"]
         : target.kind === OBJECT_KIND.STATE
           ? [...OBJECT_NAME_EFFECTS.derived, "state-name"]
-        : OBJECT_NAME_EFFECTS.derived,
+          : target.kind === OBJECT_KIND.CULTURE ? CULTURE_NAME_EFFECTS.derived : OBJECT_NAME_EFFECTS.derived,
       affected: objectAffected(target.kind, target.id)
     },
     getReplicaPaths(map) {
@@ -118,6 +124,7 @@ export function createRenameObjectCommand(object, nextName) {
     isNoop(context) {
       if (!normalizedName) return true;
       const current = readObjectName(context.map, target);
+      if (current?.slots) return current.slots.every(slot => !slot || slot.fields.name === normalizedName);
       return !current || current.name === normalizedName;
     }
   };
@@ -167,7 +174,7 @@ export function createRenameNamedObjectsFromNamebaseCommand(kind, ids, {label = 
     label: `${label || `按名称库重命名${kindLabel}`} ${targets.length} 个`,
     domain: targetKind,
     effects: {
-      ...OBJECT_NAME_EFFECTS,
+      ...(targetKind === OBJECT_KIND.CULTURE ? CULTURE_NAME_EFFECTS : OBJECT_NAME_EFFECTS),
       affected: namebaseRenameAffected(targetKind, targets)
     },
     apply(context) {
@@ -361,7 +368,7 @@ function buildNamedObjectRenameChanges(map, kind, ids, drawSeed) {
     if (!before) continue;
     const afterName = chooseRenameCandidate(before.name, drawSeed, () => generateNamedObjectName(map, generator, target));
     if (!afterName) continue;
-    const mirrorBefore = primary?.[id] && packed?.[id] && primary[id] !== packed[id]
+    const mirrorBefore = kind !== OBJECT_KIND.CULTURE && primary?.[id] && packed?.[id] && primary[id] !== packed[id]
       ? readObjectName({pack: map.pack}, target) : null;
     changes.push({target, before, afterName, mirrorBefore});
   }
@@ -417,8 +424,13 @@ function readProvinceName(map, provinceId) {
 }
 
 function readCultureName(map, cultureId) {
-  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId];
-  return culture ? {name: culture.name || "", root: culture.root || ""} : null;
+  const records = cultureNameRecords(map, cultureId);
+  const culture = records.find(Boolean);
+  if (!culture) return null;
+  const slots = records.map(record => record && {
+    fields: Object.fromEntries(["name", "root"].filter(field => Object.hasOwn(record, field)).map(field => [field, record[field]]))
+  });
+  return {name: culture.name || "", slots};
 }
 
 function readReligionName(map, religionId) {
@@ -481,17 +493,29 @@ function restoreProvinceName(map, target, previous) {
 }
 
 function writeCultureName(map, cultureId, name) {
-  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId];
-  if (!culture) throw new Error(`找不到文化 #${cultureId}`);
-  culture.name = name;
-  culture.root = name.endsWith("文化") ? name.slice(0, name.length - "文化".length) : name;
+  const records = cultureNameRecords(map, cultureId);
+  if (!records.some(Boolean)) throw new Error(`找不到文化 #${cultureId}`);
+  for (const culture of new Set(records.filter(Boolean))) {
+    culture.name = name;
+    culture.root = name.replace(/文化$/, "");
+  }
 }
 
 function restoreCultureName(map, target, previous) {
-  const culture = map?.society?.cultures?.[target.id] || map?.pack?.cultures?.[target.id];
-  if (!culture) throw new Error(`找不到文化 #${target.id}`);
-  culture.name = previous.name;
-  culture.root = previous.root;
+  const records = cultureNameRecords(map, target.id);
+  for (const [index, slot] of previous.slots.entries()) {
+    if (!slot) continue;
+    const record = records[index];
+    if (!record) throw new Error(`找不到文化 #${target.id}`);
+    for (const field of ["name", "root"]) {
+      if (Object.hasOwn(slot.fields, field)) record[field] = slot.fields[field];
+      else delete record[field];
+    }
+  }
+}
+
+function cultureNameRecords(map, cultureId) {
+  return [map?.society?.cultures?.[cultureId], map?.pack?.cultures?.[cultureId]];
 }
 
 function writeReligionName(map, religionId, name) {

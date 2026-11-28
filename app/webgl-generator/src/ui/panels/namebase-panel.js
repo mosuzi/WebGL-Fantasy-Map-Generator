@@ -1,5 +1,6 @@
 import {shallowReactive} from "vue";
 import {getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../../generator/namebase-store.js";
+import {projectCultureDirectory} from "../../runtime/culture-directory.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
@@ -23,12 +24,14 @@ const NAMEBASE_LIST_DEFAULTS = Object.freeze({
   sortDir: "asc"
 });
 
-export function createNamebasePanel(documentRef, manager, callbacks = {}) {
+export function createNamebasePanel(documentRef, manager, callbacks = {}, {mapPublication, readHistory} = {}) {
   let pendingImportFile = null;
+  let summariesDirty = true;
   const listPreferences = readPanelListPreferences(documentRef, NAMEBASE_PANEL_ID, NAMEBASE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
+    cultures: [],
     history: null,
     summaries: getNamebaseSummariesForMap(null, {includeSource: true}),
     bindingStatus: getNamebaseBindingStatus(null),
@@ -149,35 +152,62 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     }
   );
 
+  const stopDirectory = mapPublication?.subscribe(["culture", "culture-directory", "regeneration", "society"], ({map}) => {
+    setMap(map);
+    panelState.cultures = projectCultureDirectory(map, panelState.cultures);
+  });
+  const stopNamebases = mapPublication?.subscribe(["namebase", "namebase-rule", "namebase-binding"], ({map}) => {
+    setMap(map);
+    invalidateSummaries();
+    if (panelState.open) refreshSummariesIfNeeded();
+  });
+  const stopHistory = mapPublication?.subscribe(["*"], () => {
+    if (panelState.open) panelState.history = readHistory?.() || null;
+  });
+
+  function setMap(map) {
+    if (panelState.map === map) return;
+    panelState.map = map;
+    panelState.cultures = projectCultureDirectory(map, panelState.cultures);
+    invalidateSummaries();
+  }
+
+  function invalidateSummaries() {
+    summariesDirty = true;
+    pendingImportFile = null;
+    clearImportPreview(panelState);
+  }
+
+  function refreshSummariesIfNeeded() {
+    if (!summariesDirty) return;
+    refreshSummaries(panelState);
+    summariesDirty = false;
+    panelState.version++;
+  }
+
   return {
     open(map = null, options = {}) {
       pendingImportFile = null;
       clearImportPreview(panelState);
-      panelState.map = map;
+      setMap(map);
       const cultureId = options.cultureId ?? "";
       if (cultureId !== "") {
         panelState.focusCultureId = String(cultureId);
         panelState.focusCultureNonce++;
       }
       panelState.history = options.history || null;
-      refreshSummaries(panelState);
+      refreshSummariesIfNeeded();
       panelState.open = true;
-      panelState.version++;
       manager.open("namebase-panel");
       lazyPanel.load();
-    },
-    update(map = null, history = null) {
-      pendingImportFile = null;
-      clearImportPreview(panelState);
-      panelState.map = map;
-      panelState.history = history;
-      refreshSummaries(panelState);
-      panelState.version++;
     },
     isOpen() {
       return panelState.open;
     },
     unmount() {
+      stopDirectory?.();
+      stopNamebases?.();
+      stopHistory?.();
       lazyPanel.unmount();
     }
   };

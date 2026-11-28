@@ -134,6 +134,7 @@ import {formatListCount, formatArea, formatNumber as formatDisplayNumber, format
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
+import {listMapCultures} from "../../../runtime/culture-directory.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
@@ -401,8 +402,7 @@ function buildCultureMetrics(map) {
 }
 
 function cultureRows(map) {
-  return (map?.society?.cultures || map?.pack?.cultures || [])
-    .filter(culture => culture && !culture.removed && Number.isInteger(culture.i ?? culture.id) && (culture.i ?? culture.id) > 0)
+  return listMapCultures(map)
     .map(culture => ({
       id: culture.i ?? culture.id,
       name: culture.name || `文化 #${culture.i ?? culture.id}`,

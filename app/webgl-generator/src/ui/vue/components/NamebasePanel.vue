@@ -298,9 +298,9 @@ const bindingInvalidEntries = computed(() => props.state.bindingStatus?.invalid 
 const bindingInvalidLabel = computed(() => bindingInvalidEntries.value.map(item => `${item.label} -> ${item.id}`).join("；"));
 const globalBindings = computed(() => props.state.bindingStatus?.bindings?.global || {});
 const cultureBindings = computed(() => props.state.bindingStatus?.bindings?.cultures || {});
-const cultures = computed(() => collectCultures(props.state.map));
+const cultures = computed(() => props.state.cultures);
 const cultureOptions = computed(() => cultures.value.length
-  ? cultures.value.map(culture => ({value: String(culture.id), label: culture.label}))
+  ? cultures.value.map(culture => ({value: String(culture.id), label: objectLabel(culture.name, culture.id)}))
   : [{value: "", label: "暂无文化"}]
 );
 const selectedCultureId = ref("");
@@ -472,20 +472,6 @@ function isBindingCandidate(row, targetKey) {
   const compatibleKinds = bindingCompatibleKinds[targetKey];
   if (!compatibleKinds) return true;
   return compatibleKinds.has(String(row?.kind || "").trim());
-}
-
-function collectCultures(map) {
-  const cultures = map?.pack?.cultures || map?.society?.cultures || [];
-  return cultures
-    .filter(culture => culture && (culture.i || culture.id))
-    .map(culture => {
-      const id = culture.i ?? culture.id;
-      const name = culture.name || culture.root || "未命名文化";
-      return {
-        id,
-        label: objectLabel(name, id)
-      };
-    });
 }
 
 function handleNamebaseExport(key) {

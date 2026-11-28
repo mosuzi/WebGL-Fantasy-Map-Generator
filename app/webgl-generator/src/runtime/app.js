@@ -343,6 +343,7 @@ import HeightmapExportWorker from "./heightmap-export-worker.js?worker";
 import {GENERATION_WORKER_TASK} from "./generation-worker-task.js";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
+import {createMapStatePublication} from "./map-state-publication.js";
 import {createLatestDisplayIntentQueue, isSupersededDisplayIntent} from "./display-intent-queue.js";
 import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
 import {MapSaveState, installMapSaveStatus} from "./map-save-state.js";
@@ -571,6 +572,11 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
   const mapRevision = new MapRevisionTracker();
   let state = null;
+  const mapPublication = createMapStatePublication({
+    readCurrent: () => ({map: state.map, revision: mapRevision.getCoreSnapshot()}),
+    canPublish: () => !state?.runtimeOperationSnapshot?.busy && !state?.workerAtomicCommitGuard,
+    onError: error => healthMonitor?.record?.("map-state-projection-failed", {message: error?.message || String(error)}, "warning")
+  });
   const previewListObject = object => {
     const renderer = state?.renderer;
     const outline = renderer?.previewListObject(object);
@@ -590,8 +596,9 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onMutation: mutation => {
       if (mutation.command?.domain !== "suitability") invalidateSuitabilityStats(state?.map);
       saveState.mutation(mutation);
-      const before = mapRevision.getSnapshot();
+      const before = mapRevision.getCoreSnapshot();
       const after = mapRevision.advance();
+      mapPublication.record(mutation, before, mapRevision.getCoreSnapshot());
       queueCommandMapReplicaPatch(state, mutation, before, after, {
         includeCompute: !state?.workerSessionMutationGuard
       });
@@ -600,10 +607,12 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onRestore: snapshot => {
       invalidateSuitabilityStats(state?.map);
       mapRevision.restoreSnapshot(snapshot);
+      mapPublication.restore(mapRevision.getCoreSnapshot());
       saveState.restorePosition(snapshot?.saveContent);
     }
   });
   state = {
+    mapPublication,
     options: {...DEFAULT_OPTIONS},
     brushRadii: normalizeSavedBrushRadii(),
     brushStrengths: normalizeSavedBrushStrengths(),
@@ -2325,7 +2334,7 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
     onSetCultureBinding: (cultureId, target, value) => setCultureNamebaseBinding(state, documentRef, cultureId, target, value),
     onUndo: () => undoNamebaseEdit(state, documentRef),
     onRedo: () => redoNamebaseEdit(state, documentRef)
-  });
+  }, {mapPublication, readHistory: () => state.editHistory.getStats()});
   state.panels.namebase = namebasePanel;
   notesPanel = createNotesPanel(documentRef, panelManager, {
     listNotes: () => state.notesDomain?.list?.() || [],
@@ -2855,7 +2864,10 @@ export async function createGeneratorApp(documentRef, {healthMonitor = getWebglG
         }
       }));
       if (snapshot.busy) state.viewPrewarmScheduler?.cancel("foreground-operation");
-      else scheduleGpuViewPrewarm(state, documentRef);
+      else {
+        mapPublication.schedule();
+        scheduleGpuViewPrewarm(state, documentRef);
+      }
       state.keyboardShortcuts?.refreshAvailability?.();
       state.panels.oceanCurrent?.updateWorldRebuild?.(snapshot);
     }
@@ -5535,6 +5547,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   if (installFinalization.error) {
     state.healthMonitor?.record?.("map-adoption-finalize-failed", {message: installFinalization.error?.message || String(installFinalization.error)}, "warning");
   }
+  state.mapPublication.replace(state.mapRevision.getCoreSnapshot());
   } catch (error) {
     invalidatePendingMapAdoptionBindingOwner(state, "map-adoption-failed");
     if (workerAdoption?.session?.id && workerAdoption.session.committed !== true) {
@@ -5604,7 +5617,6 @@ function runtimeAfterMapLoadGroups(state, documentRef, restorePanels) {
     {id: "economy", run: () => updateEconomyPanel(state)},
     {id: "marker", run: () => updateMarkerPanel(state)},
     {id: "label-naming", run: () => updateLabelNamingPanel(state)},
-    {id: "namebase", run: () => updateNamebasePanel(state)},
     {id: "route", run: () => state.panels.route.update(state.map, state.selection, state.editHistory.getStats())},
     {id: "river", run: () => state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject)},
     {id: "ocean-current", run: () => state.panels.oceanCurrent.update(state.map, state.editHistory.getStats())},
@@ -13653,10 +13665,6 @@ function updatePanelForAffectedKind(state, kind) {
     case "measurement":
       updateMeasurementPanel(state);
       break;
-    case "namebase":
-    case "namebase-binding":
-      updateNamebasePanel(state);
-      break;
     default:
       break;
   }
@@ -14418,7 +14426,10 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
         // finally 仅对无 deferred 的旧路径作便宜解冻，不能覆盖主事务错误。
       }
     }
-    if (atomicCommitGuarded) state.workerAtomicCommitGuard = false;
+    if (atomicCommitGuarded) {
+      state.workerAtomicCommitGuard = false;
+      state.mapPublication.schedule();
+    }
     if (!workerSessionFinalized) state.workerTaskCoordinator.invalidateSession("worker-result-not-committed");
     if (!workerOperationSucceeded && state.map === committedMap) {
       restoreCityIconLayerStatistics(state.renderer, operationStartCityIconLayerStats);
@@ -20635,7 +20646,6 @@ function updateAllObjectPanels(state) {
   updateMilitaryPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
-  updateNamebasePanel(state);
   updateRoutePanel(state);
   updateRiverPanel(state);
   updateOceanCurrentPanel(state);
@@ -20655,10 +20665,6 @@ function updateZonePanel(state) {
 
 function updateMeasurementPanel(state) {
   if (isPanelOpen(state.panels.measurement)) state.panels.measurement?.update(state.map, state.editHistory.getStats());
-}
-
-function updateNamebasePanel(state) {
-  if (isPanelOpen(state.panels.namebase)) state.panels.namebase?.update(state.map, state.editHistory.getStats());
 }
 
 function updateRoutePanel(state) {
